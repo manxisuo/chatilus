@@ -3,6 +3,7 @@ import type {
   ConversationSummary,
   DatabaseStats,
   ExportResult,
+  ImageGalleryItem,
   ImportResult,
   MessageView,
   SearchHit,
@@ -66,6 +67,10 @@ export function exportConversationMarkdown(conversationId: string, outputPath: s
     conversationId,
     outputPath,
   });
+}
+
+export function listImages(limit = 60, offset = 0, includeUploads = true) {
+  return invoke<ImageGalleryItem[]>("list_images", { limit, offset, includeUploads });
 }
 
 export function readImageDataUrl(path: string) {

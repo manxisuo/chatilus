@@ -13,6 +13,8 @@ export interface ConversationSummary {
 export interface AttachmentView {
   file_key: string;
   path: string;
+  source: "generated" | "upload" | "unknown";
+  prompt?: string | null;
 }
 
 export interface MessageView {
@@ -49,9 +51,24 @@ export interface ImportResult {
   media_files_indexed: number;
 }
 
+export interface ImageGalleryItem {
+  path: string;
+  file_key: string;
+  conversation_id: string;
+  conversation_title: string;
+  message_id: string;
+  role: string;
+  create_time: number | null;
+  source: "generated" | "upload" | "unknown";
+  prompt?: string | null;
+}
+
 export interface DatabaseStats {
   conversation_count: number;
   message_count: number;
+  image_count: number;
+  generated_image_count: number;
+  upload_image_count: number;
   starred_conversation_count: number;
   starred_message_count: number;
   tag_count: number;

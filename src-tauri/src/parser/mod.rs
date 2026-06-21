@@ -5,7 +5,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-pub use conversation::{extract_pointers_from_message_json, ParsedConversation};
+pub use conversation::{
+    classify_image_source, extract_attachment_infos_from_message_json,
+    extract_pointers_from_message_json, ParsedAttachment, ParsedConversation,
+};
 
 pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files: Vec<PathBuf> = fs::read_dir(export_dir)

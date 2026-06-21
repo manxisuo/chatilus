@@ -6,7 +6,7 @@ mod parser;
 
 use commands::{
     create_tag, delete_tag, export_conversation_markdown, get_messages, get_stats,
-    import_export_dir, init_state, list_conversations, list_tags, read_image_data_url,
+    import_export_dir, init_state, list_conversations, list_images, list_tags, read_image_data_url,
     search_messages, set_conversation_starred, set_conversation_tags, set_message_starred,
 };
 use tauri::Manager;
@@ -24,6 +24,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             import_export_dir,
             list_conversations,
+            list_images,
             get_messages,
             search_messages,
             set_conversation_starred,

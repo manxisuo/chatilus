@@ -12,6 +12,7 @@ const props = defineProps<{
   initialIndex: number;
   resolveSrc: (path: string) => string;
   onImageError?: (path: string) => void;
+  captions?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -21,6 +22,11 @@ const emit = defineEmits<{
 const currentIndex = ref(0);
 
 const currentImage = computed(() => props.images[currentIndex.value] ?? null);
+
+const captionText = computed(() => {
+  if (!props.captions?.length) return "";
+  return props.captions[currentIndex.value] ?? "";
+});
 
 const counterText = computed(() => {
   if (props.images.length === 0) return "";
@@ -118,6 +124,7 @@ onUnmounted(() => {
           @error="onImageError?.(currentImage.path)"
         />
         <div class="meta">
+          <span v-if="captionText" class="caption">{{ captionText }}</span>
           <span>{{ counterText }}</span>
         </div>
       </div>
@@ -168,6 +175,20 @@ onUnmounted(() => {
   margin-top: 12px;
   color: rgba(255, 255, 255, 0.85);
   font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.caption {
+  font-size: 13px;
+  opacity: 0.9;
+  max-width: 70vw;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .close-btn {

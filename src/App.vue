@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import ConversationList from "./components/ConversationList.vue";
+import ImageGallery from "./components/ImageGallery.vue";
 import MessageView from "./components/MessageView.vue";
 import TagDialog from "./components/TagDialog.vue";
 import {
@@ -42,6 +43,7 @@ const searchMode = ref(false);
 const starredOnly = ref(false);
 const filterTagId = ref<number | null>(null);
 const tagDialogVisible = ref(false);
+const viewMode = ref<"chats" | "images">("chats");
 
 const PAGE_SIZE = 100;
 const listOffset = ref(0);
@@ -180,7 +182,13 @@ async function handleSearch() {
 
 function selectConversation(id: string) {
   searchMode.value = false;
+  viewMode.value = "chats";
   activeId.value = id;
+}
+
+function openConversationFromGallery(conversationId: string) {
+  viewMode.value = "chats";
+  activeId.value = conversationId;
 }
 
 function openSearchHit(hit: SearchHit) {
@@ -301,8 +309,30 @@ onMounted(async () => {
     <el-header class="topbar" height="56px">
       <div class="brand">
         <strong>ChatLens</strong>
+        <nav class="nav-tabs">
+          <button
+            class="nav-tab"
+            :class="{ active: viewMode === 'chats' }"
+            type="button"
+            @click="viewMode = 'chats'"
+          >
+            对话
+          </button>
+          <button
+            class="nav-tab"
+            :class="{ active: viewMode === 'images' }"
+            type="button"
+            @click="viewMode = 'images'"
+          >
+            图片
+            <span v-if="stats?.image_count" class="nav-badge">
+              {{ stats.image_count }}
+            </span>
+          </button>
+        </nav>
         <span v-if="stats" class="stats">
           {{ stats.conversation_count }} 对话 · {{ stats.message_count }} 消息
+          <template v-if="stats.image_count"> · {{ stats.image_count }} 图片</template>
           <template v-if="stats.starred_conversation_count">
             · ★ {{ stats.starred_conversation_count }}
           </template>
@@ -327,7 +357,7 @@ onMounted(async () => {
       </div>
     </el-header>
 
-    <el-container class="body">
+    <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside width="320px" class="sidebar">
         <div class="sidebar-tools">
           <el-input
@@ -404,6 +434,16 @@ onMounted(async () => {
       </el-main>
     </el-container>
 
+    <el-main v-else class="main gallery-main">
+      <ImageGallery
+        :key="stats?.image_count ?? 0"
+        :total-count="stats?.image_count ?? null"
+        :generated-count="stats?.generated_image_count ?? null"
+        :upload-count="stats?.upload_image_count ?? null"
+        @open-conversation="openConversationFromGallery"
+      />
+    </el-main>
+
     <TagDialog
       v-model:visible="tagDialogVisible"
       :tags="tags"
@@ -432,8 +472,45 @@ onMounted(async () => {
 
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-tab {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--cl-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-tab:hover {
+  background: rgba(64, 158, 255, 0.08);
+  color: var(--cl-text);
+}
+
+.nav-tab.active {
+  background: rgba(64, 158, 255, 0.15);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.nav-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.15);
 }
 
 .brand strong {
@@ -534,6 +611,12 @@ onMounted(async () => {
   position: relative;
   padding: 0;
   overflow: hidden;
+}
+
+.gallery-main {
+  padding: 0;
+  overflow: hidden;
+  height: calc(100vh - 56px);
 }
 
 .tag-fab {

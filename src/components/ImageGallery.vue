@@ -1,0 +1,417 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { readImageDataUrl, listImages } from "../api";
+import ImageLightbox from "./ImageLightbox.vue";
+import type { ImageGalleryItem } from "../types";
+
+const props = defineProps<{
+  totalCount: number | null;
+  generatedCount: number | null;
+  uploadCount: number | null;
+}>();
+
+const emit = defineEmits<{
+  openConversation: [conversationId: string];
+}>();
+
+const PAGE_SIZE = 60;
+const images = ref<ImageGalleryItem[]>([]);
+const loading = ref(false);
+const loadingMore = ref(false);
+const hasMore = ref(true);
+const showUploads = ref(true);
+const lightboxVisible = ref(false);
+const lightboxIndex = ref(0);
+const imageSrcCache = reactive<Record<string, string>>({});
+
+const visibleTotal = computed(() => {
+  if (showUploads.value) {
+    return props.totalCount;
+  }
+  if (props.generatedCount != null) {
+    const unknown = Math.max(
+      0,
+      (props.totalCount ?? 0) - props.generatedCount - (props.uploadCount ?? 0),
+    );
+    return props.generatedCount + unknown;
+  }
+  return props.totalCount;
+});
+
+const statsText = computed(() => {
+  const generated = props.generatedCount;
+  const upload = props.uploadCount;
+  if (generated == null || upload == null) return "";
+  const unknown = Math.max(0, (props.totalCount ?? 0) - generated - upload);
+  if (unknown > 0) {
+    return `生成 ${generated} · 上传 ${upload} · 其他 ${unknown}`;
+  }
+  return `生成 ${generated} · 上传 ${upload}`;
+});
+
+const lightboxImages = computed(() =>
+  images.value.map((item) => ({
+    path: item.path,
+    fileKey: item.file_key,
+  })),
+);
+
+const lightboxCaptions = computed(() =>
+  images.value.map((item) => {
+    const sourceLabel =
+      item.source === "generated" ? "生成" : item.source === "upload" ? "上传" : "图片";
+    const prompt = item.prompt?.trim();
+    if (prompt) {
+      return `${sourceLabel} · ${item.conversation_title}\n${prompt}`;
+    }
+    return `${sourceLabel} · ${item.conversation_title}`;
+  }),
+);
+
+const footerText = computed(() => {
+  if (loadingMore.value) return "加载中…";
+  if (hasMore.value) {
+    const total = visibleTotal.value;
+    if (total != null) {
+      return `已加载 ${images.value.length} / ${total}，继续下拉`;
+    }
+    return `已加载 ${images.value.length} 张，继续下拉`;
+  }
+  const total = visibleTotal.value ?? images.value.length;
+  return `共 ${total} 张图片`;
+});
+
+function sourceLabel(source: ImageGalleryItem["source"]) {
+  if (source === "generated") return "生成";
+  if (source === "upload") return "上传";
+  return "其他";
+}
+
+function sourceTagType(source: ImageGalleryItem["source"]) {
+  if (source === "generated") return "success";
+  if (source === "upload") return "info";
+  return "warning";
+}
+
+function formatTime(timestamp: number | null) {
+  if (!timestamp) return "";
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function imageSrc(path: string) {
+  if (!imageSrcCache[path]) {
+    imageSrcCache[path] = convertFileSrc(path);
+  }
+  return imageSrcCache[path];
+}
+
+async function onImageError(path: string) {
+  if (imageSrcCache[path]?.startsWith("data:")) return;
+  try {
+    imageSrcCache[path] = await readImageDataUrl(path);
+  } catch {
+    imageSrcCache[path] = "";
+  }
+}
+
+async function loadImages(reset = true) {
+  if (reset) {
+    if (loading.value) return;
+    loading.value = true;
+    hasMore.value = true;
+  } else {
+    if (loading.value || loadingMore.value || !hasMore.value) return;
+    loadingMore.value = true;
+  }
+
+  try {
+    const offset = reset ? 0 : images.value.length;
+    const batch = await listImages(PAGE_SIZE, offset, showUploads.value);
+
+    if (reset) {
+      images.value = batch;
+    } else {
+      const existing = new Set(images.value.map((item) => `${item.message_id}:${item.path}`));
+      images.value = [
+        ...images.value,
+        ...batch.filter((item) => !existing.has(`${item.message_id}:${item.path}`)),
+      ];
+    }
+
+    hasMore.value = batch.length === PAGE_SIZE;
+  } finally {
+    loading.value = false;
+    loadingMore.value = false;
+  }
+}
+
+function onScroll(event: Event) {
+  if (!hasMore.value || loading.value || loadingMore.value) return;
+  const el = event.target as HTMLElement;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
+    loadImages(false);
+  }
+}
+
+function openLightbox(index: number) {
+  lightboxIndex.value = index;
+  lightboxVisible.value = true;
+}
+
+function openConversation(conversationId: string) {
+  emit("openConversation", conversationId);
+}
+
+watch(showUploads, () => {
+  loadImages(true);
+});
+
+onMounted(() => {
+  loadImages(true);
+});
+</script>
+
+<template>
+  <div class="image-gallery">
+    <header class="gallery-header">
+      <div>
+        <h2>图片</h2>
+        <p class="subtitle">浏览所有对话中的图片，点击可放大查看</p>
+        <p v-if="statsText" class="stats">{{ statsText }}</p>
+      </div>
+      <el-checkbox v-model="showUploads" label="显示用户上传的图片" />
+    </header>
+
+    <el-skeleton v-if="loading" animated :rows="8" class="loading" />
+
+    <el-empty
+      v-else-if="images.length === 0"
+      :description="
+        showUploads
+          ? '暂无图片，请先导入包含图片的 ChatGPT 导出数据'
+          : '暂无生成图片，可勾选显示用户上传的图片'
+      "
+    />
+
+    <div v-else class="grid-scroll" @scroll.passive="onScroll">
+      <div class="grid">
+        <article
+          v-for="(item, index) in images"
+          :key="`${item.message_id}:${item.path}`"
+          class="card"
+          :class="{ 'card-upload': item.source === 'upload' }"
+        >
+          <button class="thumb-btn" type="button" @click="openLightbox(index)">
+            <img
+              v-if="imageSrcCache[item.path] !== ''"
+              :src="imageSrc(item.path)"
+              :alt="item.file_key"
+              loading="lazy"
+              @error="onImageError(item.path)"
+            />
+            <div v-else class="thumb-missing">无法加载</div>
+            <span class="source-badge" :class="`source-${item.source}`">
+              {{ sourceLabel(item.source) }}
+            </span>
+          </button>
+          <div class="card-meta">
+            <button
+              class="conv-link"
+              type="button"
+              @click="openConversation(item.conversation_id)"
+            >
+              {{ item.conversation_title }}
+            </button>
+            <div class="meta-row">
+              <el-tag size="small" :type="sourceTagType(item.source)" effect="plain">
+                {{ sourceLabel(item.source) }}
+              </el-tag>
+              <span class="time">{{ formatTime(item.create_time) }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+      <div class="footer">{{ footerText }}</div>
+    </div>
+
+    <ImageLightbox
+      v-model:visible="lightboxVisible"
+      :images="lightboxImages"
+      :initial-index="lightboxIndex"
+      :resolve-src="imageSrc"
+      :on-image-error="onImageError"
+      :captions="lightboxCaptions"
+    />
+  </div>
+</template>
+
+<style scoped>
+.image-gallery {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--cl-panel);
+}
+
+.gallery-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--cl-border);
+}
+
+.gallery-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--cl-text);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--cl-text-muted);
+}
+
+.stats {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+}
+
+.loading {
+  padding: 24px;
+}
+
+.grid-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thumb-btn {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border: 1px solid var(--cl-border);
+}
+
+.card-upload .thumb-btn {
+  border-color: rgba(64, 158, 255, 0.45);
+}
+
+.thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.source-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.source-generated {
+  background: rgba(103, 194, 58, 0.85);
+}
+
+.source-upload {
+  background: rgba(64, 158, 255, 0.85);
+}
+
+.source-unknown {
+  background: rgba(230, 162, 60, 0.85);
+}
+
+.thumb-missing {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conv-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  cursor: pointer;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.conv-link:hover {
+  text-decoration: underline;
+}
+
+.time {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  white-space: nowrap;
+}
+
+.footer {
+  padding: 8px 24px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+}
+</style>

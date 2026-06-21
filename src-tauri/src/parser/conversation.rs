@@ -1,5 +1,12 @@
 use serde_json::Value;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAttachment {
+    pub pointer: String,
+    pub source: String,
+    pub prompt: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ParsedConversation {
     pub id: String,
@@ -17,22 +24,79 @@ pub struct ParsedMessage {
     pub content: String,
     pub create_time: Option<f64>,
     pub raw_json: String,
-    pub attachment_pointers: Vec<String>,
+    pub attachments: Vec<ParsedAttachment>,
 }
 
 pub fn extract_pointers_from_message_json(raw_json: &str) -> Vec<String> {
+    extract_attachment_infos_from_message_json(raw_json)
+        .into_iter()
+        .map(|item| item.pointer)
+        .collect()
+}
+
+pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<ParsedAttachment> {
     let Ok(message) = serde_json::from_str::<Value>(raw_json) else {
         return Vec::new();
     };
 
-    let mut pointers = Vec::new();
+    let role = message
+        .get("author")
+        .and_then(|v| v.get("role"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let mut infos = Vec::new();
     if let Some(content) = message.get("content") {
-        pointers.extend(extract_attachment_pointers(content));
+        infos.extend(extract_attachment_infos_from_content(content, role));
     }
-    pointers.extend(extract_message_attachments(&message));
-    pointers.sort();
-    pointers.dedup();
-    pointers
+    for pointer in extract_message_attachments(&message) {
+        if infos.iter().any(|item| item.pointer == pointer) {
+            continue;
+        }
+        infos.push(ParsedAttachment {
+            pointer,
+            source: infer_source_from_role(role, None),
+            prompt: None,
+        });
+    }
+    infos.sort_by(|a, b| a.pointer.cmp(&b.pointer));
+    infos.dedup_by(|a, b| a.pointer == b.pointer);
+    infos
+}
+
+pub fn classify_image_source(metadata: Option<&Value>, role: &str, path: Option<&str>) -> String {
+    if let Some(meta) = metadata {
+        if meta.get("dalle").is_some_and(|v| !v.is_null()) {
+            return "generated".to_string();
+        }
+        if meta.get("generation").is_some_and(|v| !v.is_null()) {
+            return "generated".to_string();
+        }
+    }
+    if path.is_some_and(|p| p.contains("dalle-generations")) {
+        return "generated".to_string();
+    }
+    infer_source_from_role(role, path)
+}
+
+fn infer_source_from_role(role: &str, path: Option<&str>) -> String {
+    if path.is_some_and(|p| p.contains("dalle-generations")) {
+        return "generated".to_string();
+    }
+    match role {
+        "user" => "upload".to_string(),
+        "tool" => "generated".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn extract_dalle_prompt(metadata: Option<&Value>) -> Option<String> {
+    metadata?
+        .get("dalle")?
+        .get("prompt")?
+        .as_str()
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
 }
 
 pub fn parse_conversation(value: &Value) -> Option<ParsedConversation> {
@@ -94,7 +158,7 @@ fn linearize_messages(
                 if should_include(
                     &parsed.role,
                     &parsed.content,
-                    parsed.attachment_pointers.len(),
+                    parsed.attachments.len(),
                 ) {
                     chain.push(parsed);
                 }
@@ -133,10 +197,19 @@ fn parse_message(message: &Value) -> Option<ParsedMessage> {
     let content = extract_content(content_value);
     let create_time = message.get("create_time").and_then(|v| v.as_f64());
     let raw_json = message.to_string();
-    let mut attachment_pointers = extract_attachment_pointers(content_value);
-    attachment_pointers.extend(extract_message_attachments(message));
-    attachment_pointers.sort();
-    attachment_pointers.dedup();
+    let mut attachments = extract_attachment_infos_from_content(content_value, &role);
+    for pointer in extract_message_attachments(message) {
+        if attachments.iter().any(|item| item.pointer == pointer) {
+            continue;
+        }
+        attachments.push(ParsedAttachment {
+            pointer,
+            source: infer_source_from_role(&role, None),
+            prompt: None,
+        });
+    }
+    attachments.sort_by(|a, b| a.pointer.cmp(&b.pointer));
+    attachments.dedup_by(|a, b| a.pointer == b.pointer);
 
     Some(ParsedMessage {
         id,
@@ -144,7 +217,7 @@ fn parse_message(message: &Value) -> Option<ParsedMessage> {
         content,
         create_time,
         raw_json,
-        attachment_pointers,
+        attachments,
     })
 }
 
@@ -210,10 +283,10 @@ fn extract_content(content: &Value) -> String {
     }
 }
 
-fn extract_attachment_pointers(content: &Value) -> Vec<String> {
-    let mut pointers = Vec::new();
+fn extract_attachment_infos_from_content(content: &Value, role: &str) -> Vec<ParsedAttachment> {
+    let mut infos = Vec::new();
     let Some(parts) = content.get("parts").and_then(|v| v.as_array()) else {
-        return pointers;
+        return infos;
     };
 
     for part in parts {
@@ -226,12 +299,17 @@ fn extract_attachment_pointers(content: &Value) -> Vec<String> {
             .unwrap_or_default();
         if content_type == "image_asset_pointer" {
             if let Some(pointer) = obj.get("asset_pointer").and_then(|v| v.as_str()) {
-                pointers.push(pointer.to_string());
+                let metadata = obj.get("metadata");
+                infos.push(ParsedAttachment {
+                    pointer: pointer.to_string(),
+                    source: classify_image_source(metadata, role, None),
+                    prompt: extract_dalle_prompt(metadata),
+                });
             }
         }
     }
 
-    pointers
+    infos
 }
 
 fn extract_message_attachments(message: &Value) -> Vec<String> {
@@ -265,5 +343,45 @@ fn collect_attachment_ids(value: &Value, out: &mut Vec<String>) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn classifies_user_upload_without_dalle_metadata() {
+        let metadata = json!({
+            "dalle": null,
+            "generation": null
+        });
+        assert_eq!(
+            classify_image_source(Some(&metadata), "user", None),
+            "upload"
+        );
+    }
+
+    #[test]
+    fn classifies_dalle_generation_from_metadata() {
+        let metadata = json!({
+            "dalle": {
+                "gen_id": "abc",
+                "prompt": "a cat"
+            }
+        });
+        assert_eq!(
+            classify_image_source(Some(&metadata), "tool", None),
+            "generated"
+        );
+    }
+
+    #[test]
+    fn classifies_dalle_generations_path_as_generated() {
+        assert_eq!(
+            classify_image_source(None, "user", Some("dalle-generations/foo.webp")),
+            "generated"
+        );
     }
 }

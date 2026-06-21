@@ -5,8 +5,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::db::Database;
 use crate::models::{
-    ConversationSummary, DatabaseStats, ExportResult, ImportResult, MessageView, SearchHit,
-    TagView,
+    ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportResult, MessageView,
+    SearchHit, TagView,
 };
 
 pub struct AppState {
@@ -134,6 +134,21 @@ pub fn export_conversation_markdown(
 ) -> Result<ExportResult, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     db.export_conversation_markdown(&conversation_id, &PathBuf::from(output_path))
+}
+
+#[tauri::command]
+pub fn list_images(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    include_uploads: Option<bool>,
+) -> Result<Vec<ImageGalleryItem>, String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    db.list_images(
+        limit.unwrap_or(60),
+        offset.unwrap_or(0),
+        include_uploads.unwrap_or(true),
+    )
 }
 
 #[tauri::command]
