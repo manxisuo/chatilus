@@ -45,6 +45,21 @@ const filterTagId = ref<number | null>(null);
 const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "images">("chats");
 
+const navItems = computed(() => [
+  {
+    id: "chats" as const,
+    icon: "💬",
+    label: "对话",
+    count: stats.value?.conversation_count ?? null,
+  },
+  {
+    id: "images" as const,
+    icon: "🖼",
+    label: "图片",
+    count: stats.value?.image_count ?? null,
+  },
+]);
+
 const PAGE_SIZE = 100;
 const listOffset = ref(0);
 const hasMoreConversations = ref(true);
@@ -308,35 +323,21 @@ onMounted(async () => {
   <el-container class="app-shell">
     <el-header class="topbar" height="56px">
       <div class="brand">
-        <strong>ChatLens</strong>
-        <nav class="nav-tabs">
+        <strong class="brand-name">ChatLens</strong>
+        <nav class="nav-tabs" aria-label="主视图">
           <button
+            v-for="item in navItems"
+            :key="item.id"
             class="nav-tab"
-            :class="{ active: viewMode === 'chats' }"
+            :class="{ active: viewMode === item.id }"
             type="button"
-            @click="viewMode = 'chats'"
+            @click="viewMode = item.id"
           >
-            对话
-          </button>
-          <button
-            class="nav-tab"
-            :class="{ active: viewMode === 'images' }"
-            type="button"
-            @click="viewMode = 'images'"
-          >
-            图片
-            <span v-if="stats?.image_count" class="nav-badge">
-              {{ stats.image_count }}
-            </span>
+            <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
+            <span v-if="item.count" class="nav-count">{{ item.count.toLocaleString() }}</span>
           </button>
         </nav>
-        <span v-if="stats" class="stats">
-          {{ stats.conversation_count }} 对话 · {{ stats.message_count }} 消息
-          <template v-if="stats.image_count"> · {{ stats.image_count }} 图片</template>
-          <template v-if="stats.starred_conversation_count">
-            · ★ {{ stats.starred_conversation_count }}
-          </template>
-        </span>
       </div>
       <div class="actions">
         <el-input
@@ -473,54 +474,70 @@ onMounted(async () => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   min-width: 0;
+}
+
+.brand-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cl-text);
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
 }
 
 .nav-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--cl-bg);
+  border: 1px solid var(--cl-border);
 }
 
 .nav-tab {
   border: none;
   background: transparent;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--cl-text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .nav-tab:hover {
-  background: rgba(64, 158, 255, 0.08);
   color: var(--cl-text);
 }
 
 .nav-tab.active {
-  background: rgba(64, 158, 255, 0.15);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.nav-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(64, 158, 255, 0.15);
-}
-
-.brand strong {
-  font-size: 18px;
+  background: var(--cl-panel);
   color: var(--cl-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.stats {
-  font-size: 12px;
+.nav-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.nav-label {
+  line-height: 1.2;
+}
+
+.nav-count {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--cl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-tab.active .nav-count {
+  color: var(--el-color-primary);
 }
 
 .actions {

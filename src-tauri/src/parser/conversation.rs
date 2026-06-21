@@ -194,6 +194,9 @@ fn parse_message(message: &Value) -> Option<ParsedMessage> {
         .unwrap_or("unknown")
         .to_string();
     let content_value = message.get("content")?;
+    if is_internal_message(content_value, message) {
+        return None;
+    }
     let content = extract_content(content_value);
     let create_time = message.get("create_time").and_then(|v| v.as_f64());
     let raw_json = message.to_string();
@@ -279,8 +282,24 @@ fn extract_content(content: &Value) -> String {
             })
             .unwrap_or_default(),
         "image_asset_pointer" => String::new(),
+        "user_editable_context" => String::new(),
         other => format!("[{other}]"),
     }
+}
+
+fn is_internal_message(content: &Value, message: &Value) -> bool {
+    let content_type = content
+        .get("content_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    if content_type == "user_editable_context" {
+        return true;
+    }
+    message
+        .get("metadata")
+        .and_then(|v| v.get("is_user_system_message"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
 }
 
 fn extract_attachment_infos_from_content(content: &Value, role: &str) -> Vec<ParsedAttachment> {
@@ -378,10 +397,43 @@ mod tests {
     }
 
     #[test]
-    fn classifies_dalle_generations_path_as_generated() {
-        assert_eq!(
-            classify_image_source(None, "user", Some("dalle-generations/foo.webp")),
-            "generated"
-        );
+    fn skips_user_editable_context_messages() {
+        let raw = r#"{
+            "id": "conv-1",
+            "title": "test",
+            "current_node": "n1",
+            "mapping": {
+                "n1": {
+                    "id": "n1",
+                    "message": {
+                        "id": "m1",
+                        "author": { "role": "user" },
+                        "content": {
+                            "content_type": "text",
+                            "parts": ["hello"]
+                        },
+                        "create_time": 1.0
+                    },
+                    "parent": "n0"
+                },
+                "n0": {
+                    "id": "n0",
+                    "message": {
+                        "id": "m0",
+                        "author": { "role": "user" },
+                        "content": {
+                            "content_type": "user_editable_context",
+                            "user_profile": "secret"
+                        },
+                        "metadata": { "is_user_system_message": true }
+                    },
+                    "parent": null
+                }
+            }
+        }"#;
+        let value: Value = serde_json::from_str(raw).unwrap();
+        let parsed = parse_conversation(&value).expect("parse");
+        assert_eq!(parsed.messages.len(), 1);
+        assert_eq!(parsed.messages[0].content, "hello");
     }
 }

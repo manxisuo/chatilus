@@ -875,7 +875,9 @@ fn clean_content_placeholders(content: String) -> String {
         .lines()
         .filter(|line| {
             let trimmed = line.trim();
-            trimmed != "[image_asset_pointer]" && trimmed != "[multimodal_text]"
+            trimmed != "[image_asset_pointer]"
+                && trimmed != "[multimodal_text]"
+                && trimmed != "[user_editable_context]"
         })
         .collect::<Vec<_>>()
         .join("\n")

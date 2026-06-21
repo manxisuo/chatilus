@@ -182,7 +182,6 @@ onMounted(() => {
   <div class="image-gallery">
     <header class="gallery-header">
       <div>
-        <h2>图片</h2>
         <p class="subtitle">浏览所有对话中的图片，点击可放大查看</p>
         <p v-if="statsText" class="stats">{{ statsText }}</p>
       </div>
@@ -269,14 +268,8 @@ onMounted(() => {
   border-bottom: 1px solid var(--cl-border);
 }
 
-.gallery-header h2 {
-  margin: 0;
-  font-size: 18px;
-  color: var(--cl-text);
-}
-
 .subtitle {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 13px;
   color: var(--cl-text-muted);
 }

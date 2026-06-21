@@ -56,7 +56,7 @@ function sanitizeContent(content: string) {
     .split("\n")
     .filter((line) => {
       const trimmed = line.trim();
-      return trimmed !== "[image_asset_pointer]" && trimmed !== "[multimodal_text]";
+      return trimmed !== "[image_asset_pointer]" && trimmed !== "[multimodal_text]" && trimmed !== "[user_editable_context]";
     })
     .join("\n")
     .trim();
@@ -88,10 +88,12 @@ function openLightbox(path: string) {
 }
 
 const renderedMessages = computed(() =>
-  props.messages.map((message) => ({
-    ...message,
-    html: renderMarkdown(sanitizeContent(message.content)),
-  })),
+  props.messages
+    .map((message) => ({
+      ...message,
+      html: renderMarkdown(sanitizeContent(message.content)),
+    }))
+    .filter((message) => message.html.trim() || message.attachments.length > 0),
 );
 </script>
 
@@ -106,7 +108,7 @@ const renderedMessages = computed(() =>
         <div class="header-main">
           <h2>{{ title }}</h2>
           <div class="header-meta">
-            <span class="count">{{ messages.length }} 条消息</span>
+            <span class="count">{{ renderedMessages.length }} 条消息</span>
             <el-tag
               v-for="tag in conversationTags"
               :key="tag"
