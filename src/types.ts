@@ -1,0 +1,64 @@
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  create_time: number | null;
+  update_time: number | null;
+  model: string | null;
+  message_count: number;
+  is_starred: boolean;
+  source_path: string;
+  tags: string[];
+}
+
+export interface AttachmentView {
+  file_key: string;
+  path: string;
+}
+
+export interface MessageView {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  create_time: number | null;
+  sort_order: number;
+  is_starred: boolean;
+  attachments: AttachmentView[];
+}
+
+export interface SearchHit {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string;
+  role: string;
+  snippet: string;
+  create_time: number | null;
+}
+
+export interface TagView {
+  id: number;
+  name: string;
+  conversation_count: number;
+}
+
+export interface ImportResult {
+  conversations_imported: number;
+  messages_imported: number;
+  files_processed: number;
+  source_path: string;
+  media_files_indexed: number;
+}
+
+export interface DatabaseStats {
+  conversation_count: number;
+  message_count: number;
+  starred_conversation_count: number;
+  starred_message_count: number;
+  tag_count: number;
+  db_path: string;
+}
+
+export interface ExportResult {
+  path: string;
+  message_count: number;
+}

@@ -1,0 +1,33 @@
+:root {
+  --cl-bg: #f3f4f6;
+  --cl-panel: #ffffff;
+  --cl-border: #e5e7eb;
+  --cl-text: #111827;
+  --cl-text-muted: #6b7280;
+  --cl-message-bg: #ffffff;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--cl-bg);
+  color: var(--cl-text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cl-bg: #111827;
+    --cl-panel: #1f2937;
+    --cl-border: #374151;
+    --cl-text: #f9fafb;
+    --cl-text-muted: #9ca3af;
+    --cl-message-bg: #111827;
+  }
+}
