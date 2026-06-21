@@ -352,7 +352,7 @@ onMounted(async () => {
         />
         <el-button @click="handleSearch">搜索</el-button>
         <el-button type="primary" :loading="importing" @click="handleImport">
-          导入导出目录
+          导入数据
         </el-button>
       </div>
     </el-header>

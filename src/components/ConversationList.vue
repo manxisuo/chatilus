@@ -67,7 +67,7 @@ const footerText = computed(() => {
 <template>
   <div class="conversation-list">
     <el-skeleton v-if="loading" animated :rows="8" />
-    <el-empty v-else-if="items.length === 0" description="暂无对话，请先导入导出目录" />
+    <el-empty v-else-if="items.length === 0" description="暂无对话，请先导入 ChatGPT 数据" />
     <div v-else class="list-scroll" @scroll.passive="onScroll">
       <button
         v-for="item in items"
