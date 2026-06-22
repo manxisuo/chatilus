@@ -153,8 +153,8 @@ src-tauri/src/
 
 #### PR 5 — Phase E：Asset 统一（可与图片功能迭代合并）
 
-- [ ] `list_images` 改为 `AssetRepository::list`
-- [ ] 逐步弃用 `ImageGalleryItem` 专用结构，统一为 `Asset` + View 投影
+- [x] `list_images` 改为 `AssetRepository::list`
+- [x] 逐步弃用 `ImageGalleryItem` 专用结构，统一为 `Asset` + View 投影
 
 **同步小项（任意 PR 可附带）：**
 
@@ -251,7 +251,7 @@ src-tauri/src/
 - [x] PR 2：ChatGPT Importer
 - [x] PR 3：Repository 拆分
 - [x] PR 4：SearchEngine trait
-- [ ] PR 5：Asset 统一
+- [x] PR 5：Asset 统一
 
 **功能（收敛完成后再做）**
 

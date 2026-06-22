@@ -65,40 +65,64 @@ pub fn asset_to_attachment_view(asset: &Asset) -> AttachmentView {
     }
 }
 
-pub fn gallery_item_to_asset(item: &ImageGalleryItem) -> Asset {
+pub fn image_fields_to_asset(
+    message_id: String,
+    conversation_id: String,
+    role: String,
+    create_time: Option<f64>,
+    conversation_title: String,
+    path: String,
+    file_key: String,
+    source: String,
+    prompt: Option<String>,
+) -> Asset {
     let mut metadata = HashMap::new();
     metadata.insert(
         "image_source".into(),
-        serde_json::Value::String(item.source.clone()),
+        serde_json::Value::String(source.clone()),
     );
-    metadata.insert("role".into(), serde_json::Value::String(item.role.clone()));
+    metadata.insert("role".into(), serde_json::Value::String(role));
     metadata.insert(
         "conversation_title".into(),
-        serde_json::Value::String(item.conversation_title.clone()),
+        serde_json::Value::String(conversation_title),
     );
-    if let Some(prompt) = &item.prompt {
+    if let Some(prompt) = &prompt {
         metadata.insert("prompt".into(), serde_json::Value::String(prompt.clone()));
     }
 
     Asset {
-        id: item.file_key.clone(),
+        id: file_key,
         source: DataSource::ChatGpt,
-        conversation_id: Some(item.conversation_id.clone()),
-        message_id: Some(item.message_id.clone()),
+        conversation_id: Some(conversation_id),
+        message_id: Some(message_id),
         asset_type: AssetType::Image,
-        title: item.prompt.clone(),
+        title: prompt,
         mime_type: None,
         uri: None,
-        local_path: Some(item.path.clone()),
+        local_path: Some(path),
         content: None,
         metadata,
-        created_at: item.create_time,
+        created_at: create_time,
         is_favorite: false,
         tags: Vec::new(),
     }
 }
 
-pub fn asset_to_gallery_item(asset: &Asset, conversation_title: &str, role: &str) -> ImageGalleryItem {
+pub fn gallery_item_to_asset(item: &ImageGalleryItem) -> Asset {
+    image_fields_to_asset(
+        item.message_id.clone(),
+        item.conversation_id.clone(),
+        item.role.clone(),
+        item.create_time,
+        item.conversation_title.clone(),
+        item.path.clone(),
+        item.file_key.clone(),
+        item.source.clone(),
+        item.prompt.clone(),
+    )
+}
+
+pub fn asset_to_gallery_item(asset: &Asset) -> ImageGalleryItem {
     let source = asset
         .metadata
         .get("image_source")
@@ -110,13 +134,18 @@ pub fn asset_to_gallery_item(asset: &Asset, conversation_title: &str, role: &str
         path: asset.local_path.clone().unwrap_or_default(),
         file_key: asset.id.clone(),
         conversation_id: asset.conversation_id.clone().unwrap_or_default(),
-        conversation_title: conversation_title.to_string(),
+        conversation_title: asset
+            .metadata
+            .get("conversation_title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         message_id: asset.message_id.clone().unwrap_or_default(),
         role: asset
             .metadata
             .get("role")
             .and_then(|v| v.as_str())
-            .unwrap_or(role)
+            .unwrap_or("unknown")
             .to_string(),
         create_time: asset.created_at,
         source,
@@ -127,6 +156,12 @@ pub fn asset_to_gallery_item(asset: &Asset, conversation_title: &str, role: &str
                 .and_then(|v| v.as_str())
                 .map(str::to_string)
         }),
+    }
+}
+
+impl From<Asset> for ImageGalleryItem {
+    fn from(asset: Asset) -> Self {
+        asset_to_gallery_item(&asset)
     }
 }
 
@@ -171,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn gallery_item_maps_to_asset() {
+    fn gallery_item_asset_round_trip() {
         let item = ImageGalleryItem {
             path: "/img.png".to_string(),
             file_key: "fk".to_string(),
@@ -181,11 +216,14 @@ mod tests {
             role: "assistant".to_string(),
             create_time: Some(1.0),
             source: "upload".to_string(),
-            prompt: None,
+            prompt: Some("prompt".to_string()),
         };
 
-        let asset: Asset = (&item).into();
+        let asset = gallery_item_to_asset(&item);
         assert_eq!(asset.id, "fk");
         assert_eq!(asset.local_path.as_deref(), Some("/img.png"));
+
+        let back = asset_to_gallery_item(&asset);
+        assert_eq!(back, item);
     }
 }

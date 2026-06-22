@@ -65,7 +65,7 @@ pub struct ImportResult {
     pub media_files_indexed: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageGalleryItem {
     pub path: String,
     pub file_key: String,

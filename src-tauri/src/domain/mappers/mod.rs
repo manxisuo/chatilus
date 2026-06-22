@@ -6,5 +6,6 @@ mod message;
 mod parser;
 mod search;
 
+pub use asset::{asset_to_gallery_item, image_fields_to_asset};
 pub use conversation::conversation_from_row;
 pub use message::{message_from_db_fields, message_to_view};

@@ -3,20 +3,21 @@ use std::path::Path;
 
 use rusqlite::params;
 
+use crate::domain::mappers::image_fields_to_asset;
+use crate::domain::models::Asset;
 use crate::domain::ports::{AssetListQuery, AssetRepository};
 use crate::infrastructure::importers::chatgpt::{
     attachments::{imported_attachments_to_views, resolve_imported_attachments},
     extract_attachment_infos_from_message_json,
 };
 use crate::infrastructure::media::MediaIndex;
-use crate::models::ImageGalleryItem;
 
 use super::Database;
 
 impl AssetRepository for Database {
-    fn list_images(&self, query: AssetListQuery) -> Result<Vec<ImageGalleryItem>, String> {
+    fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String> {
         let mut from_attachments =
-            list_images_from_attachments(&self.conn, query.limit, query.offset, query.include_uploads)?;
+            list_assets_from_attachments(&self.conn, query.limit, query.offset, query.include_uploads)?;
 
         if from_attachments.len() as i64 >= query.limit {
             return Ok(from_attachments);
@@ -30,7 +31,7 @@ impl AssetRepository for Database {
                 query.include_uploads,
             )?))
         .max(0);
-        let hydrated = list_images_from_raw_json(
+        let hydrated = list_assets_from_raw_json(
             &self.conn,
             remaining,
             hydrate_offset,
@@ -46,12 +47,12 @@ impl AssetRepository for Database {
     }
 }
 
-fn list_images_from_attachments(
+fn list_assets_from_attachments(
     conn: &rusqlite::Connection,
     limit: i64,
     offset: i64,
     include_uploads: bool,
-) -> Result<Vec<ImageGalleryItem>, String> {
+) -> Result<Vec<Asset>, String> {
     let upload_filter = if include_uploads {
         String::new()
     } else {
@@ -86,17 +87,17 @@ fn list_images_from_attachments(
 
     let rows = stmt
         .query_map(params![limit, offset], |row| {
-            Ok(ImageGalleryItem {
-                message_id: row.get(0)?,
-                conversation_id: row.get(1)?,
-                role: row.get(2)?,
-                create_time: row.get(3)?,
-                conversation_title: row.get(4)?,
-                path: row.get(5)?,
-                file_key: row.get(6)?,
-                source: row.get(7)?,
-                prompt: row.get(8)?,
-            })
+            Ok(image_fields_to_asset(
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+            ))
         })
         .map_err(|e| format!("查询图片失败: {e}"))?;
 
@@ -104,12 +105,12 @@ fn list_images_from_attachments(
         .map_err(|e| format!("读取图片失败: {e}"))
 }
 
-fn list_images_from_raw_json(
+fn list_assets_from_raw_json(
     conn: &rusqlite::Connection,
     limit: i64,
     offset: i64,
     include_uploads: bool,
-) -> Result<Vec<ImageGalleryItem>, String> {
+) -> Result<Vec<Asset>, String> {
     if limit <= 0 {
         return Ok(Vec::new());
     }
@@ -162,17 +163,17 @@ fn list_images_from_raw_json(
             if !include_uploads && attachment.source == "upload" {
                 continue;
             }
-            flattened.push(ImageGalleryItem {
-                path: attachment.path,
-                file_key: attachment.file_key,
-                conversation_id: conversation_id.clone(),
-                conversation_title: title.clone(),
-                message_id: message_id.clone(),
-                role: role.clone(),
+            flattened.push(image_fields_to_asset(
+                message_id.clone(),
+                conversation_id.clone(),
+                role.clone(),
                 create_time,
-                source: attachment.source,
-                prompt: attachment.prompt,
-            });
+                title.clone(),
+                attachment.path,
+                attachment.file_key,
+                attachment.source,
+                attachment.prompt,
+            ));
         }
     }
 

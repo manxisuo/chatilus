@@ -1,7 +1,6 @@
+use crate::domain::models::Asset;
 use crate::domain::ports::ImportedConversation;
-use crate::models::{
-    ConversationSummary, ExportResult, ImageGalleryItem, MessageView,
-};
+use crate::models::{ConversationSummary, ExportResult, MessageView};
 
 #[derive(Debug, Clone, Default)]
 pub struct ConversationListQuery {
@@ -51,6 +50,6 @@ pub trait MessageRepository {
 }
 
 pub trait AssetRepository {
-    fn list_images(&self, query: AssetListQuery) -> Result<Vec<ImageGalleryItem>, String>;
+    fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String>;
     fn count_by_source(&self) -> Result<(i64, i64, i64), String>;
 }
