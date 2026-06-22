@@ -2,7 +2,7 @@
 
 > 本文描述 **架构收敛（PR 1–5）完成后的当前结构**。技术路线与版本规划见 [ROADMAP.md](../ROADMAP.md)。
 >
-> **当前阶段**：架构收敛已完成；下一阶段以 **v0.3 产品能力**（zip 导入、进度、多包合并）为主，辅以 `schema_version`、`ImportJob`、`SourceInfo` 等技术配套。
+> **当前阶段**：v0.3（导入、进度、多包合并去重）已完成；下一阶段为 **v0.4 多源 Importer**（及可选 AI 分析）。技术路线见 [ROADMAP.md](../ROADMAP.md)。
 
 ## 核心原则
 
@@ -414,4 +414,4 @@ FTS · Thumbnail · Embedding · Summary
 
 ## 相关文档
 
-- [ROADMAP.md](../ROADMAP.md) — 技术栈、版本规划、数据库表设计、v0.3 当前重点
+- [ROADMAP.md](../ROADMAP.md) — 技术栈、版本规划、数据库表设计、v0.4 当前重点

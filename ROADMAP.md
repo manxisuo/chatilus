@@ -4,18 +4,31 @@
 >
 > 长期愿景：从「导出数据查看器」演进为本地 **AI Conversation OS**——核心是 **Import + Index + Browse**，而非云平台或插件生态。
 
-## 当前重点（v0.3）
+## 当前重点（v0.4）
 
-架构收敛（PR 1–5）**已完成**。下一阶段以**产品能力**为主，详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+v0.3（导入、进度、多包合并去重）**已完成**。下一阶段以**多源 Importer** 为主，详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+### 产品功能
+
+- [ ] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
+- [ ] Claude / Gemini / Cursor 等导出格式（按需逐个新增 Importer，PR4b+）
+
+### 技术配套
+
+- [ ] 导入流程去 ChatGPT 硬编码（`import_data` / `zip` 解压后根目录探测）
+- [ ] 各 Importer 独立 `importer_version`
+
+---
+
+## v0.3 交付清单（已完成）
 
 ### 产品功能
 
 - [x] 直接导入 zip（含嵌套 zip）
 - [x] 导入进度 UI（本地 `ImportJob` + 进度条）
 - [x] 多导出包合并 / 去重
-- [ ] Claude / Gemini / DeepSeek 等导出格式（按需新增 Importer）
 
-### 技术配套（与产品功能同步推进）
+### 技术配套
 
 - [x] `meta` 表 + `schema_version`（统一 DB 迁移）
 - [x] `ImportJob` 最小模型（`id` / `source_path` / `status` / `progress` / `error`；不做分布式任务队列）
@@ -266,13 +279,24 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - [x] 导出为 Markdown
 - [x] 图片附件展示（`file-*` 本地路径解析）
 
-### v0.3 — 导入与多源（当前）
+### v0.3 — 导入增强 ✅
 
-**架构收敛** — 已完成，见上文 PR 1–5。
+**架构收敛** — PR 1–5，已完成。
 
-**产品 + 技术配套** — 见本文档顶部「当前重点」。
+**产品 + 技术配套** — 见上文「v0.3 交付清单」。
 
-### v0.4+ — 智能分析（可选）
+- zip 直导、导入进度、`ImportJob`
+- 多导出包合并 / 去重
+- `schema_version`、`SourceInfo`、`conversations.source` / `source_id`
+
+### v0.4 — 多源与智能分析（当前）
+
+**多源 Importer**
+
+- [ ] `ImporterRegistry` + 导入流程去硬编码（PR4a）
+- [ ] Claude / Gemini / Cursor 等（PR4b+，按样本逐个实现）
+
+**智能分析（可选）**
 
 - [ ] `application/ai/`：AI 总结历史对话
 - [ ] 向量检索（新 `SearchEngine` 实现或扩展）
