@@ -7,7 +7,7 @@ use serde_json::Value;
 
 pub use conversation::{
     classify_image_source, extract_attachment_infos_from_message_json,
-    extract_pointers_from_message_json, ParsedAttachment, ParsedConversation,
+    extract_pointers_from_message_json, ParsedAttachment, ParsedConversation, ParsedMessage,
 };
 
 pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String> {

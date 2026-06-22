@@ -20,25 +20,157 @@ ChatLens 只需浏览本地历史数据，不需要内置完整 Chromium。**Tau
 
 ## 架构
 
+### 核心原则
+
+> **外部数据源可以变，内部模型尽量稳定。**
+
+核心层只认：`Conversation`、`Message`、`Asset`、`Importer`、`Repository`、`SearchEngine`、`AIProvider`。
+
+以下概念**不得渗入** domain / application 层：
+
+- ChatGPT `mapping` / `current_node`
+- Cursor SQLite 表结构
+- Claude / Gemini 导出字段
+- OpenAI response 格式
+- FTS5 SQL 细节
+
+外部格式变化 → 改 Importer；存储变化 → 改 Repository；搜索升级 → 改 SearchEngine；LLM 接入 → 加 AIProvider。
+
+### 分层（目标形态）
+
+```txt
+Vue 3 前端（薄层：api.ts + components）
+        │  invoke
+        ▼
+  commands.rs（Tauri 适配，不含业务逻辑）
+        │
+        ▼
+  application/（用例：import_data、list_conversations、search_all …）
+        │
+        ▼
+  domain/（稳定模型 + 端口 trait）
+        ▲
+        │  实现
+  infrastructure/
+    · importers/chatgpt/     外部格式 → 内部模型
+    · db/                    SQLite Repository
+    · search/                SQLite FTS5 SearchEngine
+    · ai/                    NullAIProvider（预留）
+```
+
+数据流：
+
 ```txt
 ChatGPT Export（zip / 解压目录）
         │
         ▼
-  Rust 导入解析器
-  · 检测 conversations.json / conversations-NNN.json
-  · 线性化 mapping 树（current_node → parent 链）
-  · 提取 role / content / 时间 / 模型
+  ChatGptImporter（detect → preview → import）
         │
         ▼
-  SQLite 数据库
-  · conversations
-  · messages
-  · messages_fts（FTS5 全文索引）
+  Conversation / Message / Asset（domain 模型）
+        │
+        ├──► Repository → SQLite
+        └──► SearchEngine → FTS5
         │
         ▼
-  Vue 3 前端
-  · 对话列表 · 消息浏览 · 搜索 · 收藏/标签/导出/图片
+  View DTO → Vue（对话列表 · 消息 · 搜索 · 收藏/标签 · 图片）
 ```
+
+### Rust 目录结构（收敛后）
+
+```txt
+src-tauri/src/
+  domain/
+    models/          conversation, message, asset, source, search
+    ports/           importer, repository, search_engine, ai_provider
+  application/
+    usecases/        import_data, list_conversations, search_all, …
+  infrastructure/
+    importers/chatgpt/
+    db/              sqlite + *\_repository.rs
+    search/          sqlite_fts_search_engine.rs
+    ai/              null_ai_provider.rs
+  commands.rs        薄适配层
+```
+
+前端保持现有结构（`api.ts`、`types.ts`、`components/`），不急于拆 `presentation/` 子目录。
+
+### 核心内部模型
+
+长期稳定的领域概念（Rust 为 source of truth，经 commands 序列化给前端）：
+
+| 模型 | 说明 |
+|------|------|
+| `Conversation` | 会话元数据：`source`、`sourceId`、`title`、时间、计数、收藏、标签 |
+| `Message` | 消息：`role`、`content: MessageContent[]`、`plainText`、父子关系、`assetIds` |
+| `Asset` | 统一资产：图片、文件、代码片段、链接等（合并现有 `AttachmentView` / `ImageGalleryItem`） |
+| `Tag` | 标签（保持独立表） |
+| `SearchQuery` / `SearchResult` | 搜索抽象 |
+| `ImportJob` | 导入任务（接口预留，当前可用 `ImportResult` 扩展） |
+
+`MessageContent` 第一版从简，导入时以 `Text` / `ImageRef` 为主，后续再补 `Code`、`Link` 等结构化块。
+
+收藏暂用 `is_favorite` 字段（DB 列可继续叫 `is_starred`，mapper 转换），不必单独建 `Favorite` 实体表。
+
+### 端口抽象
+
+| 端口 | 职责 | 当前实现 |
+|------|------|----------|
+| `Importer` | `detect` / `preview` / `import` → `NormalizedImportResult` | `ChatGptImporter` |
+| `ConversationRepository` 等 | 持久化 domain 模型 | SQLite |
+| `SearchEngine` | 全文检索，与 FTS 实现解耦 | `SqliteFtsSearchEngine` |
+| `AIProvider` | 总结、打标签、抽资产、嵌入（可选） | `NullAIProvider`（空实现） |
+
+### 架构收敛（v0.3 前置，分 PR 实施）
+
+轻量收敛，**每步可独立合并、UI 行为不变、测试保持通过**。双轨运行：domain 模型与现有 View DTO 并存，通过 mapper 转换，不一次性删旧类型。
+
+#### PR 1 — Phase A：领域模型 + 映射
+
+- [x] 新增 `domain/models/`（`DataSource`、`Conversation`、`Message`、`Asset`）
+- [x] `MessageContent` 枚举（首版 `Text` + `ImageRef`）
+- [x] `impl From<Domain> for ViewDto` 映射，**旧 Tauri command 返回类型不变**
+- [x] 单元测试覆盖 mapper
+
+#### PR 2 — Phase B：抽出 ChatGPT Importer
+
+- [ ] 定义 `Importer` trait（`domain/ports/importer.rs`）
+- [ ] `infrastructure/importers/chatgpt/` 收纳现有 `parser/` + `media/` 编排
+- [ ] `import_export_dir` 改为：`importer.import()` → `save_many()`
+- [ ] `Database` 不再直接 `use parser::`
+
+#### PR 3 — Phase C：拆 Repository
+
+- [ ] 定义 Repository trait（`domain/ports/repository.rs`）
+- [ ] 从 `db/mod.rs` 切出 `conversation_repo`、`message_repo`、`asset_repo`
+- [ ] `AppState` 持有 repo 实例（或门面），commands 经 application 调用
+
+#### PR 4 — Phase D：SearchEngine trait
+
+- [ ] 定义 `SearchEngine` trait
+- [ ] FTS 读写迁入 `infrastructure/search/sqlite_fts.rs`
+- [ ] `search_messages` 经 application 层调用
+
+#### PR 5 — Phase E：Asset 统一（可与图片功能迭代合并）
+
+- [ ] `list_images` 改为 `AssetRepository::list`
+- [ ] 逐步弃用 `ImageGalleryItem` 专用结构，统一为 `Asset` + View 投影
+
+**同步小项（任意 PR 可附带）：**
+
+- [ ] `NullAIProvider` + trait 定义（零调用路径）
+- [ ] 按需 DB 迁移：`source`、`source_id` 列（非阻塞）
+
+### 暂不过度设计
+
+以下只在架构上**留位置**，当前不实现：
+
+- 插件化 Importer 动态加载
+- 服务端 / 多端同步
+- 向量数据库、Hybrid 搜索
+- LLM API 配置中心
+- 完整 `ImportJob` 进度系统
+- 前端完整 Clean Architecture 目录
 
 ---
 
@@ -111,7 +243,17 @@ ChatGPT Export（zip / 解压目录）
 - [x] 导出为 Markdown
 - [x] 图片附件展示（`file-*` 本地路径解析）
 
-### v0.3 — 导入与多源
+### v0.3 — 架构收敛 + 导入与多源
+
+**架构收敛（优先，见上文「架构收敛」5 个 PR）**
+
+- [x] PR 1：领域模型 + 映射
+- [ ] PR 2：ChatGPT Importer
+- [ ] PR 3：Repository 拆分
+- [ ] PR 4：SearchEngine trait
+- [ ] PR 5：Asset 统一
+
+**功能（收敛完成后再做）**
 
 - [ ] 直接导入 zip（含嵌套 zip）
 - [ ] 导入进度与增量更新

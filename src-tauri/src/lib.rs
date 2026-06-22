@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod domain;
 mod media;
 mod models;
 mod parser;

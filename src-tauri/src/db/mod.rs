@@ -5,6 +5,7 @@ use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite::functions::FunctionFlags;
 
+use crate::domain::mappers::{conversation_from_row, message_from_db_fields, message_to_view};
 use crate::media::MediaIndex;
 use crate::models::{
     AttachmentView, ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem,
@@ -274,6 +275,13 @@ impl Database {
 
         let rows = stmt
             .query_map(params![conversation_id], |row| {
+                let id: String = row.get(0)?;
+                let conversation_id: String = row.get(1)?;
+                let role: String = row.get(2)?;
+                let content = clean_content_placeholders(row.get(3)?);
+                let create_time: Option<f64> = row.get(4)?;
+                let sort_order: i64 = row.get(5)?;
+                let is_starred = row.get::<_, i64>(6)? != 0;
                 let attachments_raw: Option<String> = row.get(7)?;
                 let raw_json: Option<String> = row.get(8)?;
                 let mut attachments = attachments_raw
@@ -283,7 +291,6 @@ impl Database {
 
                 if attachments.is_empty() {
                     if let (Some(ref index), Some(ref raw)) = (&media_index, &raw_json) {
-                        let role: String = row.get(2)?;
                         attachments = resolve_parsed_attachments(
                             &extract_attachment_infos_from_message_json(raw),
                             &role,
@@ -291,25 +298,24 @@ impl Database {
                         );
                     }
                 } else {
-                    let role: String = row.get(2)?;
                     attachments = attachments
                         .into_iter()
                         .map(|attachment| enrich_attachment(attachment, &role))
                         .collect();
                 }
 
-                let content = clean_content_placeholders(row.get(3)?);
-
-                Ok(MessageView {
-                    id: row.get(0)?,
-                    conversation_id: row.get(1)?,
-                    role: row.get(2)?,
+                let message = message_from_db_fields(
+                    id,
+                    conversation_id,
+                    &role,
                     content,
-                    create_time: row.get(4)?,
-                    sort_order: row.get(5)?,
-                    is_starred: row.get::<_, i64>(6)? != 0,
-                    attachments,
-                })
+                    create_time,
+                    sort_order,
+                    is_starred,
+                    &attachments,
+                    raw_json,
+                );
+                Ok(message_to_view(message, attachments))
             })
             .map_err(|e| format!("查询消息失败: {e}"))?;
 
@@ -857,17 +863,18 @@ fn map_conversation_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<Convers
         tag_names.split('\x1f').map(str::to_string).collect()
     };
 
-    Ok(ConversationSummary {
-        id: row.get(0)?,
-        title: row.get(1)?,
-        create_time: row.get(2)?,
-        update_time: row.get(3)?,
-        model: row.get(4)?,
-        message_count: row.get(5)?,
-        is_starred: row.get::<_, i64>(6)? != 0,
-        source_path: row.get(7)?,
+    Ok(conversation_from_row(
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get::<_, i64>(6)? != 0,
+        row.get(7)?,
         tags,
-    })
+    )
+    .into())
 }
 
 fn clean_content_placeholders(content: String) -> String {

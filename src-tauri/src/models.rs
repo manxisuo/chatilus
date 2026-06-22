@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConversationSummary {
     pub id: String,
     pub title: String,
@@ -13,7 +13,7 @@ pub struct ConversationSummary {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttachmentView {
     pub file_key: String,
     pub path: String,
@@ -27,7 +27,7 @@ fn default_image_source() -> String {
     "unknown".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageView {
     pub id: String,
     pub conversation_id: String,
