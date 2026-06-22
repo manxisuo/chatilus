@@ -36,7 +36,9 @@ impl Database {
                     source_path TEXT NOT NULL,
                     model TEXT,
                     message_count INTEGER NOT NULL DEFAULT 0,
-                    is_starred INTEGER NOT NULL DEFAULT 0
+                    is_starred INTEGER NOT NULL DEFAULT 0,
+                    source TEXT,
+                    source_id TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS messages (

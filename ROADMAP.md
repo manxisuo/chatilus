@@ -12,7 +12,7 @@
 
 - [x] 直接导入 zip（含嵌套 zip）
 - [x] 导入进度 UI（本地 `ImportJob` + 进度条）
-- [ ] 多导出包合并 / 去重
+- [x] 多导出包合并 / 去重
 - [ ] Claude / Gemini / DeepSeek 等导出格式（按需新增 Importer）
 
 ### 技术配套（与产品功能同步推进）
@@ -20,7 +20,7 @@
 - [x] `meta` 表 + `schema_version`（统一 DB 迁移）
 - [x] `ImportJob` 最小模型（`id` / `source_path` / `status` / `progress` / `error`；不做分布式任务队列）
 - [x] 导入元数据 `SourceInfo`（`source` + `export_label` + `importer_version`，写入 `imports` 或 `ImportJob`）
-- [ ] 按需 DB 迁移：`conversations.source`、`conversations.source_id`
+- [x] 按需 DB 迁移：`conversations.source`、`conversations.source_id`
 
 ---
 

@@ -194,12 +194,14 @@ ImageRef { asset_id }
 
 | key | 示例 value | 用途 |
 |-----|------------|------|
-| `schema_version` | `2` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 2`） |
+| `schema_version` | `3` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 3`） |
 | `app_version` | `0.1.0` | 最近一次打开数据库的应用版本（`CARGO_PKG_VERSION`） |
 
 v1 迁移：将早期库中散落的 `ALTER TABLE`（`is_starred`、`attachments`）纳入版本框架。
 
 v2 迁移：`import_jobs` 表；`imports` 表增加 `source` / `export_label` / `importer_version`。
+
+v3 迁移：`conversations.source` / `conversations.source_id`；旧数据回填为 `chatgpt` + `id`。
 
 ### SourceInfo（v0.3）
 
@@ -213,9 +215,15 @@ importer_version: 0.3
 
 可挂在 `imports` 表扩展字段或 `ImportJob` 结果中，写入 `NormalizedImportResult`。
 
-### conversations.source / source_id（v0.3 可选）
+### conversations.source / source_id（v3，已实现）
 
-domain 模型已有 `source` / `sourceId`；DB 列迁移与多源 Importer 同步推进。
+domain 模型已有 `source` / `sourceId`；DB 列在 v3 迁移中补齐。ChatGPT 导入时 `source_id` = 对话 UUID。
+
+### 多包合并 / 去重（v3，已实现）
+
+- **包内去重**：`domain/import_merge.rs` 按对话 `id` 合并，消息按源 `message.id` 去重。
+- **跨包合并**：持久化时不再 `DELETE` 全量消息，改为按 `conversation_id::message_id` upsert，保留其他导出包中的独有消息。
+- **元数据**：较新的 `update_time` 优先更新标题/模型；`message_count` 与 FTS 在合并后重建。
 
 ---
 

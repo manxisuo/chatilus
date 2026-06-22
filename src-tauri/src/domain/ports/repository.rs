@@ -1,4 +1,5 @@
 use crate::domain::models::Asset;
+use crate::domain::models::DataSource;
 use crate::domain::ports::ImportedConversation;
 use crate::models::{ConversationSummary, ExportResult, MessageView};
 
@@ -23,6 +24,7 @@ pub struct ImportPersistCounts {
     pub new_conversations: usize,
     pub updated_conversations: usize,
     pub messages: usize,
+    pub conversations_deduplicated: usize,
 }
 
 pub trait ConversationRepository {
@@ -41,7 +43,9 @@ pub trait ConversationRepository {
     fn save_many(
         &mut self,
         conversations: &[ImportedConversation],
-        source: &str,
+        source_path: &str,
+        data_source: DataSource,
+        conversations_deduplicated: usize,
     ) -> Result<ImportPersistCounts, String>;
 }
 

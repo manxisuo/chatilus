@@ -3,6 +3,7 @@ use std::path::Path;
 
 use rusqlite::{params, OptionalExtension, Transaction};
 
+use crate::domain::models::DataSource;
 use crate::domain::ports::{
     ConversationListQuery, ConversationRepository, ImportPersistCounts, ImportedConversation,
     MessageRepository,
@@ -198,7 +199,9 @@ impl ConversationRepository for Database {
     fn save_many(
         &mut self,
         conversations: &[ImportedConversation],
-        source: &str,
+        source_path: &str,
+        data_source: DataSource,
+        conversations_deduplicated: usize,
     ) -> Result<ImportPersistCounts, String> {
         let tx = self
             .conn
@@ -210,13 +213,14 @@ impl ConversationRepository for Database {
         let mut message_count = 0usize;
 
         for conversation in conversations {
-            let inserted = upsert_conversation(&tx, conversation, source)?;
+            let inserted =
+                upsert_conversation(&tx, conversation, source_path, data_source)?;
             if inserted {
                 new_conversations += 1;
             } else {
                 updated_conversations += 1;
             }
-            message_count += insert_messages(&tx, conversation)?;
+            message_count += merge_messages(&tx, conversation)?;
         }
 
         tx.commit()
@@ -226,6 +230,7 @@ impl ConversationRepository for Database {
             new_conversations,
             updated_conversations,
             messages: message_count,
+            conversations_deduplicated,
         })
     }
 }
@@ -233,54 +238,118 @@ impl ConversationRepository for Database {
 fn upsert_conversation(
     tx: &Transaction<'_>,
     conversation: &ImportedConversation,
-    source: &str,
+    source_path: &str,
+    data_source: DataSource,
 ) -> Result<bool, String> {
-    let exists: i64 = tx
-        .query_row(
-            "SELECT COUNT(*) FROM conversations WHERE id = ?1",
-            params![conversation.id],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("检查会话失败: {e}"))?;
+    let existing = read_conversation_metadata(tx, &conversation.id)?;
+    let is_new = existing.is_none();
+    let metadata = pick_conversation_metadata(conversation, existing.as_ref());
 
     tx.execute(
-        "INSERT INTO conversations (id, title, create_time, update_time, source_path, model, message_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "INSERT INTO conversations (
+            id, title, create_time, update_time, source_path, model, message_count, source, source_id
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             create_time = excluded.create_time,
             update_time = excluded.update_time,
             source_path = excluded.source_path,
             model = excluded.model,
-            message_count = excluded.message_count",
+            source = excluded.source,
+            source_id = excluded.source_id",
         params![
             conversation.id,
-            conversation.title,
-            conversation.create_time,
-            conversation.update_time,
-            source,
-            conversation.model,
+            metadata.title,
+            metadata.create_time,
+            metadata.update_time,
+            source_path,
+            metadata.model,
             conversation.messages.len() as i64,
+            data_source.as_str(),
+            conversation.id,
         ],
     )
     .map_err(|e| format!("写入会话失败: {e}"))?;
 
-    tx.execute(
-        "DELETE FROM messages WHERE conversation_id = ?1",
-        params![conversation.id],
-    )
-    .map_err(|e| format!("清理旧消息失败: {e}"))?;
-
-    remove_conversation_index(&tx, &conversation.id)?;
-
-    Ok(exists == 0)
+    Ok(is_new)
 }
 
-fn insert_messages(
+struct ConversationMetadata {
+    title: String,
+    create_time: Option<f64>,
+    update_time: Option<f64>,
+    model: Option<String>,
+}
+
+fn read_conversation_metadata(
+    tx: &Transaction<'_>,
+    conversation_id: &str,
+) -> Result<Option<ConversationMetadata>, String> {
+    tx.query_row(
+        "SELECT title, create_time, update_time, model
+         FROM conversations WHERE id = ?1",
+        params![conversation_id],
+        |row| {
+            Ok(ConversationMetadata {
+                title: row.get(0)?,
+                create_time: row.get(1)?,
+                update_time: row.get(2)?,
+                model: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| format!("读取会话元数据失败: {e}"))
+}
+
+fn pick_conversation_metadata(
+    incoming: &ImportedConversation,
+    existing: Option<&ConversationMetadata>,
+) -> ConversationMetadata {
+    let Some(existing) = existing else {
+        return ConversationMetadata {
+            title: incoming.title.clone(),
+            create_time: incoming.create_time,
+            update_time: incoming.update_time,
+            model: incoming.model.clone(),
+        };
+    };
+
+    let incoming_update = incoming.update_time.unwrap_or(0.0);
+    let existing_update = existing.update_time.unwrap_or(0.0);
+    if incoming_update >= existing_update {
+        ConversationMetadata {
+            title: incoming.title.clone(),
+            create_time: min_option_time(incoming.create_time, existing.create_time),
+            update_time: Some(incoming_update.max(existing_update)),
+            model: incoming.model.clone().or_else(|| existing.model.clone()),
+        }
+    } else {
+        ConversationMetadata {
+            title: existing.title.clone(),
+            create_time: min_option_time(incoming.create_time, existing.create_time),
+            update_time: existing.update_time,
+            model: existing.model.clone().or_else(|| incoming.model.clone()),
+        }
+    }
+}
+
+fn min_option_time(left: Option<f64>, right: Option<f64>) -> Option<f64> {
+    match (left, right) {
+        (Some(l), Some(r)) => Some(l.min(r)),
+        (Some(l), None) => Some(l),
+        (None, Some(r)) => Some(r),
+        (None, None) => None,
+    }
+}
+
+fn merge_messages(
     tx: &Transaction<'_>,
     conversation: &ImportedConversation,
 ) -> Result<usize, String> {
-    for (index, message) in conversation.messages.iter().enumerate() {
+    let mut touched = 0usize;
+
+    for message in &conversation.messages {
         let stored_id = format!("{}::{}", conversation.id, message.id);
         let attachments = imported_attachments_to_views(&message.attachments);
         let attachments_json = serde_json::to_string(&attachments)
@@ -288,30 +357,195 @@ fn insert_messages(
 
         tx.execute(
             "INSERT INTO messages (id, conversation_id, role, content, create_time, sort_order, raw_json, attachments)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                role = excluded.role,
+                content = excluded.content,
+                create_time = excluded.create_time,
+                raw_json = excluded.raw_json,
+                attachments = excluded.attachments",
             params![
                 stored_id,
                 conversation.id,
                 message.role,
                 message.content,
                 message.create_time,
-                index as i64,
                 message.raw_json,
                 attachments_json,
             ],
         )
         .map_err(|e| format!("写入消息失败: {e}"))?;
+        touched += 1;
+    }
 
+    reorder_conversation_messages(tx, &conversation.id)?;
+    refresh_conversation_message_count(tx, &conversation.id)?;
+    reindex_conversation_messages(tx, &conversation.id, &conversation.title)?;
+
+    Ok(touched)
+}
+
+fn reorder_conversation_messages(
+    tx: &Transaction<'_>,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let mut stmt = tx
+        .prepare(
+            "SELECT id, create_time
+             FROM messages
+             WHERE conversation_id = ?1
+             ORDER BY COALESCE(create_time, 0), id",
+        )
+        .map_err(|e| format!("读取消息排序失败: {e}"))?;
+
+    let rows = stmt
+        .query_map(params![conversation_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<f64>>(1)?))
+        })
+        .map_err(|e| format!("读取消息排序失败: {e}"))?;
+
+    for (index, row) in rows.enumerate() {
+        let (message_id, _) = row.map_err(|e| format!("读取消息排序失败: {e}"))?;
+        tx.execute(
+            "UPDATE messages SET sort_order = ?1 WHERE id = ?2",
+            params![index as i64, message_id],
+        )
+        .map_err(|e| format!("更新消息顺序失败: {e}"))?;
+    }
+
+    Ok(())
+}
+
+fn refresh_conversation_message_count(
+    tx: &Transaction<'_>,
+    conversation_id: &str,
+) -> Result<(), String> {
+    tx.execute(
+        "UPDATE conversations
+         SET message_count = (
+            SELECT COUNT(*) FROM messages WHERE conversation_id = ?1
+         )
+         WHERE id = ?1",
+        params![conversation_id],
+    )
+    .map_err(|e| format!("更新会话消息数失败: {e}"))?;
+    Ok(())
+}
+
+fn reindex_conversation_messages(
+    tx: &Transaction<'_>,
+    conversation_id: &str,
+    conversation_title: &str,
+) -> Result<(), String> {
+    remove_conversation_index(tx, conversation_id)?;
+
+    let mut stmt = tx
+        .prepare(
+            "SELECT id, content
+             FROM messages
+             WHERE conversation_id = ?1
+             ORDER BY sort_order",
+        )
+        .map_err(|e| format!("读取消息索引失败: {e}"))?;
+
+    let rows = stmt
+        .query_map(params![conversation_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| format!("读取消息索引失败: {e}"))?;
+
+    for row in rows {
+        let (message_id, content) = row.map_err(|e| format!("读取消息索引失败: {e}"))?;
         index_message(
-            &tx,
+            tx,
             &SearchIndexEntry {
-                message_id: stored_id,
-                conversation_id: conversation.id.clone(),
-                conversation_title: conversation.title.clone(),
-                content: message.content.clone(),
+                message_id,
+                conversation_id: conversation_id.to_string(),
+                conversation_title: conversation_title.to_string(),
+                content,
             },
         )?;
     }
 
-    Ok(conversation.messages.len())
+    Ok(())
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use crate::db::Database;
+    use crate::domain::models::DataSource;
+    use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
+
+    fn sample_conversation(message_ids: &[&str]) -> ImportedConversation {
+        ImportedConversation {
+            id: "conv-1".to_string(),
+            title: "Merge Test".to_string(),
+            create_time: Some(1.0),
+            update_time: Some(2.0),
+            model: Some("gpt-4".to_string()),
+            messages: message_ids
+                .iter()
+                .map(|message_id| ImportedMessage {
+                    id: (*message_id).to_string(),
+                    role: "user".to_string(),
+                    content: format!("body-{message_id}"),
+                    create_time: Some(3.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::<ImportedAttachment>::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn merge_import_keeps_existing_messages_from_other_packages() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-merge-test-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        ConversationRepository::save_many(
+            &mut db,
+            &[sample_conversation(&["m1", "m2"])],
+            "/export-a",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("first import");
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[sample_conversation(&["m2", "m3"])],
+            "/export-b",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("second import");
+
+        let message_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count messages");
+        assert_eq!(message_count, 3);
+
+        let source_id: String = db
+            .conn
+            .query_row(
+                "SELECT source_id FROM conversations WHERE id = 'conv-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("source id");
+        assert_eq!(source_id, "conv-1");
+    }
 }

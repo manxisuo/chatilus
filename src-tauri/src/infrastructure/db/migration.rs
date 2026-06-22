@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 2;
+pub const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -31,6 +31,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
     let result = match version {
         1 => migrate_v1(&tx),
         2 => migrate_v2(&tx),
+        3 => migrate_v3(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -109,6 +110,30 @@ fn migrate_v2(conn: &Connection) -> Result<(), String> {
     }
 
     upsert_meta(conn, "schema_version", "2")?;
+    Ok(())
+}
+
+/// v3：conversations 表补充 source / source_id。
+fn migrate_v3(conn: &Connection) -> Result<(), String> {
+    if !table_has_column(conn, "conversations", "source")? {
+        conn.execute("ALTER TABLE conversations ADD COLUMN source TEXT", [])
+            .map_err(|e| format!("迁移 v3: 添加 conversations.source 失败: {e}"))?;
+    }
+    if !table_has_column(conn, "conversations", "source_id")? {
+        conn.execute("ALTER TABLE conversations ADD COLUMN source_id TEXT", [])
+            .map_err(|e| format!("迁移 v3: 添加 conversations.source_id 失败: {e}"))?;
+    }
+
+    conn.execute(
+        "UPDATE conversations
+         SET source = COALESCE(source, 'chatgpt'),
+             source_id = COALESCE(source_id, id)
+         WHERE source IS NULL OR source_id IS NULL",
+        [],
+    )
+    .map_err(|e| format!("迁移 v3: 回填 conversations.source/source_id 失败: {e}"))?;
+
+    upsert_meta(conn, "schema_version", "3")?;
     Ok(())
 }
 

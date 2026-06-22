@@ -1,3 +1,4 @@
+pub mod import_merge;
 pub mod mappers;
 pub mod models;
 pub mod ports;

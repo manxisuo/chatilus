@@ -46,6 +46,7 @@ export interface TagView {
 export interface ImportResult {
   conversations_imported: number;
   conversations_updated: number;
+  conversations_deduplicated: number;
   messages_imported: number;
   files_processed: number;
   source_path: string;

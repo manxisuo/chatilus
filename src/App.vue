@@ -199,6 +199,9 @@ function formatImportResultMessage(result: ImportResult): string {
   if (result.conversations_updated > 0) {
     parts.push(`更新 ${result.conversations_updated} 个对话`);
   }
+  if (result.conversations_deduplicated > 0) {
+    parts.push(`包内合并 ${result.conversations_deduplicated} 个重复对话`);
+  }
   if (parts.length === 0) {
     parts.push("未发现对话");
   }

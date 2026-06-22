@@ -60,6 +60,7 @@ pub struct TagView {
 pub struct ImportResult {
     pub conversations_imported: usize,
     pub conversations_updated: usize,
+    pub conversations_deduplicated: usize,
     pub messages_imported: usize,
     pub files_processed: usize,
     pub source_path: String,

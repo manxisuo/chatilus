@@ -3,6 +3,7 @@ use std::path::Path;
 
 use rusqlite::{params, Connection};
 
+use crate::domain::import_merge::dedup_import_package;
 use crate::domain::models::SourceInfo;
 use crate::domain::ports::{ConversationRepository, NormalizedImportResult};
 use crate::models::ImportResult;
@@ -48,10 +49,15 @@ impl Database {
         let (source_key, export_label, importer_version) =
             Database::source_info_sql_values(source_info);
 
+        let (conversations, conversations_deduplicated) =
+            dedup_import_package(imported.package.conversations.clone());
+
         let counts = ConversationRepository::save_many(
             self,
-            &imported.package.conversations,
+            &conversations,
             &source,
+            source_info.source,
+            conversations_deduplicated,
         )?;
 
         self.conn
@@ -74,6 +80,7 @@ impl Database {
         Ok(ImportResult {
             conversations_imported: counts.new_conversations,
             conversations_updated: counts.updated_conversations,
+            conversations_deduplicated: counts.conversations_deduplicated,
             messages_imported: counts.messages,
             files_processed,
             source_path: source,
