@@ -29,6 +29,10 @@ impl Importer for ChatGptImporter {
         DataSource::ChatGpt
     }
 
+    fn version(&self) -> &'static str {
+        "0.1.0"
+    }
+
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
         let matched = find_conversation_files(&input.path).is_ok();
         Ok(ImportDetectResult {

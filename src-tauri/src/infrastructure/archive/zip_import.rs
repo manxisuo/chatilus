@@ -1,17 +1,17 @@
 use std::fs::{self, File};
 use std::io::{copy, Read};
 use std::path::{Path, PathBuf};
-
-use crate::domain::models::ImportProgress;
-use crate::infrastructure::importers::chatgpt::find_conversation_files;
 use std::sync::Arc;
 
-const CHATGPT_IMPORTER_VERSION: &str = "0.1.0";
+use crate::domain::models::ImportProgress;
+use crate::infrastructure::importers::{default_importer_registry, ImporterRegistry};
 
 pub struct ResolvedImportPath {
     pub export_dir: PathBuf,
     pub cleanup: Option<TempExtractDir>,
     pub export_label: String,
+    pub importer_id: String,
+    pub importer_display_name: String,
 }
 
 pub struct TempExtractDir {
@@ -34,13 +34,23 @@ pub fn resolve_import_path(
     input_path: &Path,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
 ) -> Result<ResolvedImportPath, String> {
+    resolve_import_path_with_registry(input_path, &default_importer_registry(), on_progress)
+}
+
+pub fn resolve_import_path_with_registry(
+    input_path: &Path,
+    registry: &ImporterRegistry,
+    on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
+) -> Result<ResolvedImportPath, String> {
     if input_path.is_dir() {
-        let export_dir = find_chatgpt_export_root(input_path)?;
+        let (export_dir, detect) = registry.find_export_root(input_path)?;
         let export_label = export_label_from_path(input_path);
         return Ok(ResolvedImportPath {
             export_dir,
             cleanup: None,
             export_label,
+            importer_id: detect.importer_id,
+            importer_display_name: detect.display_name,
         });
     }
 
@@ -52,12 +62,14 @@ pub fn resolve_import_path(
         extract_zip(input_path, cleanup.path())?;
         report(on_progress.as_ref(), "extracting", 1, 1, 0.18);
         extract_nested_zips(cleanup.path(), on_progress.clone())?;
-        let export_dir = find_chatgpt_export_root(cleanup.path())?;
+        let (export_dir, detect) = registry.find_export_root(cleanup.path())?;
         let export_label = export_label_from_path(input_path);
         return Ok(ResolvedImportPath {
             export_dir,
             cleanup: Some(cleanup),
             export_label,
+            importer_id: detect.importer_id,
+            importer_display_name: detect.display_name,
         });
     }
 
@@ -67,14 +79,10 @@ pub fn resolve_import_path(
     ))
 }
 
-pub fn chatgpt_importer_version() -> &'static str {
-    CHATGPT_IMPORTER_VERSION
-}
-
 fn export_label_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|name| name.to_str())
-        .unwrap_or("chatgpt-export")
+        .unwrap_or("export")
         .to_string()
 }
 
@@ -205,32 +213,6 @@ fn collect_zip_files_recursively(dir: &Path, files: &mut Vec<PathBuf>) -> Result
     Ok(())
 }
 
-pub fn find_chatgpt_export_root(search_root: &Path) -> Result<PathBuf, String> {
-    if find_conversation_files(search_root).is_ok() {
-        return Ok(search_root.to_path_buf());
-    }
-
-    let mut queue = vec![search_root.to_path_buf()];
-    while let Some(dir) = queue.pop() {
-        let entries = fs::read_dir(&dir).map_err(|e| format!("无法读取目录 {}: {e}", dir.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
-            let path = entry.path();
-            if path.is_dir() {
-                if find_conversation_files(&path).is_ok() {
-                    return Ok(path);
-                }
-                queue.push(path);
-            }
-        }
-    }
-
-    Err(format!(
-        "在 {} 中未找到 ChatGPT 导出（conversations*.json）",
-        search_root.display()
-    ))
-}
-
 fn report(
     on_progress: Option<&Arc<dyn Fn(ImportProgress) + Send + Sync>>,
     phase: &str,
@@ -251,11 +233,13 @@ fn report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use zip::write::SimpleFileOptions;
-    use zip::ZipWriter;
+    use crate::infrastructure::importers::chatgpt::find_conversation_files;
 
     fn write_test_zip(path: &Path, json_name: &str, json_body: &str) {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
         let file = File::create(path).expect("create zip");
         let mut zip = ZipWriter::new(file);
         zip.start_file(
@@ -290,5 +274,6 @@ mod tests {
         let resolved = resolve_import_path(&zip_path, None).expect("resolve");
         assert!(find_conversation_files(&resolved.export_dir).is_ok());
         assert_eq!(resolved.export_label, "sample-export");
+        assert_eq!(resolved.importer_id, "chatgpt");
     }
 }

@@ -149,7 +149,7 @@ flowchart LR
 
 | 端口 | 职责 | Trait 定义 | 当前实现 |
 |------|------|------------|----------|
-| `Importer` | `detect` / `preview` / `import` → 统一导入包 | `domain/ports/importer.rs` | `infrastructure/importers/chatgpt/` |
+| `Importer` | `detect` / `preview` / `import` → 统一导入包 | `domain/ports/importer.rs` | `ImporterRegistry` → `infrastructure/importers/*` |
 | `ConversationRepository` | 会话列表、收藏、标签、导出、导入写入 | `domain/ports/repository.rs` | `infrastructure/db/conversation_repository.rs` |
 | `MessageRepository` | 消息列表、消息收藏 | 同上 | `infrastructure/db/message_repository.rs` |
 | `AssetRepository` | 资产列表（图片画廊）、按来源统计 | 同上 | `infrastructure/db/asset_repository.rs` |
@@ -224,6 +224,12 @@ domain 模型已有 `source` / `sourceId`；DB 列在 v3 迁移中补齐。ChatG
 - **包内去重**：`domain/import_merge.rs` 按对话 `id` 合并，消息按源 `message.id` 去重。
 - **跨包合并**：持久化时不再 `DELETE` 全量消息，改为按 `conversation_id::message_id` upsert，保留其他导出包中的独有消息。
 - **元数据**：较新的 `update_time` 优先更新标题/模型；`message_count` 与 FTS 在合并后重建。
+
+### ImporterRegistry（v4 PR4a，已实现）
+
+- `infrastructure/importers/registry.rs`：`detect(path)` / `find_export_root(path)`，按注册顺序匹配。
+- `application/import_data` 与 `archive/zip_import` 经 registry 选择 Importer，不再硬编码 `ChatGptImporter`。
+- 新源接入：实现 `Importer` trait 并加入 `default_importer_registry()` 即可。
 
 ---
 

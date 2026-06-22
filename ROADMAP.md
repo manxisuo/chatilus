@@ -10,13 +10,13 @@ v0.3（导入、进度、多包合并去重）**已完成**。下一阶段以**�
 
 ### 产品功能
 
-- [ ] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
+- [x] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
 - [ ] Claude / Gemini / Cursor 等导出格式（按需逐个新增 Importer，PR4b+）
 
 ### 技术配套
 
-- [ ] 导入流程去 ChatGPT 硬编码（`import_data` / `zip` 解压后根目录探测）
-- [ ] 各 Importer 独立 `importer_version`
+- [x] 导入流程去 ChatGPT 硬编码（`import_data` / `zip` 解压后根目录探测）
+- [x] 各 Importer 独立 `importer_version`（`Importer::version()`）
 
 ---
 
@@ -293,7 +293,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 
 **多源 Importer**
 
-- [ ] `ImporterRegistry` + 导入流程去硬编码（PR4a）
+- [x] `ImporterRegistry` + 导入流程去硬编码（PR4a）
 - [ ] Claude / Gemini / Cursor 等（PR4b+，按样本逐个实现）
 
 **智能分析（可选）**

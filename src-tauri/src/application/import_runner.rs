@@ -6,7 +6,8 @@ use tauri::{AppHandle, Emitter};
 use crate::application::{import_job_store::SharedImportJobStore, run_import_resolved};
 use crate::db::Database;
 use crate::domain::models::{ImportJob, ImportProgress, SourceInfo};
-use crate::infrastructure::archive::{chatgpt_importer_version, resolve_import_path};
+use crate::infrastructure::archive::resolve_import_path;
+use crate::infrastructure::importers::default_importer_registry;
 use crate::models::{ImportJobView, ImportProgressEvent};
 
 pub fn spawn_import_job(
@@ -51,6 +52,11 @@ pub fn spawn_import_job(
                 Some(progress.clone()),
             )?;
 
+            let importer_registry = default_importer_registry();
+            let importer = importer_registry
+                .by_id(&resolved.importer_id)
+                .ok_or_else(|| format!("未找到 Importer: {}", resolved.importer_id))?;
+
             if let Ok(mut registry) = store.lock() {
                 registry.set_resolved_path(
                     &job_id,
@@ -59,9 +65,9 @@ pub fn spawn_import_job(
                 registry.set_source_info(
                     &job_id,
                     SourceInfo::new(
-                        crate::domain::models::DataSource::ChatGpt,
+                        importer.source(),
                         resolved.export_label.clone(),
-                        chatgpt_importer_version(),
+                        importer.version(),
                     ),
                 );
             }

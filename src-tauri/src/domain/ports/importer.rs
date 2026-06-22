@@ -38,10 +38,11 @@ pub struct NormalizedImportResult {
     pub package: ImportPackage,
 }
 
-pub trait Importer {
+pub trait Importer: Send + Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
     fn source(&self) -> DataSource;
+    fn version(&self) -> &'static str;
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String>;
     fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String>;

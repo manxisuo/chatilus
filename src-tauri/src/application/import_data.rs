@@ -2,10 +2,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::db::Database;
-use crate::domain::models::{DataSource, ImportProgress, SourceInfo};
-use crate::domain::ports::{ImportInput, ImportOptions, Importer};
-use crate::infrastructure::archive::{chatgpt_importer_version, resolve_import_path, ResolvedImportPath};
-use crate::infrastructure::importers::ChatGptImporter;
+use crate::domain::models::{ImportProgress, SourceInfo};
+use crate::domain::ports::{ImportInput, ImportOptions};
+use crate::infrastructure::archive::resolve_import_path;
+use crate::infrastructure::archive::ResolvedImportPath;
+use crate::infrastructure::importers::default_importer_registry;
 use crate::models::ImportResult;
 
 pub fn import_export_dir(db: &mut Database, source_path: &Path) -> Result<ImportResult, String> {
@@ -28,13 +29,17 @@ pub fn run_import_resolved(
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
 ) -> Result<ImportResult, String> {
     let _cleanup = resolved.cleanup;
+    let registry = default_importer_registry();
+    let importer = registry
+        .by_id(&resolved.importer_id)
+        .ok_or_else(|| format!("未找到 Importer: {}", resolved.importer_id))?;
+
     let source_info = SourceInfo::new(
-        DataSource::ChatGpt,
+        importer.source(),
         resolved.export_label,
-        chatgpt_importer_version(),
+        importer.version(),
     );
 
-    let importer = ChatGptImporter::new();
     let normalized = importer.import(
         &ImportInput {
             path: resolved.export_dir,

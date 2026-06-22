@@ -1,5 +1,3 @@
 mod zip_import;
 
-pub use zip_import::{
-    chatgpt_importer_version, resolve_import_path, ResolvedImportPath,
-};
+pub use zip_import::{resolve_import_path, resolve_import_path_with_registry, ResolvedImportPath};
