@@ -1,8 +1,11 @@
-use crate::parser::{ParsedAttachment, ParsedConversation, ParsedMessage};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
 
 use super::super::models::{Conversation, DataSource, Message, MessageRole};
 
-pub fn parsed_conversation_to_domain(parsed: &ParsedConversation, import_path: &str) -> Conversation {
+pub fn parsed_conversation_to_domain(
+    parsed: &ImportedConversation,
+    import_path: &str,
+) -> Conversation {
     let asset_count = parsed
         .messages
         .iter()
@@ -28,7 +31,7 @@ pub fn parsed_conversation_to_domain(parsed: &ParsedConversation, import_path: &
 }
 
 pub fn parsed_message_to_domain(
-    parsed: &ParsedMessage,
+    parsed: &ImportedMessage,
     conversation_id: &str,
     sort_order: i64,
 ) -> Message {
@@ -55,7 +58,7 @@ pub fn parsed_message_to_domain(
     }
 }
 
-pub fn parsed_attachment_asset_ids(attachments: &[ParsedAttachment]) -> Vec<String> {
+pub fn parsed_attachment_asset_ids(attachments: &[ImportedAttachment]) -> Vec<String> {
     attachments
         .iter()
         .map(|attachment| attachment.pointer.clone())
@@ -68,22 +71,23 @@ mod tests {
 
     #[test]
     fn parsed_conversation_maps_to_domain() {
-        let parsed = ParsedConversation {
+        let parsed = ImportedConversation {
             id: "abc".to_string(),
             title: "Hello".to_string(),
             create_time: Some(1.0),
             update_time: Some(2.0),
             model: Some("gpt-4o".to_string()),
-            messages: vec![ParsedMessage {
+            messages: vec![ImportedMessage {
                 id: "m1".to_string(),
                 role: "user".to_string(),
                 content: "hi".to_string(),
                 create_time: None,
                 raw_json: "{}".to_string(),
-                attachments: vec![ParsedAttachment {
+                attachments: vec![ImportedAttachment {
                     pointer: "ptr-1".to_string(),
                     source: "upload".to_string(),
                     prompt: None,
+                    path: None,
                 }],
             }],
         };

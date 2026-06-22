@@ -6,14 +6,19 @@ use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite::functions::FunctionFlags;
 
 use crate::domain::mappers::{conversation_from_row, message_from_db_fields, message_to_view};
-use crate::media::MediaIndex;
+use crate::domain::ports::{
+    ImportInput, ImportOptions, ImportedConversation, Importer, NormalizedImportResult,
+};
+use crate::infrastructure::importers::chatgpt::{
+    attachments::{
+        enrich_attachment_view, imported_attachments_to_views, resolve_imported_attachments,
+    },
+    classify_image_source, extract_attachment_infos_from_message_json, ChatGptImporter,
+};
+use crate::infrastructure::media::MediaIndex;
 use crate::models::{
     AttachmentView, ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem,
     ImportResult, MessageView, SearchHit, TagView,
-};
-use crate::parser::{
-    classify_image_source, extract_attachment_infos_from_message_json, parse_export_dir,
-    ParsedAttachment, ParsedConversation,
 };
 
 pub struct Database {
@@ -151,10 +156,23 @@ impl Database {
     }
 
     pub fn import_export_dir(&mut self, source_path: &Path) -> Result<ImportResult, String> {
-        let media_index = MediaIndex::build(source_path);
-        let conversations = parse_export_dir(source_path)?;
-        let files_processed = crate::parser::find_conversation_files(source_path)?.len();
-        let source = source_path.display().to_string();
+        let importer = ChatGptImporter::new();
+        let normalized = importer.import(
+            &ImportInput {
+                path: source_path.to_path_buf(),
+            },
+            &ImportOptions::default(),
+        )?;
+        self.persist_import(&normalized)
+    }
+
+    pub fn persist_import(
+        &mut self,
+        imported: &NormalizedImportResult,
+    ) -> Result<ImportResult, String> {
+        let source = imported.source_path.clone();
+        let files_processed = imported.files_processed;
+        let media_files_indexed = imported.media_files_indexed;
 
         let tx = self
             .conn
@@ -164,12 +182,12 @@ impl Database {
         let mut conversation_count = 0usize;
         let mut message_count = 0usize;
 
-        for conversation in conversations {
-            let inserted = upsert_conversation(&tx, &conversation, &source)?;
+        for conversation in &imported.package.conversations {
+            let inserted = upsert_conversation(&tx, conversation, &source)?;
             if inserted {
                 conversation_count += 1;
             }
-            message_count += insert_messages(&tx, &conversation, &media_index)?;
+            message_count += insert_messages(&tx, conversation)?;
         }
 
         tx.execute(
@@ -187,7 +205,7 @@ impl Database {
             messages_imported: message_count,
             files_processed,
             source_path: source,
-            media_files_indexed: media_index.len(),
+            media_files_indexed,
         })
     }
 
@@ -291,16 +309,16 @@ impl Database {
 
                 if attachments.is_empty() {
                     if let (Some(ref index), Some(ref raw)) = (&media_index, &raw_json) {
-                        attachments = resolve_parsed_attachments(
+                        attachments = imported_attachments_to_views(&resolve_imported_attachments(
                             &extract_attachment_infos_from_message_json(raw),
                             &role,
                             index,
-                        );
+                        ));
                     }
                 } else {
                     attachments = attachments
                         .into_iter()
-                        .map(|attachment| enrich_attachment(attachment, &role))
+                        .map(|attachment| enrich_attachment_view(attachment, &role))
                         .collect();
                 }
 
@@ -694,7 +712,9 @@ impl Database {
                 .or_insert_with(|| MediaIndex::build(Path::new(&source_path)));
 
             let pointers = extract_attachment_infos_from_message_json(&raw_json);
-            let attachments = resolve_parsed_attachments(&pointers, &role, index);
+            let attachments = imported_attachments_to_views(&resolve_imported_attachments(
+                &pointers, &role, index,
+            ));
             for attachment in attachments {
                 if !include_uploads && attachment.source == "upload" {
                     continue;
@@ -898,7 +918,7 @@ fn parse_attachments_json(raw: &str) -> Vec<AttachmentView> {
 
 fn upsert_conversation(
     tx: &rusqlite::Transaction<'_>,
-    conversation: &ParsedConversation,
+    conversation: &ImportedConversation,
     source: &str,
 ) -> Result<bool, String> {
     let exists: i64 = tx
@@ -948,12 +968,11 @@ fn upsert_conversation(
 
 fn insert_messages(
     tx: &rusqlite::Transaction<'_>,
-    conversation: &ParsedConversation,
-    media_index: &MediaIndex,
+    conversation: &ImportedConversation,
 ) -> Result<usize, String> {
     for (index, message) in conversation.messages.iter().enumerate() {
         let stored_id = format!("{}::{}", conversation.id, message.id);
-        let attachments = resolve_parsed_attachments(&message.attachments, &message.role, media_index);
+        let attachments = imported_attachments_to_views(&message.attachments);
         let attachments_json = serde_json::to_string(&attachments)
             .map_err(|e| format!("序列化附件失败: {e}"))?;
 
@@ -987,44 +1006,6 @@ fn insert_messages(
     }
 
     Ok(conversation.messages.len())
-}
-
-fn resolve_parsed_attachments(
-    parsed: &[ParsedAttachment],
-    role: &str,
-    media_index: &MediaIndex,
-) -> Vec<AttachmentView> {
-    parsed
-        .iter()
-        .filter_map(|item| {
-            media_index.resolve(&item.pointer).map(|path| {
-                let path_str = path.display().to_string();
-                let source = if item.source == "unknown" {
-                    classify_image_source(None, role, Some(&path_str))
-                } else if path_str.contains("dalle-generations") {
-                    "generated".to_string()
-                } else {
-                    item.source.clone()
-                };
-                AttachmentView {
-                    file_key: item.pointer.clone(),
-                    path: path_str,
-                    source,
-                    prompt: item.prompt.clone(),
-                }
-            })
-        })
-        .collect()
-}
-
-fn enrich_attachment(mut attachment: AttachmentView, role: &str) -> AttachmentView {
-    if attachment.source.is_empty() || attachment.source == "unknown" {
-        attachment.source =
-            classify_image_source(None, role, Some(&attachment.path));
-    } else if attachment.path.contains("dalle-generations") {
-        attachment.source = "generated".to_string();
-    }
-    attachment
 }
 
 fn effective_source_from_attachment_json(role: &str, json: &str) -> String {

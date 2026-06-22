@@ -1,9 +1,8 @@
 mod commands;
 mod db;
 mod domain;
-mod media;
+mod infrastructure;
 mod models;
-mod parser;
 
 use commands::{
     create_tag, delete_tag, export_conversation_markdown, get_messages, get_stats,
@@ -47,7 +46,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::db::Database;
-    use crate::parser::parse_export_dir;
+    use crate::infrastructure::importers::chatgpt::parse_export_dir;
 
     fn sample_export_dir() -> PathBuf {
         PathBuf::from(r"D:\Personal\ChatGPT数据下载-2026年5月18日\2026-05-16-12-08-35")

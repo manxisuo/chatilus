@@ -1,0 +1,50 @@
+use std::path::PathBuf;
+
+use super::import_package::ImportPackage;
+use crate::domain::models::DataSource;
+
+#[derive(Debug, Clone)]
+pub struct ImportInput {
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDetectResult {
+    pub matched: bool,
+    pub importer_id: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportPreview {
+    pub importer_id: String,
+    pub display_name: String,
+    pub conversation_count: usize,
+    pub shard_file_count: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ImportOptions {}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedImportResult {
+    pub source: DataSource,
+    pub source_path: String,
+    pub files_processed: usize,
+    pub media_files_indexed: usize,
+    pub package: ImportPackage,
+}
+
+pub trait Importer {
+    fn id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
+    fn source(&self) -> DataSource;
+
+    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String>;
+    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String>;
+    fn import(
+        &self,
+        input: &ImportInput,
+        options: &ImportOptions,
+    ) -> Result<NormalizedImportResult, String>;
+}

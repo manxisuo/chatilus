@@ -1,0 +1,76 @@
+use crate::domain::ports::ImportedAttachment;
+use crate::infrastructure::importers::chatgpt::classify_image_source;
+use crate::infrastructure::media::MediaIndex;
+use crate::models::AttachmentView;
+
+pub fn resolve_imported_attachments(
+    attachments: &[ImportedAttachment],
+    role: &str,
+    media_index: &MediaIndex,
+) -> Vec<ImportedAttachment> {
+    attachments
+        .iter()
+        .filter_map(|item| {
+            media_index.resolve(&item.pointer).map(|path| {
+                let path_str = path.display().to_string();
+                let source = if item.source == "unknown" {
+                    classify_image_source(None, role, Some(&path_str))
+                } else if path_str.contains("dalle-generations") {
+                    "generated".to_string()
+                } else {
+                    item.source.clone()
+                };
+                ImportedAttachment {
+                    pointer: item.pointer.clone(),
+                    source,
+                    prompt: item.prompt.clone(),
+                    path: Some(path_str),
+                }
+            })
+        })
+        .collect()
+}
+
+pub fn imported_attachments_to_views(attachments: &[ImportedAttachment]) -> Vec<AttachmentView> {
+    attachments
+        .iter()
+        .filter_map(|item| {
+            item.path.as_ref().map(|path| AttachmentView {
+                file_key: item.pointer.clone(),
+                path: path.clone(),
+                source: item.source.clone(),
+                prompt: item.prompt.clone(),
+            })
+        })
+        .collect()
+}
+
+pub fn enrich_attachment_view(mut attachment: AttachmentView, role: &str) -> AttachmentView {
+    if attachment.source.is_empty() || attachment.source == "unknown" {
+        attachment.source = classify_image_source(None, role, Some(&attachment.path));
+    } else if attachment.path.contains("dalle-generations") {
+        attachment.source = "generated".to_string();
+    }
+    attachment
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skips_unresolved_pointers() {
+        let index = MediaIndex::build(std::path::Path::new("."));
+        let resolved = resolve_imported_attachments(
+            &[ImportedAttachment {
+                pointer: "file-missing".to_string(),
+                source: "unknown".to_string(),
+                prompt: None,
+                path: None,
+            }],
+            "user",
+            &index,
+        );
+        assert!(resolved.is_empty());
+    }
+}

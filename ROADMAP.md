@@ -134,10 +134,10 @@ src-tauri/src/
 
 #### PR 2 — Phase B：抽出 ChatGPT Importer
 
-- [ ] 定义 `Importer` trait（`domain/ports/importer.rs`）
-- [ ] `infrastructure/importers/chatgpt/` 收纳现有 `parser/` + `media/` 编排
-- [ ] `import_export_dir` 改为：`importer.import()` → `save_many()`
-- [ ] `Database` 不再直接 `use parser::`
+- [x] 定义 `Importer` trait（`domain/ports/importer.rs`）
+- [x] `infrastructure/importers/chatgpt/` 收纳现有 `parser/` + `media/` 编排
+- [x] `import_export_dir` 改为：`importer.import()` → `persist_import()`
+- [x] `Database` 不再直接 `use parser::`
 
 #### PR 3 — Phase C：拆 Repository
 
@@ -248,7 +248,7 @@ src-tauri/src/
 **架构收敛（优先，见上文「架构收敛」5 个 PR）**
 
 - [x] PR 1：领域模型 + 映射
-- [ ] PR 2：ChatGPT Importer
+- [x] PR 2：ChatGPT Importer
 - [ ] PR 3：Repository 拆分
 - [ ] PR 4：SearchEngine trait
 - [ ] PR 5：Asset 统一

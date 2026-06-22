@@ -1,31 +1,11 @@
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedAttachment {
-    pub pointer: String,
-    pub source: String,
-    pub prompt: Option<String>,
-}
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
 
-#[derive(Debug, Clone)]
-pub struct ParsedConversation {
-    pub id: String,
-    pub title: String,
-    pub create_time: Option<f64>,
-    pub update_time: Option<f64>,
-    pub model: Option<String>,
-    pub messages: Vec<ParsedMessage>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParsedMessage {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub create_time: Option<f64>,
-    pub raw_json: String,
-    pub attachments: Vec<ParsedAttachment>,
-}
+pub use crate::domain::ports::{
+    ImportedAttachment as ParsedAttachment, ImportedConversation as ParsedConversation,
+    ImportedMessage as ParsedMessage,
+};
 
 pub fn extract_pointers_from_message_json(raw_json: &str) -> Vec<String> {
     extract_attachment_infos_from_message_json(raw_json)
@@ -34,7 +14,7 @@ pub fn extract_pointers_from_message_json(raw_json: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<ParsedAttachment> {
+pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<ImportedAttachment> {
     let Ok(message) = serde_json::from_str::<Value>(raw_json) else {
         return Vec::new();
     };
@@ -53,10 +33,11 @@ pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<ParsedA
         if infos.iter().any(|item| item.pointer == pointer) {
             continue;
         }
-        infos.push(ParsedAttachment {
+        infos.push(ImportedAttachment {
             pointer,
             source: infer_source_from_role(role, None),
             prompt: None,
+            path: None,
         });
     }
     infos.sort_by(|a, b| a.pointer.cmp(&b.pointer));
@@ -99,7 +80,7 @@ fn extract_dalle_prompt(metadata: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
-pub fn parse_conversation(value: &Value) -> Option<ParsedConversation> {
+pub fn parse_conversation(value: &Value) -> Option<ImportedConversation> {
     let id = value
         .get("id")
         .or_else(|| value.get("conversation_id"))
@@ -131,7 +112,7 @@ pub fn parse_conversation(value: &Value) -> Option<ParsedConversation> {
 
     let messages = linearize_messages(mapping, current_node);
 
-    Some(ParsedConversation {
+    Some(ImportedConversation {
         id,
         title,
         create_time,
@@ -144,7 +125,7 @@ pub fn parse_conversation(value: &Value) -> Option<ParsedConversation> {
 fn linearize_messages(
     mapping: &serde_json::Map<String, Value>,
     current_node: &str,
-) -> Vec<ParsedMessage> {
+) -> Vec<ImportedMessage> {
     let mut chain = Vec::new();
     let mut node_id = Some(current_node.to_string());
 
@@ -185,7 +166,7 @@ fn should_include(role: &str, content: &str, attachment_count: usize) -> bool {
     !(content.trim().is_empty() && attachment_count == 0)
 }
 
-fn parse_message(message: &Value) -> Option<ParsedMessage> {
+fn parse_message(message: &Value) -> Option<ImportedMessage> {
     let id = message.get("id").and_then(|v| v.as_str())?.to_string();
     let role = message
         .get("author")
@@ -205,16 +186,17 @@ fn parse_message(message: &Value) -> Option<ParsedMessage> {
         if attachments.iter().any(|item| item.pointer == pointer) {
             continue;
         }
-        attachments.push(ParsedAttachment {
+        attachments.push(ImportedAttachment {
             pointer,
             source: infer_source_from_role(&role, None),
             prompt: None,
+            path: None,
         });
     }
     attachments.sort_by(|a, b| a.pointer.cmp(&b.pointer));
     attachments.dedup_by(|a, b| a.pointer == b.pointer);
 
-    Some(ParsedMessage {
+    Some(ImportedMessage {
         id,
         role,
         content,
@@ -302,7 +284,7 @@ fn is_internal_message(content: &Value, message: &Value) -> bool {
         .unwrap_or(false)
 }
 
-fn extract_attachment_infos_from_content(content: &Value, role: &str) -> Vec<ParsedAttachment> {
+fn extract_attachment_infos_from_content(content: &Value, role: &str) -> Vec<ImportedAttachment> {
     let mut infos = Vec::new();
     let Some(parts) = content.get("parts").and_then(|v| v.as_array()) else {
         return infos;
@@ -319,10 +301,11 @@ fn extract_attachment_infos_from_content(content: &Value, role: &str) -> Vec<Par
         if content_type == "image_asset_pointer" {
             if let Some(pointer) = obj.get("asset_pointer").and_then(|v| v.as_str()) {
                 let metadata = obj.get("metadata");
-                infos.push(ParsedAttachment {
+                infos.push(ImportedAttachment {
                     pointer: pointer.to_string(),
                     source: classify_image_source(metadata, role, None),
                     prompt: extract_dalle_prompt(metadata),
+                    path: None,
                 });
             }
         }

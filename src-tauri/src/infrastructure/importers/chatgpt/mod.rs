@@ -1,14 +1,20 @@
 mod conversation;
+pub mod attachments;
+mod importer;
+
+pub use conversation::{
+    classify_image_source, extract_attachment_infos_from_message_json,
+    extract_pointers_from_message_json, parse_conversation,
+    ParsedAttachment, ParsedConversation, ParsedMessage,
+};
+pub use importer::ChatGptImporter;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-pub use conversation::{
-    classify_image_source, extract_attachment_infos_from_message_json,
-    extract_pointers_from_message_json, ParsedAttachment, ParsedConversation, ParsedMessage,
-};
+use crate::domain::ports::ImportedConversation;
 
 pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files: Vec<PathBuf> = fs::read_dir(export_dir)
@@ -37,7 +43,7 @@ pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String
     Ok(files)
 }
 
-pub fn parse_export_dir(export_dir: &Path) -> Result<Vec<ParsedConversation>, String> {
+pub fn parse_export_dir(export_dir: &Path) -> Result<Vec<ImportedConversation>, String> {
     let files = find_conversation_files(export_dir)?;
     let mut conversations = Vec::new();
 
