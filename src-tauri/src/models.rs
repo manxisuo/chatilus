@@ -45,7 +45,7 @@ pub struct MessageView {
     pub attachments: Vec<AttachmentView>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {
     pub message_id: String,
     pub conversation_id: String,
@@ -53,6 +53,8 @@ pub struct SearchHit {
     pub role: String,
     pub snippet: String,
     pub create_time: Option<f64>,
+    #[serde(default = "default_conversation_source")]
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +137,12 @@ pub struct ImageGalleryItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceCount {
+    pub source: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseStats {
     pub conversation_count: i64,
     pub message_count: i64,
@@ -145,6 +153,8 @@ pub struct DatabaseStats {
     pub starred_message_count: i64,
     pub tag_count: i64,
     pub db_path: String,
+    pub conversation_counts_by_source: Vec<SourceCount>,
+    pub image_counts_by_source: Vec<SourceCount>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

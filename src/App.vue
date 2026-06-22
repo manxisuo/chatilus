@@ -30,6 +30,7 @@ import type {
   SearchHit,
   TagView,
 } from "./types";
+import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "./utils/dataSource";
 
 const conversations = ref<ConversationSummary[]>([]);
 const messages = ref<Awaited<ReturnType<typeof getMessages>>>([]);
@@ -55,6 +56,7 @@ const searchQuery = ref("");
 const searchMode = ref(false);
 const starredOnly = ref(false);
 const filterTagId = ref<number | null>(null);
+const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "images">("chats");
 
@@ -82,7 +84,52 @@ const listTotalHint = computed(() => {
   if (starredOnly.value || filterTagId.value || listQuery.value.trim()) {
     return null;
   }
+  if (filterSource.value) {
+    const entry = stats.value?.conversation_counts_by_source?.find(
+      (item) => item.source === filterSource.value,
+    );
+    return entry?.count ?? null;
+  }
   return stats.value?.conversation_count ?? null;
+});
+
+const sourceNavItems = computed(() => {
+  const counts = new Map(
+    (stats.value?.conversation_counts_by_source ?? []).map((item) => [
+      item.source,
+      item.count,
+    ]),
+  );
+  const items: Array<{ id: string | null; label: string; count: number }> = [
+    {
+      id: null,
+      label: "全部对话",
+      count: stats.value?.conversation_count ?? 0,
+    },
+  ];
+
+  const seen = new Set<string>();
+  for (const source of KNOWN_DATA_SOURCES) {
+    seen.add(source);
+    items.push({
+      id: source,
+      label: sourceLabel(source),
+      count: counts.get(source) ?? 0,
+    });
+  }
+
+  for (const entry of stats.value?.conversation_counts_by_source ?? []) {
+    if (seen.has(entry.source)) {
+      continue;
+    }
+    items.push({
+      id: entry.source,
+      label: sourceLabel(entry.source),
+      count: entry.count,
+    });
+  }
+
+  return items;
 });
 
 const activeConversation = computed(() =>
@@ -122,6 +169,7 @@ async function loadConversations(reset = true) {
       query: listQuery.value.trim() || undefined,
       starredOnly: starredOnly.value,
       tagId: filterTagId.value,
+      source: filterSource.value,
       limit: PAGE_SIZE,
       offset: listOffset.value,
     });
@@ -439,7 +487,7 @@ watch(activeId, async (id) => {
   }
 });
 
-watch([listQuery, starredOnly, filterTagId], async () => {
+watch([listQuery, starredOnly, filterTagId, filterSource], async () => {
   if (!searchMode.value) {
     await loadConversations();
   }
@@ -522,6 +570,21 @@ onMounted(async () => {
 
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside width="320px" class="sidebar">
+        <div v-if="!searchMode" class="source-nav">
+          <div class="section-title">来源</div>
+          <button
+            v-for="item in sourceNavItems"
+            :key="item.id ?? 'all'"
+            type="button"
+            class="source-nav-item"
+            :class="{ active: filterSource === item.id }"
+            @click="filterSource = item.id"
+          >
+            <span>{{ item.label }}</span>
+            <span class="source-nav-count">{{ item.count }}</span>
+          </button>
+        </div>
+
         <div class="sidebar-tools">
           <el-input
             v-model="listQuery"
@@ -560,7 +623,16 @@ onMounted(async () => {
             class="search-hit"
             @click="openSearchHit(hit)"
           >
-            <div class="hit-title">{{ hit.conversation_title }}</div>
+            <div class="hit-header">
+              <el-tag
+                size="small"
+                :type="sourceTagType(hit.source)"
+                effect="plain"
+              >
+                {{ sourceLabel(hit.source) }}
+              </el-tag>
+              <div class="hit-title">{{ hit.conversation_title }}</div>
+            </div>
             <div class="hit-snippet" v-html="hit.snippet" />
           </button>
         </div>
@@ -600,10 +672,12 @@ onMounted(async () => {
 
     <el-main v-else class="main gallery-main">
       <ImageGallery
-        :key="stats?.image_count ?? 0"
+        :key="`${stats?.image_count ?? 0}:${filterSource ?? 'all'}`"
+        v-model:filter-source="filterSource"
         :total-count="stats?.image_count ?? null"
         :generated-count="stats?.generated_image_count ?? null"
         :upload-count="stats?.upload_image_count ?? null"
+        :image-counts-by-source="stats?.image_counts_by_source ?? []"
         @open-conversation="openConversationFromGallery"
       />
     </el-main>
@@ -725,6 +799,46 @@ onMounted(async () => {
   min-height: 0;
 }
 
+.source-nav {
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--cl-border);
+}
+
+.source-nav-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--cl-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.source-nav-item:hover {
+  background: rgba(64, 158, 255, 0.06);
+}
+
+.source-nav-item.active {
+  background: rgba(64, 158, 255, 0.1);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.source-nav-count {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.source-nav-item.active .source-nav-count {
+  color: var(--el-color-primary);
+}
+
 .sidebar > .conversation-list,
 .sidebar > .search-results {
   flex: 1;
@@ -774,10 +888,21 @@ onMounted(async () => {
   background: rgba(64, 158, 255, 0.08);
 }
 
+.hit-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .hit-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--cl-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hit-snippet {

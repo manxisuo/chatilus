@@ -35,6 +35,8 @@ impl Database {
             .map_err(|e| format!("统计失败: {e}"))?;
         let (image_count, generated_image_count, upload_image_count) =
             AssetRepository::count_by_source(self)?;
+        let conversation_counts_by_source = self.conversation_counts_by_source()?;
+        let image_counts_by_source = AssetRepository::image_counts_by_conversation_source(self)?;
 
         Ok(DatabaseStats {
             conversation_count,
@@ -46,6 +48,32 @@ impl Database {
             starred_message_count,
             tag_count,
             db_path: self.path.clone(),
+            conversation_counts_by_source,
+            image_counts_by_source,
         })
+    }
+
+    fn conversation_counts_by_source(&self) -> Result<Vec<crate::models::SourceCount>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT COALESCE(source, 'chatgpt') AS source, COUNT(*) AS count
+                 FROM conversations
+                 GROUP BY COALESCE(source, 'chatgpt')
+                 ORDER BY count DESC, source ASC",
+            )
+            .map_err(|e| format!("统计来源会话数失败: {e}"))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(crate::models::SourceCount {
+                    source: row.get(0)?,
+                    count: row.get(1)?,
+                })
+            })
+            .map_err(|e| format!("读取来源会话统计失败: {e}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取来源会话统计失败: {e}"))
     }
 }

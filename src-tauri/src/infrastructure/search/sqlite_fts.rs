@@ -17,9 +17,11 @@ pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>
                 f.conversation_title,
                 m.role,
                 snippet(messages_fts, 3, '【', '】', '…', 32) AS snippet,
-                m.create_time
+                m.create_time,
+                COALESCE(c.source, 'chatgpt') AS source
              FROM messages_fts f
              JOIN messages m ON m.id = f.message_id
+             JOIN conversations c ON c.id = f.conversation_id
              WHERE messages_fts MATCH ?1
              ORDER BY rank
              LIMIT ?2",
@@ -36,6 +38,7 @@ pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>
                 role: row.get(3)?,
                 snippet: row.get(4)?,
                 created_at: row.get(5)?,
+                source: row.get(6)?,
             })
         })
         .map_err(|e| format!("搜索失败: {e}"))?;

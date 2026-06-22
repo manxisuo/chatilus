@@ -10,6 +10,7 @@ impl From<SearchResult> for SearchHit {
             role: result.role,
             snippet: result.snippet,
             create_time: result.created_at,
+            source: result.source,
         }
     }
 }
@@ -27,10 +28,12 @@ mod tests {
             role: "user".to_string(),
             snippet: "匹配片段".to_string(),
             created_at: Some(1.0),
+            source: "cursor".to_string(),
         };
 
         let hit: SearchHit = result.into();
         assert_eq!(hit.message_id, "m1");
         assert_eq!(hit.create_time, Some(1.0));
+        assert_eq!(hit.source, "cursor");
     }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ConversationSummary } from "../types";
+import { sourceLabel, sourceTagType } from "../utils/dataSource";
 
 const props = defineProps<{
   conversations: ConversationSummary[];
@@ -67,7 +68,7 @@ const footerText = computed(() => {
 <template>
   <div class="conversation-list">
     <el-skeleton v-if="loading" animated :rows="8" />
-    <el-empty v-else-if="items.length === 0" description="暂无对话，请先导入 ChatGPT 数据" />
+    <el-empty v-else-if="items.length === 0" description="暂无对话，请先导入数据" />
     <div v-else class="list-scroll" @scroll.passive="onScroll">
       <button
         v-for="item in items"
@@ -77,7 +78,17 @@ const footerText = computed(() => {
         @click="emit('select', item.id)"
       >
         <div class="row-top">
-          <div class="title">{{ item.title }}</div>
+          <div class="title-wrap">
+            <el-tag
+              size="small"
+              :type="sourceTagType(item.source)"
+              effect="plain"
+              class="source-badge"
+            >
+              {{ sourceLabel(item.source) }}
+            </el-tag>
+            <div class="title">{{ item.title }}</div>
+          </div>
           <span
             class="star"
             :class="{ active: item.is_starred }"
@@ -141,6 +152,18 @@ const footerText = computed(() => {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+
+.title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-badge {
+  align-self: flex-start;
 }
 
 .title {

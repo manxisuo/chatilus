@@ -36,6 +36,7 @@ export interface SearchHit {
   role: string;
   snippet: string;
   create_time: number | null;
+  source?: string;
 }
 
 export interface TagView {
@@ -90,6 +91,11 @@ export interface ImageGalleryItem {
   prompt?: string | null;
 }
 
+export interface SourceCount {
+  source: string;
+  count: number;
+}
+
 export interface DatabaseStats {
   conversation_count: number;
   message_count: number;
@@ -100,6 +106,8 @@ export interface DatabaseStats {
   starred_message_count: number;
   tag_count: number;
   db_path: string;
+  conversation_counts_by_source?: SourceCount[];
+  image_counts_by_source?: SourceCount[];
 }
 
 export interface ExportResult {

@@ -8,6 +8,7 @@ pub struct ConversationListQuery {
     pub text_query: Option<String>,
     pub starred_only: bool,
     pub tag_id: Option<i64>,
+    pub source: Option<String>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -17,6 +18,7 @@ pub struct AssetListQuery {
     pub limit: i64,
     pub offset: i64,
     pub include_uploads: bool,
+    pub conversation_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,5 +58,11 @@ pub trait MessageRepository {
 
 pub trait AssetRepository {
     fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String>;
+    fn count(
+        &self,
+        include_uploads: bool,
+        conversation_source: Option<&str>,
+    ) -> Result<i64, String>;
     fn count_by_source(&self) -> Result<(i64, i64, i64), String>;
+    fn image_counts_by_conversation_source(&self) -> Result<Vec<crate::models::SourceCount>, String>;
 }

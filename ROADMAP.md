@@ -22,12 +22,12 @@ v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从�
 
 存储与搜索层已统一；下列为**视图层**，让「All Conversations」成为主入口：
 
-- [ ] 左侧 **Sources** 导航：`All` / `ChatGPT` / `Cursor` / …（含各源计数）
-- [ ] 对话列表 **来源徽标**（如 ChatGPT / Cursor 小标签）
-- [ ] `ConversationListQuery` 增加 `source` 过滤
-- [ ] 搜索结果展示 **来源**（`SearchHit` + UI）
-- [ ] 会话列表 `source` 字段贯通 API（已完成部分：消息角色标签已按源显示）
-- [ ] （可选）图片画廊按对话来源筛选
+- [x] 左侧 **Sources** 导航：`All` / `ChatGPT` / `Cursor` / …（含各源计数）
+- [x] 对话列表 **来源徽标**（如 ChatGPT / Cursor 小标签）
+- [x] `ConversationListQuery` 增加 `source` 过滤
+- [x] 搜索结果展示 **来源**（`SearchHit` + UI）
+- [x] 会话列表 `source` 字段贯通 API（已完成部分：消息角色标签已按源显示）
+- [x] （可选）图片画廊按对话来源筛选
 
 ### 技术配套
 
@@ -322,7 +322,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | PR4a | `ImporterRegistry` + 去硬编码 | ✅ |
 | PR4b | Cursor Importer | ✅ |
 | PR4c | Claude / Gemini 等（有样本再做） | 待定 |
-| PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | 进行中 |
+| PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | ✅ |
 
 **不在 v0.4 范围内**
 

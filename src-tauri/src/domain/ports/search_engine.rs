@@ -12,6 +12,7 @@ pub struct SearchResult {
     pub role: String,
     pub snippet: String,
     pub created_at: Option<f64>,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

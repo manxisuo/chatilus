@@ -27,6 +27,7 @@ export function listConversations(options?: {
   query?: string;
   starredOnly?: boolean;
   tagId?: number | null;
+  source?: string | null;
   limit?: number;
   offset?: number;
 }) {
@@ -34,6 +35,7 @@ export function listConversations(options?: {
     query: options?.query || null,
     starredOnly: options?.starredOnly ?? false,
     tagId: options?.tagId ?? null,
+    source: options?.source ?? null,
     limit: options?.limit ?? 200,
     offset: options?.offset ?? 0,
   });
@@ -78,8 +80,18 @@ export function exportConversationMarkdown(conversationId: string, outputPath: s
   });
 }
 
-export function listImages(limit = 60, offset = 0, includeUploads = true) {
-  return invoke<ImageGalleryItem[]>("list_images", { limit, offset, includeUploads });
+export function listImages(
+  limit = 60,
+  offset = 0,
+  includeUploads = true,
+  conversationSource?: string | null,
+) {
+  return invoke<ImageGalleryItem[]>("list_images", {
+    limit,
+    offset,
+    includeUploads,
+    conversationSource: conversationSource ?? null,
+  });
 }
 
 export function readImageDataUrl(path: string) {

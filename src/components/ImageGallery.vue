@@ -3,16 +3,25 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
-import type { ImageGalleryItem } from "../types";
+import type { ImageGalleryItem, SourceCount } from "../types";
+import {
+  KNOWN_DATA_SOURCES,
+  conversationSourceFromId,
+  sourceLabel as conversationSourceLabel,
+  sourceTagType as conversationSourceTagType,
+} from "../utils/dataSource";
 
 const props = defineProps<{
   totalCount: number | null;
   generatedCount: number | null;
   uploadCount: number | null;
+  filterSource: string | null;
+  imageCountsBySource: SourceCount[];
 }>();
 
 const emit = defineEmits<{
   openConversation: [conversationId: string];
+  "update:filterSource": [source: string | null];
 }>();
 
 const PAGE_SIZE = 60;
@@ -26,6 +35,12 @@ const lightboxIndex = ref(0);
 const imageSrcCache = reactive<Record<string, string>>({});
 
 const visibleTotal = computed(() => {
+  if (props.filterSource) {
+    const entry = props.imageCountsBySource.find(
+      (item) => item.source === props.filterSource,
+    );
+    return entry?.count ?? null;
+  }
   if (showUploads.value) {
     return props.totalCount;
   }
@@ -37,6 +52,42 @@ const visibleTotal = computed(() => {
     return props.generatedCount + unknown;
   }
   return props.totalCount;
+});
+
+const sourceNavItems = computed(() => {
+  const counts = new Map(
+    props.imageCountsBySource.map((item) => [item.source, item.count]),
+  );
+  const items: Array<{ id: string | null; label: string; count: number }> = [
+    {
+      id: null,
+      label: "全部图片",
+      count: props.totalCount ?? 0,
+    },
+  ];
+
+  const seen = new Set<string>();
+  for (const source of KNOWN_DATA_SOURCES) {
+    seen.add(source);
+    items.push({
+      id: source,
+      label: conversationSourceLabel(source),
+      count: counts.get(source) ?? 0,
+    });
+  }
+
+  for (const entry of props.imageCountsBySource) {
+    if (seen.has(entry.source)) {
+      continue;
+    }
+    items.push({
+      id: entry.source,
+      label: conversationSourceLabel(entry.source),
+      count: entry.count,
+    });
+  }
+
+  return items;
 });
 
 const statsText = computed(() => {
@@ -82,13 +133,13 @@ const footerText = computed(() => {
   return `共 ${total} 张图片`;
 });
 
-function sourceLabel(source: ImageGalleryItem["source"]) {
+function imageTypeLabel(source: ImageGalleryItem["source"]) {
   if (source === "generated") return "生成";
   if (source === "upload") return "上传";
   return "其他";
 }
 
-function sourceTagType(source: ImageGalleryItem["source"]) {
+function imageTypeTagType(source: ImageGalleryItem["source"]) {
   if (source === "generated") return "success";
   if (source === "upload") return "info";
   return "warning";
@@ -133,7 +184,12 @@ async function loadImages(reset = true) {
 
   try {
     const offset = reset ? 0 : images.value.length;
-    const batch = await listImages(PAGE_SIZE, offset, showUploads.value);
+    const batch = await listImages(
+      PAGE_SIZE,
+      offset,
+      showUploads.value,
+      props.filterSource,
+    );
 
     if (reset) {
       images.value = batch;
@@ -173,6 +229,13 @@ watch(showUploads, () => {
   loadImages(true);
 });
 
+watch(
+  () => props.filterSource,
+  () => {
+    loadImages(true);
+  },
+);
+
 onMounted(() => {
   loadImages(true);
 });
@@ -181,9 +244,22 @@ onMounted(() => {
 <template>
   <div class="image-gallery">
     <header class="gallery-header">
-      <div>
+      <div class="gallery-header-main">
         <p class="subtitle">浏览所有对话中的图片，点击可放大查看</p>
-        <p v-if="statsText" class="stats">{{ statsText }}</p>
+        <p v-if="statsText && !filterSource" class="stats">{{ statsText }}</p>
+        <div class="source-nav">
+          <button
+            v-for="item in sourceNavItems"
+            :key="item.id ?? 'all'"
+            type="button"
+            class="source-nav-item"
+            :class="{ active: filterSource === item.id }"
+            @click="emit('update:filterSource', item.id)"
+          >
+            <span>{{ item.label }}</span>
+            <span class="source-nav-count">{{ item.count }}</span>
+          </button>
+        </div>
       </div>
       <el-checkbox v-model="showUploads" label="显示用户上传的图片" />
     </header>
@@ -193,9 +269,11 @@ onMounted(() => {
     <el-empty
       v-else-if="images.length === 0"
       :description="
-        showUploads
-          ? '暂无图片，请先导入包含图片的 ChatGPT 导出数据'
-          : '暂无生成图片，可勾选显示用户上传的图片'
+        filterSource
+          ? `暂无来自 ${conversationSourceLabel(filterSource)} 的图片`
+          : showUploads
+            ? '暂无图片，请先导入包含图片的对话数据'
+            : '暂无生成图片，可勾选显示用户上传的图片'
       "
     />
 
@@ -217,7 +295,7 @@ onMounted(() => {
             />
             <div v-else class="thumb-missing">无法加载</div>
             <span class="source-badge" :class="`source-${item.source}`">
-              {{ sourceLabel(item.source) }}
+              {{ imageTypeLabel(item.source) }}
             </span>
           </button>
           <div class="card-meta">
@@ -229,9 +307,19 @@ onMounted(() => {
               {{ item.conversation_title }}
             </button>
             <div class="meta-row">
-              <el-tag size="small" :type="sourceTagType(item.source)" effect="plain">
-                {{ sourceLabel(item.source) }}
-              </el-tag>
+              <div class="meta-tags">
+                <el-tag
+                  v-if="!filterSource"
+                  size="small"
+                  :type="conversationSourceTagType(conversationSourceFromId(item.conversation_id))"
+                  effect="plain"
+                >
+                  {{ conversationSourceLabel(conversationSourceFromId(item.conversation_id)) }}
+                </el-tag>
+                <el-tag size="small" :type="imageTypeTagType(item.source)" effect="plain">
+                  {{ imageTypeLabel(item.source) }}
+                </el-tag>
+              </div>
               <span class="time">{{ formatTime(item.create_time) }}</span>
             </div>
           </div>
@@ -266,6 +354,52 @@ onMounted(() => {
   gap: 16px;
   padding: 20px 24px 12px;
   border-bottom: 1px solid var(--cl-border);
+}
+
+.gallery-header-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.source-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.source-nav-item {
+  border: 1px solid var(--cl-border);
+  background: var(--cl-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--cl-text);
+  cursor: pointer;
+}
+
+.source-nav-item:hover {
+  border-color: var(--el-color-primary-light-5);
+}
+
+.source-nav-item.active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.1);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.source-nav-count {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.source-nav-item.active .source-nav-count {
+  color: var(--el-color-primary);
 }
 
 .subtitle {
@@ -373,6 +507,13 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
 }
 
 .conv-link {

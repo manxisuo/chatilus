@@ -8,6 +8,7 @@ pub fn list_images(
     limit: i64,
     offset: i64,
     include_uploads: bool,
+    conversation_source: Option<&str>,
 ) -> Result<Vec<ImageGalleryItem>, String> {
     AssetRepository::list(
         db,
@@ -15,6 +16,7 @@ pub fn list_images(
             limit,
             offset,
             include_uploads,
+            conversation_source: conversation_source.map(str::to_string),
         },
     )
     .map(|assets| assets.iter().map(asset_to_gallery_item).collect())

@@ -81,6 +81,7 @@ pub fn list_conversations(
     query: Option<String>,
     starred_only: Option<bool>,
     tag_id: Option<i64>,
+    source: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ConversationSummary>, String> {
@@ -90,6 +91,7 @@ pub fn list_conversations(
         query.as_deref(),
         starred_only.unwrap_or(false),
         tag_id,
+        source.as_deref(),
         limit.unwrap_or(200),
         offset.unwrap_or(0),
     )
@@ -178,6 +180,7 @@ pub fn list_images(
     limit: Option<i64>,
     offset: Option<i64>,
     include_uploads: Option<bool>,
+    conversation_source: Option<String>,
 ) -> Result<Vec<ImageGalleryItem>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_images(
@@ -185,6 +188,7 @@ pub fn list_images(
         limit.unwrap_or(60),
         offset.unwrap_or(0),
         include_uploads.unwrap_or(true),
+        conversation_source.as_deref(),
     )
 }
 

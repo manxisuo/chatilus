@@ -9,6 +9,7 @@ pub fn list_conversations(
     query: Option<&str>,
     starred_only: bool,
     tag_id: Option<i64>,
+    source: Option<&str>,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<ConversationSummary>, String> {
@@ -18,6 +19,7 @@ pub fn list_conversations(
             text_query: query.map(str::to_string),
             starred_only,
             tag_id,
+            source: source.map(str::to_string),
             limit,
             offset,
         },

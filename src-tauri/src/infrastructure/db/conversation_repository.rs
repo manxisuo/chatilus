@@ -51,6 +51,15 @@ impl ConversationRepository for Database {
             );
             bind.push(Box::new(tag));
         }
+        if let Some(source) = query
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            bind.push(Box::new(source.to_string()));
+        }
 
         sql.push_str(
             " GROUP BY c.id
@@ -483,7 +492,9 @@ mod merge_tests {
     use super::*;
     use crate::db::Database;
     use crate::domain::models::DataSource;
-    use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
+    use crate::domain::ports::{
+        ConversationListQuery, ImportedAttachment, ImportedConversation, ImportedMessage,
+    };
 
     fn sample_conversation(message_ids: &[&str]) -> ImportedConversation {
         ImportedConversation {
@@ -628,5 +639,62 @@ mod merge_tests {
             .query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))
             .expect("conversation count");
         assert_eq!(conversation_count, 2);
+    }
+
+    #[test]
+    fn list_filters_by_source() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-source-filter-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        ConversationRepository::save_many(
+            &mut db,
+            &[sample_conversation(&["m1"])],
+            "/chatgpt",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("chatgpt import");
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "cursor-only".to_string(),
+                title: "Cursor only".to_string(),
+                create_time: None,
+                update_time: None,
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "cursor".to_string(),
+                    create_time: None,
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/cursor",
+            DataSource::Cursor,
+            0,
+        )
+        .expect("cursor import");
+
+        let cursor_only = ConversationRepository::list(
+            &db,
+            ConversationListQuery {
+                source: Some("cursor".to_string()),
+                limit: 10,
+                offset: 0,
+                ..ConversationListQuery::default()
+            },
+        )
+        .expect("list cursor");
+        assert_eq!(cursor_only.len(), 1);
+        assert_eq!(cursor_only[0].source, "cursor");
     }
 }
