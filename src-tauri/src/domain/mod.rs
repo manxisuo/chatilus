@@ -9,5 +9,6 @@ pub use ports::{
     AssetListQuery, AssetRepository, ConversationListQuery, ConversationRepository,
     ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
     ImportedAttachment, ImportedConversation, ImportedMessage, ImportPersistCounts,
-    MessageRepository, NormalizedImportResult,
+    MessageRepository, NormalizedImportResult, SearchEngine, SearchIndexEntry, SearchQuery,
+    SearchResult,
 };

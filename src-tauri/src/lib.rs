@@ -86,7 +86,7 @@ mod tests {
             result.conversations_imported
         );
 
-        let hits = db.search_messages("uuid", 5).expect("search");
+        let hits = application::search_messages(&db, "uuid", 5).expect("search");
         assert!(!hits.is_empty());
 
         let conv_id = application::list_conversations(&db, None, false, None, 1, 0)

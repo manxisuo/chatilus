@@ -147,9 +147,9 @@ src-tauri/src/
 
 #### PR 4 — Phase D：SearchEngine trait
 
-- [ ] 定义 `SearchEngine` trait
-- [ ] FTS 读写迁入 `infrastructure/search/sqlite_fts.rs`
-- [ ] `search_messages` 经 application 层调用
+- [x] 定义 `SearchEngine` trait
+- [x] FTS 读写迁入 `infrastructure/search/sqlite_fts.rs`
+- [x] `search_messages` 经 application 层调用
 
 #### PR 5 — Phase E：Asset 统一（可与图片功能迭代合并）
 
@@ -250,7 +250,7 @@ src-tauri/src/
 - [x] PR 1：领域模型 + 映射
 - [x] PR 2：ChatGPT Importer
 - [x] PR 3：Repository 拆分
-- [ ] PR 4：SearchEngine trait
+- [x] PR 4：SearchEngine trait
 - [ ] PR 5：Asset 统一
 
 **功能（收敛完成后再做）**

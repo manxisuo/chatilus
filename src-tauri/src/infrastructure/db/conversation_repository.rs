@@ -7,7 +7,9 @@ use crate::domain::ports::{
     ConversationListQuery, ConversationRepository, ImportPersistCounts, ImportedConversation,
     MessageRepository,
 };
+use crate::domain::ports::SearchIndexEntry;
 use crate::infrastructure::importers::chatgpt::attachments::imported_attachments_to_views;
+use crate::infrastructure::search::{index_message, remove_conversation_index};
 use crate::models::{ConversationSummary, ExportResult};
 
 use super::helpers::{
@@ -265,11 +267,7 @@ fn upsert_conversation(
     )
     .map_err(|e| format!("清理旧消息失败: {e}"))?;
 
-    tx.execute(
-        "DELETE FROM messages_fts WHERE conversation_id = ?1",
-        params![conversation.id],
-    )
-    .map_err(|e| format!("清理旧索引失败: {e}"))?;
+    remove_conversation_index(&tx, &conversation.id)?;
 
     Ok(exists == 0)
 }
@@ -300,17 +298,15 @@ fn insert_messages(
         )
         .map_err(|e| format!("写入消息失败: {e}"))?;
 
-        tx.execute(
-            "INSERT INTO messages_fts (message_id, conversation_id, conversation_title, content)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![
-                stored_id,
-                conversation.id,
-                conversation.title,
-                message.content,
-            ],
-        )
-        .map_err(|e| format!("写入全文索引失败: {e}"))?;
+        index_message(
+            &tx,
+            &SearchIndexEntry {
+                message_id: stored_id,
+                conversation_id: conversation.id.clone(),
+                conversation_title: conversation.title.clone(),
+                content: message.content.clone(),
+            },
+        )?;
     }
 
     Ok(conversation.messages.len())

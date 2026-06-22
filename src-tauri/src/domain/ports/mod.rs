@@ -1,6 +1,7 @@
 pub mod import_package;
 pub mod importer;
 pub mod repository;
+pub mod search_engine;
 
 pub use import_package::{
     ImportedAttachment, ImportedConversation, ImportedMessage, ImportPackage,
@@ -13,3 +14,4 @@ pub use repository::{
     AssetListQuery, AssetRepository, ConversationListQuery, ConversationRepository,
     ImportPersistCounts, MessageRepository,
 };
+pub use search_engine::{SearchEngine, SearchIndexEntry, SearchQuery, SearchResult};

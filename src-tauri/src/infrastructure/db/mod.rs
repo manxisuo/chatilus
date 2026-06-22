@@ -11,7 +11,6 @@ mod conversation_repository;
 mod helpers;
 mod message_repository;
 mod schema;
-mod search;
 mod stats;
 mod tag_repository;
 

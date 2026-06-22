@@ -58,15 +58,6 @@ pub(crate) fn effective_source_from_attachment_json(role: &str, json: &str) -> S
     classify_image_source(None, role, path)
 }
 
-pub(crate) fn build_fts_query(input: &str) -> String {
-    input
-        .split_whitespace()
-        .filter(|token| !token.is_empty())
-        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
-        .collect::<Vec<_>>()
-        .join(" AND ")
-}
-
 pub(crate) fn role_heading(role: &str) -> &'static str {
     match role {
         "user" => "用户",
