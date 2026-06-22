@@ -1,3 +1,4 @@
+mod application;
 mod commands;
 mod db;
 mod domain;
@@ -45,6 +46,7 @@ pub fn run() {
 mod tests {
     use std::path::PathBuf;
 
+    use crate::application;
     use crate::db::Database;
     use crate::infrastructure::importers::chatgpt::parse_export_dir;
 
@@ -70,8 +72,7 @@ mod tests {
         let _ = std::fs::remove_file(&dir);
 
         let mut db = Database::open(&dir).expect("open db");
-        let result = db
-            .import_export_dir(&sample_export_dir())
+        let result = application::import_export_dir(&mut db, &sample_export_dir())
             .expect("import export");
 
         assert!(result.conversations_imported > 0);
@@ -88,19 +89,17 @@ mod tests {
         let hits = db.search_messages("uuid", 5).expect("search");
         assert!(!hits.is_empty());
 
-        let conv_id = db
-            .list_conversations(None, false, None, 1, 0)
+        let conv_id = application::list_conversations(&db, None, false, None, 1, 0)
             .expect("list")[0]
             .id
             .clone();
-        db.set_conversation_starred(&conv_id, true).expect("star");
-        let tag = db.create_tag("测试标签").expect("tag");
-        db.set_conversation_tags(&conv_id, &[tag.id])
+        application::set_conversation_starred(&db, &conv_id, true).expect("star");
+        let tag = application::create_tag(&db, "测试标签").expect("tag");
+        application::set_conversation_tags(&db, &conv_id, &[tag.id])
             .expect("set tags");
 
         let export_path = std::env::temp_dir().join("chatlens-export-test.md");
-        let export = db
-            .export_conversation_markdown(&conv_id, &export_path)
+        let export = application::export_conversation_markdown(&db, &conv_id, &export_path)
             .expect("export");
         assert!(export.message_count > 0);
         assert!(export_path.exists());

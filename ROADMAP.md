@@ -141,9 +141,9 @@ src-tauri/src/
 
 #### PR 3 — Phase C：拆 Repository
 
-- [ ] 定义 Repository trait（`domain/ports/repository.rs`）
-- [ ] 从 `db/mod.rs` 切出 `conversation_repo`、`message_repo`、`asset_repo`
-- [ ] `AppState` 持有 repo 实例（或门面），commands 经 application 调用
+- [x] 定义 Repository trait（`domain/ports/repository.rs`）
+- [x] 从 `db/mod.rs` 切出 `conversation_repo`、`message_repo`、`asset_repo`
+- [x] `application/` 用例层 + `commands` 经 application 调用
 
 #### PR 4 — Phase D：SearchEngine trait
 
@@ -249,7 +249,7 @@ src-tauri/src/
 
 - [x] PR 1：领域模型 + 映射
 - [x] PR 2：ChatGPT Importer
-- [ ] PR 3：Repository 拆分
+- [x] PR 3：Repository 拆分
 - [ ] PR 4：SearchEngine trait
 - [ ] PR 5：Asset 统一
 

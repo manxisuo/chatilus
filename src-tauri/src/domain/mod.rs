@@ -6,6 +6,8 @@ pub mod ports;
 pub use models::{Asset, AssetType, Conversation, DataSource, Message, MessageContent, MessageRole};
 #[allow(unused_imports)]
 pub use ports::{
+    AssetListQuery, AssetRepository, ConversationListQuery, ConversationRepository,
     ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
-    ImportedAttachment, ImportedConversation, ImportedMessage, NormalizedImportResult,
+    ImportedAttachment, ImportedConversation, ImportedMessage, ImportPersistCounts,
+    MessageRepository, NormalizedImportResult,
 };

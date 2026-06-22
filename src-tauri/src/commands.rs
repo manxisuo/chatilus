@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, State};
 
+use crate::application;
 use crate::db::Database;
 use crate::models::{
     ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportResult, MessageView,
@@ -37,7 +38,7 @@ pub fn import_export_dir(
     }
 
     let mut db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.import_export_dir(&export_path)
+    application::import_export_dir(&mut db, &export_path)
 }
 
 #[tauri::command]
@@ -50,7 +51,8 @@ pub fn list_conversations(
     offset: Option<i64>,
 ) -> Result<Vec<ConversationSummary>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.list_conversations(
+    application::list_conversations(
+        &db,
         query.as_deref(),
         starred_only.unwrap_or(false),
         tag_id,
@@ -65,7 +67,7 @@ pub fn get_messages(
     conversation_id: String,
 ) -> Result<Vec<MessageView>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.get_messages(&conversation_id)
+    application::get_messages(&db, &conversation_id)
 }
 
 #[tauri::command]
@@ -75,7 +77,7 @@ pub fn search_messages(
     limit: Option<i64>,
 ) -> Result<Vec<SearchHit>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.search_messages(&query, limit.unwrap_or(100))
+    application::search_messages(&db, &query, limit.unwrap_or(100))
 }
 
 #[tauri::command]
@@ -85,7 +87,7 @@ pub fn set_conversation_starred(
     starred: bool,
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.set_conversation_starred(&conversation_id, starred)
+    application::set_conversation_starred(&db, &conversation_id, starred)
 }
 
 #[tauri::command]
@@ -95,25 +97,25 @@ pub fn set_message_starred(
     starred: bool,
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.set_message_starred(&message_id, starred)
+    application::set_message_starred(&db, &message_id, starred)
 }
 
 #[tauri::command]
 pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<TagView>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.list_tags()
+    application::list_tags(&db)
 }
 
 #[tauri::command]
 pub fn create_tag(state: State<'_, AppState>, name: String) -> Result<TagView, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.create_tag(&name)
+    application::create_tag(&db, &name)
 }
 
 #[tauri::command]
 pub fn delete_tag(state: State<'_, AppState>, tag_id: i64) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.delete_tag(tag_id)
+    application::delete_tag(&db, tag_id)
 }
 
 #[tauri::command]
@@ -123,7 +125,7 @@ pub fn set_conversation_tags(
     tag_ids: Vec<i64>,
 ) -> Result<Vec<String>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.set_conversation_tags(&conversation_id, &tag_ids)
+    application::set_conversation_tags(&db, &conversation_id, &tag_ids)
 }
 
 #[tauri::command]
@@ -133,7 +135,7 @@ pub fn export_conversation_markdown(
     output_path: String,
 ) -> Result<ExportResult, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.export_conversation_markdown(&conversation_id, &PathBuf::from(output_path))
+    application::export_conversation_markdown(&db, &conversation_id, &PathBuf::from(output_path))
 }
 
 #[tauri::command]
@@ -144,7 +146,8 @@ pub fn list_images(
     include_uploads: Option<bool>,
 ) -> Result<Vec<ImageGalleryItem>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
-    db.list_images(
+    application::list_images(
+        &db,
         limit.unwrap_or(60),
         offset.unwrap_or(0),
         include_uploads.unwrap_or(true),
