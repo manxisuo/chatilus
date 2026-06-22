@@ -10,6 +10,7 @@ mod asset_repository;
 mod conversation_repository;
 mod helpers;
 mod message_repository;
+mod migration;
 mod schema;
 mod stats;
 mod tag_repository;

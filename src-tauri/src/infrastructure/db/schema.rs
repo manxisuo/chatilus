@@ -1,6 +1,7 @@
 use rusqlite::functions::FunctionFlags;
 
 use super::helpers::effective_source_from_attachment_json;
+use super::migration::run_migrations;
 use super::Database;
 
 impl Database {
@@ -10,6 +11,11 @@ impl Database {
                 "
                 PRAGMA journal_mode = WAL;
                 PRAGMA foreign_keys = ON;
+
+                CREATE TABLE IF NOT EXISTS meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
 
                 CREATE TABLE IF NOT EXISTS imports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +79,7 @@ impl Database {
             )
             .map_err(|e| format!("初始化数据库失败: {e}"))?;
 
-        self.migrate_schema()?;
+        run_migrations(&self.conn)?;
         self.register_sql_functions()?;
 
         self.conn
@@ -100,21 +106,6 @@ impl Database {
                 },
             )
             .map_err(|e| format!("注册 SQL 函数失败: {e}"))?;
-        Ok(())
-    }
-
-    fn migrate_schema(&self) -> Result<(), String> {
-        let _ = self.conn.execute(
-            "ALTER TABLE conversations ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0",
-            [],
-        );
-        let _ = self.conn.execute(
-            "ALTER TABLE messages ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0",
-            [],
-        );
-        let _ = self
-            .conn
-            .execute("ALTER TABLE messages ADD COLUMN attachments TEXT", []);
         Ok(())
     }
 }
