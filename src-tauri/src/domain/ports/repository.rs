@@ -21,6 +21,7 @@ pub struct AssetListQuery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImportPersistCounts {
     pub new_conversations: usize,
+    pub updated_conversations: usize,
     pub messages: usize,
 }
 

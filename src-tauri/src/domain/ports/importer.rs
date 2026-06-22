@@ -1,7 +1,8 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use super::import_package::ImportPackage;
-use crate::domain::models::DataSource;
+use crate::domain::models::{DataSource, ImportProgress};
 
 #[derive(Debug, Clone)]
 pub struct ImportInput {
@@ -23,8 +24,10 @@ pub struct ImportPreview {
     pub shard_file_count: usize,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ImportOptions {}
+#[derive(Clone, Default)]
+pub struct ImportOptions {
+    pub on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
+}
 
 #[derive(Debug, Clone)]
 pub struct NormalizedImportResult {

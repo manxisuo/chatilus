@@ -2,16 +2,20 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, State};
+use uuid::Uuid;
 
-use crate::application;
+use crate::application::{self, new_import_job_store, spawn_import_job, SharedImportJobStore};
 use crate::db::Database;
+use crate::domain::models::ImportJob;
 use crate::models::{
-    ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportResult, MessageView,
-    SearchHit, TagView,
+    ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportJobView,
+    ImportResult, MessageView, SearchHit, TagView,
 };
 
 pub struct AppState {
+    pub db_path: PathBuf,
     pub db: Mutex<Database>,
+    pub import_jobs: SharedImportJobStore,
 }
 
 pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
@@ -23,7 +27,9 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
 
     let db = Database::open(&db_path)?;
     Ok(AppState {
+        db_path,
         db: Mutex::new(db),
+        import_jobs: new_import_job_store(),
     })
 }
 
@@ -33,12 +39,40 @@ pub fn import_export_dir(
     path: String,
 ) -> Result<ImportResult, String> {
     let export_path = PathBuf::from(path);
-    if !export_path.is_dir() {
-        return Err(format!("路径不存在或不是目录: {}", export_path.display()));
+    if !export_path.exists() {
+        return Err(format!("路径不存在: {}", export_path.display()));
     }
 
     let mut db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::import_export_dir(&mut db, &export_path)
+}
+
+#[tauri::command]
+pub fn start_import(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    path: String,
+) -> Result<String, String> {
+    let input_path = PathBuf::from(&path);
+    if !input_path.exists() {
+        return Err(format!("路径不存在: {}", input_path.display()));
+    }
+
+    let job_id = Uuid::new_v4().to_string();
+    let job = ImportJob::new(job_id.clone(), path);
+    spawn_import_job(app, state.import_jobs.clone(), state.db_path.clone(), job);
+    Ok(job_id)
+}
+
+#[tauri::command]
+pub fn get_import_job(state: State<'_, AppState>, job_id: String) -> Result<ImportJobView, String> {
+    let registry = state
+        .import_jobs
+        .lock()
+        .map_err(|_| "导入任务锁失败".to_string())?;
+    registry
+        .get_view(&job_id)
+        .ok_or_else(|| format!("未找到导入任务: {job_id}"))
 }
 
 #[tauri::command]

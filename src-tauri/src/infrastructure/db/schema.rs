@@ -22,7 +22,10 @@ impl Database {
                     source_path TEXT NOT NULL,
                     imported_at REAL NOT NULL,
                     conversation_count INTEGER NOT NULL,
-                    message_count INTEGER NOT NULL
+                    message_count INTEGER NOT NULL,
+                    source TEXT,
+                    export_label TEXT,
+                    importer_version TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS conversations (

@@ -206,12 +206,15 @@ impl ConversationRepository for Database {
             .map_err(|e| format!("开启事务失败: {e}"))?;
 
         let mut new_conversations = 0usize;
+        let mut updated_conversations = 0usize;
         let mut message_count = 0usize;
 
         for conversation in conversations {
             let inserted = upsert_conversation(&tx, conversation, source)?;
             if inserted {
                 new_conversations += 1;
+            } else {
+                updated_conversations += 1;
             }
             message_count += insert_messages(&tx, conversation)?;
         }
@@ -221,6 +224,7 @@ impl ConversationRepository for Database {
 
         Ok(ImportPersistCounts {
             new_conversations,
+            updated_conversations,
             messages: message_count,
         })
     }

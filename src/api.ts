@@ -4,6 +4,7 @@ import type {
   DatabaseStats,
   ExportResult,
   ImageGalleryItem,
+  ImportJobView,
   ImportResult,
   MessageView,
   SearchHit,
@@ -12,6 +13,14 @@ import type {
 
 export function importExportDir(path: string) {
   return invoke<ImportResult>("import_export_dir", { path });
+}
+
+export function startImport(path: string) {
+  return invoke<string>("start_import", { path });
+}
+
+export function getImportJob(jobId: string) {
+  return invoke<ImportJobView>("get_import_job", { jobId });
 }
 
 export function listConversations(options?: {

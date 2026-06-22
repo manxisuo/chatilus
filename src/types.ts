@@ -45,10 +45,35 @@ export interface TagView {
 
 export interface ImportResult {
   conversations_imported: number;
+  conversations_updated: number;
   messages_imported: number;
   files_processed: number;
   source_path: string;
   media_files_indexed: number;
+}
+
+export interface ImportProgressEvent {
+  job_id: string;
+  phase: string;
+  progress: number;
+  processed: number;
+  total: number;
+}
+
+export interface ImportJobView {
+  id: string;
+  source_path: string;
+  resolved_path?: string | null;
+  status: string;
+  phase: string;
+  progress: number;
+  processed: number;
+  total: number;
+  error?: string | null;
+  source?: string | null;
+  export_label?: string | null;
+  importer_version?: string | null;
+  result?: ImportResult | null;
 }
 
 export interface ImageGalleryItem {

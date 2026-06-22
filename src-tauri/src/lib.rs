@@ -6,9 +6,10 @@ mod infrastructure;
 mod models;
 
 use commands::{
-    create_tag, delete_tag, export_conversation_markdown, get_messages, get_stats,
+    create_tag, delete_tag, export_conversation_markdown, get_import_job, get_messages, get_stats,
     import_export_dir, init_state, list_conversations, list_images, list_tags, read_image_data_url,
     search_messages, set_conversation_starred, set_conversation_tags, set_message_starred,
+    start_import,
 };
 use tauri::Manager;
 
@@ -24,6 +25,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             import_export_dir,
+            start_import,
+            get_import_job,
             list_conversations,
             list_images,
             get_messages,

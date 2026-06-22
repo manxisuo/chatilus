@@ -3,12 +3,14 @@ use std::path::Path;
 
 use rusqlite::{params, Connection};
 
+use crate::domain::models::SourceInfo;
 use crate::domain::ports::{ConversationRepository, NormalizedImportResult};
 use crate::models::ImportResult;
 
 mod asset_repository;
 mod conversation_repository;
 mod helpers;
+mod import_job_repository;
 mod message_repository;
 mod migration;
 mod schema;
@@ -38,10 +40,13 @@ impl Database {
     pub fn persist_import(
         &mut self,
         imported: &NormalizedImportResult,
+        source_info: &SourceInfo,
     ) -> Result<ImportResult, String> {
         let source = imported.source_path.clone();
         let files_processed = imported.files_processed;
         let media_files_indexed = imported.media_files_indexed;
+        let (source_key, export_label, importer_version) =
+            Database::source_info_sql_values(source_info);
 
         let counts = ConversationRepository::save_many(
             self,
@@ -51,18 +56,24 @@ impl Database {
 
         self.conn
             .execute(
-                "INSERT INTO imports (source_path, imported_at, conversation_count, message_count)
-                 VALUES (?1, unixepoch('subsec'), ?2, ?3)",
+                "INSERT INTO imports (
+                    source_path, imported_at, conversation_count, message_count,
+                    source, export_label, importer_version
+                 ) VALUES (?1, unixepoch('subsec'), ?2, ?3, ?4, ?5, ?6)",
                 params![
                     source,
                     counts.new_conversations as i64,
-                    counts.messages as i64
+                    counts.messages as i64,
+                    source_key,
+                    export_label,
+                    importer_version,
                 ],
             )
             .map_err(|e| format!("记录导入历史失败: {e}"))?;
 
         Ok(ImportResult {
             conversations_imported: counts.new_conversations,
+            conversations_updated: counts.updated_conversations,
             messages_imported: counts.messages,
             files_processed,
             source_path: source,

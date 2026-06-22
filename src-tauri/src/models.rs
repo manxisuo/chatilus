@@ -59,10 +59,57 @@ pub struct TagView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportResult {
     pub conversations_imported: usize,
+    pub conversations_updated: usize,
     pub messages_imported: usize,
     pub files_processed: usize,
     pub source_path: String,
     pub media_files_indexed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportProgressEvent {
+    pub job_id: String,
+    pub phase: String,
+    pub progress: f64,
+    pub processed: usize,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportJobView {
+    pub id: String,
+    pub source_path: String,
+    pub resolved_path: Option<String>,
+    pub status: String,
+    pub phase: String,
+    pub progress: f64,
+    pub processed: usize,
+    pub total: usize,
+    pub error: Option<String>,
+    pub source: Option<String>,
+    pub export_label: Option<String>,
+    pub importer_version: Option<String>,
+    pub result: Option<ImportResult>,
+}
+
+impl ImportJobView {
+    pub fn failed(id: &str, source_path: &str, error: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            source_path: source_path.to_string(),
+            resolved_path: None,
+            status: "failed".to_string(),
+            phase: String::new(),
+            progress: 0.0,
+            processed: 0,
+            total: 0,
+            error: Some(error.to_string()),
+            source: None,
+            export_label: None,
+            importer_version: None,
+            result: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

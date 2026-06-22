@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import ConversationList from "./components/ConversationList.vue";
@@ -12,17 +13,20 @@ import {
   exportConversationMarkdown,
   getMessages,
   getStats,
-  importExportDir,
   listConversations,
   listTags,
   searchMessages,
   setConversationStarred,
   setConversationTags,
   setMessageStarred,
+  startImport,
 } from "./api";
 import type {
   ConversationSummary,
   DatabaseStats,
+  ImportJobView,
+  ImportProgressEvent,
+  ImportResult,
   SearchHit,
   TagView,
 } from "./types";
@@ -35,6 +39,15 @@ const activeId = ref<string | null>(null);
 const listLoading = ref(false);
 const messageLoading = ref(false);
 const importing = ref(false);
+const importDialogVisible = ref(false);
+const importJobId = ref<string | null>(null);
+const importProgress = ref({
+  phase: "pending",
+  progress: 0,
+  processed: 0,
+  total: 0,
+});
+let importUnlisten: UnlistenFn[] = [];
 const exporting = ref(false);
 const stats = ref<DatabaseStats | null>(null);
 const listQuery = ref("");
@@ -152,7 +165,129 @@ async function loadMessages(conversationId: string) {
   }
 }
 
-async function handleImport() {
+const importPhaseLabel = computed(() => {
+  switch (importProgress.value.phase) {
+    case "extracting":
+      return "正在解压…";
+    case "parsing":
+      return "正在解析对话…";
+    case "persisting":
+      return "正在写入数据库…";
+    case "done":
+      return "导入完成";
+    default:
+      return "准备导入…";
+  }
+});
+
+function cleanupImportListeners() {
+  for (const unlisten of importUnlisten) {
+    void unlisten();
+  }
+  importUnlisten = [];
+}
+
+onUnmounted(() => {
+  cleanupImportListeners();
+});
+
+function formatImportResultMessage(result: ImportResult): string {
+  const parts: string[] = [];
+  if (result.conversations_imported > 0) {
+    parts.push(`新增 ${result.conversations_imported} 个对话`);
+  }
+  if (result.conversations_updated > 0) {
+    parts.push(`更新 ${result.conversations_updated} 个对话`);
+  }
+  if (parts.length === 0) {
+    parts.push("未发现对话");
+  }
+  parts.push(`写入 ${result.messages_imported} 条消息`);
+  parts.push(`索引媒体 ${result.media_files_indexed} 个`);
+  return `导入完成：${parts.join("，")}`;
+}
+
+async function finishImport(job: ImportJobView) {
+  importing.value = false;
+  importDialogVisible.value = false;
+  cleanupImportListeners();
+  importJobId.value = null;
+
+  if (job.status === "done" && job.result) {
+    ElMessage.success(formatImportResultMessage(job.result));
+    searchMode.value = false;
+    searchQuery.value = "";
+    searchHits.value = [];
+    await refreshStats();
+    await refreshTags();
+    await loadConversations();
+    activeId.value = conversations.value[0]?.id ?? null;
+    return;
+  }
+
+  ElMessage.error(job.error ?? "导入失败");
+}
+
+async function startImportFlow(path: string) {
+  cleanupImportListeners();
+  importing.value = true;
+  importDialogVisible.value = true;
+  importProgress.value = {
+    phase: "pending",
+    progress: 0,
+    processed: 0,
+    total: 0,
+  };
+
+  try {
+    const jobId = await startImport(path);
+    importJobId.value = jobId;
+
+    importUnlisten.push(
+      await listen<ImportProgressEvent>("import-progress", (event) => {
+        if (event.payload.job_id !== importJobId.value) {
+          return;
+        }
+        importProgress.value = {
+          phase: event.payload.phase,
+          progress: Math.round(event.payload.progress * 100),
+          processed: event.payload.processed,
+          total: event.payload.total,
+        };
+      }),
+    );
+
+    importUnlisten.push(
+      await listen<ImportJobView>("import-complete", (event) => {
+        if (event.payload.id !== importJobId.value) {
+          return;
+        }
+        void finishImport(event.payload);
+      }),
+    );
+  } catch (error) {
+    importing.value = false;
+    importDialogVisible.value = false;
+    cleanupImportListeners();
+    ElMessage.error(String(error));
+  }
+}
+
+async function handleImportZip() {
+  const selected = await open({
+    multiple: false,
+    title: "选择 ChatGPT 导出 zip",
+    filters: [{ name: "ZIP", extensions: ["zip"] }],
+  });
+
+  if (!selected || Array.isArray(selected)) {
+    return;
+  }
+
+  await startImportFlow(selected);
+}
+
+async function handleImportDir() {
   const selected = await open({
     directory: true,
     multiple: false,
@@ -163,24 +298,15 @@ async function handleImport() {
     return;
   }
 
-  importing.value = true;
-  try {
-    const result = await importExportDir(selected);
-    ElMessage.success(
-      `导入完成：${result.conversations_imported} 个对话，${result.messages_imported} 条消息；索引媒体 ${result.media_files_indexed} 个`,
-    );
-    searchMode.value = false;
-    searchQuery.value = "";
-    searchHits.value = [];
-    await refreshStats();
-    await refreshTags();
-    await loadConversations();
-    activeId.value = conversations.value[0]?.id ?? null;
-  } catch (error) {
-    ElMessage.error(String(error));
-  } finally {
-    importing.value = false;
+  await startImportFlow(selected);
+}
+
+function handleImportCommand(command: string) {
+  if (command === "zip") {
+    void handleImportZip();
+    return;
   }
+  void handleImportDir();
 }
 
 async function handleSearch() {
@@ -352,11 +478,39 @@ onMounted(async () => {
           "
         />
         <el-button @click="handleSearch">搜索</el-button>
-        <el-button type="primary" :loading="importing" @click="handleImport">
-          导入数据
-        </el-button>
+        <el-dropdown trigger="click" @command="handleImportCommand">
+          <el-button type="primary" :loading="importing">
+            导入数据
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="zip">导入 ZIP</el-dropdown-item>
+              <el-dropdown-item command="dir">导入目录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </el-header>
+
+    <el-dialog
+      v-model="importDialogVisible"
+      title="正在导入"
+      width="420px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+    >
+      <p>{{ importPhaseLabel }}</p>
+      <el-progress
+        :percentage="importProgress.progress"
+        :stroke-width="16"
+        striped
+        striped-flow
+      />
+      <p v-if="importProgress.total > 0" class="import-progress-detail">
+        {{ importProgress.processed }} / {{ importProgress.total }}
+      </p>
+    </el-dialog>
 
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside width="320px" class="sidebar">
@@ -640,5 +794,11 @@ onMounted(async () => {
   position: absolute;
   right: 20px;
   bottom: 20px;
+}
+
+.import-progress-detail {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--cl-text-muted);
 }
 </style>

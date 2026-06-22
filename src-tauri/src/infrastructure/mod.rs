@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod db;
 pub mod importers;
 pub mod media;

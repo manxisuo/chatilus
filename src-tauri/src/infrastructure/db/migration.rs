@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
-/// 当前数据库 schema 版本。后续 PR 递增（如 import_jobs 表 → 2）。
-pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+/// 当前数据库 schema 版本。
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -30,6 +30,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
 
     let result = match version {
         1 => migrate_v1(&tx),
+        2 => migrate_v2(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -68,6 +69,46 @@ fn migrate_v1(conn: &Connection) -> Result<(), String> {
     }
 
     upsert_meta(conn, "schema_version", "1")?;
+    Ok(())
+}
+
+/// v2：import_jobs 表；imports 表补充 SourceInfo 列。
+fn migrate_v2(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS import_jobs (
+            id TEXT PRIMARY KEY,
+            source_path TEXT NOT NULL,
+            resolved_path TEXT,
+            status TEXT NOT NULL,
+            phase TEXT NOT NULL DEFAULT '',
+            progress REAL NOT NULL DEFAULT 0,
+            processed INTEGER NOT NULL DEFAULT 0,
+            total INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            source TEXT,
+            export_label TEXT,
+            importer_version TEXT,
+            created_at REAL NOT NULL,
+            finished_at REAL
+        )",
+        [],
+    )
+    .map_err(|e| format!("迁移 v2: 创建 import_jobs 失败: {e}"))?;
+
+    if !table_has_column(conn, "imports", "source")? {
+        conn.execute("ALTER TABLE imports ADD COLUMN source TEXT", [])
+            .map_err(|e| format!("迁移 v2: 添加 imports.source 失败: {e}"))?;
+    }
+    if !table_has_column(conn, "imports", "export_label")? {
+        conn.execute("ALTER TABLE imports ADD COLUMN export_label TEXT", [])
+            .map_err(|e| format!("迁移 v2: 添加 imports.export_label 失败: {e}"))?;
+    }
+    if !table_has_column(conn, "imports", "importer_version")? {
+        conn.execute("ALTER TABLE imports ADD COLUMN importer_version TEXT", [])
+            .map_err(|e| format!("迁移 v2: 添加 imports.importer_version 失败: {e}"))?;
+    }
+
+    upsert_meta(conn, "schema_version", "2")?;
     Ok(())
 }
 

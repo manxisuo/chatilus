@@ -1,6 +1,6 @@
 use super::attachments::resolve_imported_attachments;
-use super::{find_conversation_files, parse_export_dir};
-use crate::domain::models::DataSource;
+use super::{find_conversation_files, parse_conversation_file};
+use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
     NormalizedImportResult,
@@ -40,7 +40,7 @@ impl Importer for ChatGptImporter {
 
     fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
         let shard_file_count = find_conversation_files(&input.path)?.len();
-        let conversations = parse_export_dir(&input.path)?;
+        let conversations = super::parse_export_dir(&input.path)?;
         Ok(ImportPreview {
             importer_id: self.id().to_string(),
             display_name: self.display_name().to_string(),
@@ -52,7 +52,7 @@ impl Importer for ChatGptImporter {
     fn import(
         &self,
         input: &ImportInput,
-        _options: &ImportOptions,
+        options: &ImportOptions,
     ) -> Result<NormalizedImportResult, String> {
         if !input.path.is_dir() {
             return Err(format!(
@@ -65,8 +65,22 @@ impl Importer for ChatGptImporter {
         let shard_files = find_conversation_files(&input.path)?;
         let files_processed = shard_files.len();
         let source_path = input.path.display().to_string();
+        let total = files_processed.max(1);
 
-        let mut conversations = parse_export_dir(&input.path)?;
+        let mut conversations = Vec::new();
+        for (index, file) in shard_files.iter().enumerate() {
+            conversations.extend(parse_conversation_file(file)?);
+            if let Some(callback) = &options.on_progress {
+                let progress = 0.2 + ((index + 1) as f64 / total as f64) * 0.6;
+                callback(ImportProgress {
+                    phase: "parsing".to_string(),
+                    progress,
+                    processed: index + 1,
+                    total,
+                });
+            }
+        }
+
         for conversation in &mut conversations {
             for message in &mut conversation.messages {
                 message.attachments =

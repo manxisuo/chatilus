@@ -172,8 +172,8 @@ Rust `domain/models/` 为 **source of truth**。经 `commands` 序列化给前�
 | `Asset` | 统一图片 / 文件 / 代码 / 链接等；`assetType`、`localPath`、`metadata` |
 | `DataSource` | `ChatGpt` · `Cursor` · `Claude` · `Gemini` |
 | `SearchQuery` / `SearchResult` | 搜索抽象，与 FTS 解耦 |
-| `ImportJob` | v0.3 规划：导入状态与进度（见下文） |
-| `SourceInfo` | v0.3 规划：`source` + `export_label` + `importer_version` |
+| `ImportJob` | 已实现：内存 registry + `import_jobs` 表持久化；`start_import` 后台线程 + 事件 |
+| `SourceInfo` | 已实现：写入 `imports` 与 `import_jobs` |
 
 `MessageContent` 当前版本：
 
@@ -194,10 +194,12 @@ ImageRef { asset_id }
 
 | key | 示例 value | 用途 |
 |-----|------------|------|
-| `schema_version` | `1` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 1`） |
+| `schema_version` | `2` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 2`） |
 | `app_version` | `0.1.0` | 最近一次打开数据库的应用版本（`CARGO_PKG_VERSION`） |
 
-v1 迁移：将早期库中散落的 `ALTER TABLE`（`is_starred`、`attachments`）纳入版本框架。新库直接以完整 `CREATE TABLE` 建表，再写入 `schema_version = 1`。
+v1 迁移：将早期库中散落的 `ALTER TABLE`（`is_starred`、`attachments`）纳入版本框架。
+
+v2 迁移：`import_jobs` 表；`imports` 表增加 `source` / `export_label` / `importer_version`。
 
 ### SourceInfo（v0.3）
 
@@ -320,7 +322,7 @@ sequenceDiagram
     APP-->>UI: ImportResult
 ```
 
-v0.3 将在上述流程中插入 `ImportJob` 状态更新与 zip 解压步骤。
+v0.3 在导入流程中通过 `start_import` → 后台线程 → `import-progress` / `import-complete` 事件推送进度；zip 由 `infrastructure/archive/zip_import.rs` 解压（含嵌套 zip）。
 
 ### 读取与搜索
 
