@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 3;
+pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -32,6 +32,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
         1 => migrate_v1(&tx),
         2 => migrate_v2(&tx),
         3 => migrate_v3(&tx),
+        4 => migrate_v4(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -135,6 +136,189 @@ fn migrate_v3(conn: &Connection) -> Result<(), String> {
 
     upsert_meta(conn, "schema_version", "3")?;
     Ok(())
+}
+
+/// v4：会话主键改为 `{source}::{source_id}`，并级联更新消息 / 标签 / FTS。
+fn migrate_v4(conn: &Connection) -> Result<(), String> {
+    use crate::domain::composite_id::is_composite_conversation_id;
+
+    conn.execute(
+        "UPDATE conversations
+         SET source = COALESCE(source, 'chatgpt'),
+             source_id = COALESCE(source_id, id)
+         WHERE source IS NULL OR source_id IS NULL",
+        [],
+    )
+    .map_err(|e| format!("迁移 v4: 回填 conversations.source/source_id 失败: {e}"))?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, source, source_id FROM conversations")
+        .map_err(|e| format!("迁移 v4: 读取 conversations 失败: {e}"))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| format!("迁移 v4: 遍历 conversations 失败: {e}"))?;
+
+    let mut pending = Vec::new();
+    for row in rows {
+        let (old_id, source, source_id) =
+            row.map_err(|e| format!("迁移 v4: 读取 conversation 行失败: {e}"))?;
+        if is_composite_conversation_id(&old_id) {
+            continue;
+        }
+        let new_id = format!("{source}::{source_id}");
+        if old_id == new_id {
+            continue;
+        }
+        pending.push((old_id, new_id));
+    }
+
+    for (old_id, new_id) in pending {
+        conn.execute(
+            "INSERT INTO conversations (
+                id, title, create_time, update_time, source_path, model, message_count,
+                is_starred, source, source_id
+             )
+             SELECT ?1, title, create_time, update_time, source_path, model, message_count,
+                    is_starred, source, source_id
+             FROM conversations
+             WHERE id = ?2",
+            params![new_id, old_id],
+        )
+        .map_err(|e| format!("迁移 v4: 复制 conversations({old_id} → {new_id}) 失败: {e}"))?;
+
+        conn.execute(
+            "UPDATE messages
+             SET conversation_id = ?1,
+                 id = ?1 || '::' || substr(id, length(?2) + 3)
+             WHERE conversation_id = ?2",
+            params![new_id, old_id],
+        )
+        .map_err(|e| format!("迁移 v4: 更新 messages({old_id} → {new_id}) 失败: {e}"))?;
+
+        conn.execute(
+            "UPDATE conversation_tags SET conversation_id = ?1 WHERE conversation_id = ?2",
+            params![new_id, old_id],
+        )
+        .map_err(|e| format!("迁移 v4: 更新 conversation_tags 失败: {e}"))?;
+
+        conn.execute(
+            "DELETE FROM conversations WHERE id = ?1",
+            params![old_id],
+        )
+        .map_err(|e| format!("迁移 v4: 删除旧 conversations.id 失败: {e}"))?;
+    }
+
+    rebuild_messages_fts(conn)?;
+    upsert_meta(conn, "schema_version", "4")?;
+    Ok(())
+}
+
+fn rebuild_messages_fts(conn: &Connection) -> Result<(), String> {
+    conn.execute("DELETE FROM messages_fts", [])
+        .map_err(|e| format!("迁移 v4: 清空 messages_fts 失败: {e}"))?;
+    conn.execute(
+        "INSERT INTO messages_fts (message_id, conversation_id, conversation_title, content)
+         SELECT m.id, m.conversation_id, c.title, m.content
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id",
+        [],
+    )
+    .map_err(|e| format!("迁移 v4: 重建 messages_fts 失败: {e}"))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod migrate_v4_tests {
+    use super::*;
+    use crate::domain::composite_id::is_composite_conversation_id;
+    use rusqlite::Connection;
+
+    #[test]
+    fn migrates_legacy_conversation_ids_to_composite_form() {
+        let conn = Connection::open_in_memory().expect("open");
+        conn.execute_batch(
+            "
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta (key, value) VALUES ('schema_version', '3');
+
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                create_time REAL,
+                update_time REAL,
+                source_path TEXT NOT NULL,
+                model TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                source TEXT,
+                source_id TEXT
+            );
+
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                create_time REAL,
+                sort_order INTEGER NOT NULL,
+                raw_json TEXT,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                attachments TEXT,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created_at REAL NOT NULL DEFAULT 0);
+            CREATE TABLE conversation_tags (
+                conversation_id TEXT NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (conversation_id, tag_id),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
+
+            CREATE VIRTUAL TABLE messages_fts USING fts5(
+                message_id UNINDEXED,
+                conversation_id UNINDEXED,
+                conversation_title,
+                content,
+                tokenize = 'unicode61'
+            );
+
+            INSERT INTO conversations (id, title, source_path, message_count, source, source_id)
+            VALUES ('conv-1', 'Legacy', '/export', 1, 'chatgpt', 'conv-1');
+            INSERT INTO messages (id, conversation_id, role, content, sort_order)
+            VALUES ('conv-1::m1', 'conv-1', 'user', 'hello', 0);
+            INSERT INTO messages_fts (message_id, conversation_id, conversation_title, content)
+            VALUES ('conv-1::m1', 'conv-1', 'Legacy', 'hello');
+            ",
+        )
+        .expect("seed");
+
+        migrate_v4(&conn).expect("migrate v4");
+
+        let conversation_id: String = conn
+            .query_row("SELECT id FROM conversations", [], |row| row.get(0))
+            .expect("conversation id");
+        assert_eq!(conversation_id, "chatgpt::conv-1");
+        assert!(is_composite_conversation_id(&conversation_id));
+
+        let message_id: String = conn
+            .query_row("SELECT id FROM messages", [], |row| row.get(0))
+            .expect("message id");
+        assert_eq!(message_id, "chatgpt::conv-1::m1");
+
+        let fts_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM messages_fts", [], |row| row.get(0))
+            .expect("fts count");
+        assert_eq!(fts_count, 1);
+    }
 }
 
 fn read_schema_version(conn: &Connection) -> Result<i32, String> {

@@ -276,11 +276,16 @@ async function startImportFlow(path: string) {
   }
 }
 
-async function handleImportZip() {
+async function handleImportFile() {
   const selected = await open({
     multiple: false,
-    title: "选择 ChatGPT 导出 zip",
-    filters: [{ name: "ZIP", extensions: ["zip"] }],
+    title: "选择导入文件",
+    filters: [
+      {
+        name: "支持的导入文件",
+        extensions: ["zip", "vscdb"],
+      },
+    ],
   });
 
   if (!selected || Array.isArray(selected)) {
@@ -294,7 +299,7 @@ async function handleImportDir() {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: "选择 ChatGPT 导出目录",
+    title: "选择导入目录（ChatGPT 导出 / Cursor User 或 globalStorage）",
   });
 
   if (!selected || Array.isArray(selected)) {
@@ -305,8 +310,8 @@ async function handleImportDir() {
 }
 
 function handleImportCommand(command: string) {
-  if (command === "zip") {
-    void handleImportZip();
+  if (command === "file") {
+    void handleImportFile();
     return;
   }
   void handleImportDir();
@@ -487,7 +492,7 @@ onMounted(async () => {
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="zip">导入 ZIP</el-dropdown-item>
+              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb）</el-dropdown-item>
               <el-dropdown-item command="dir">导入目录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -579,6 +584,7 @@ onMounted(async () => {
         <MessageView
           :messages="messages"
           :title="activeConversation?.title ?? '对话详情'"
+          :data-source="activeConversation?.source ?? 'chatgpt'"
           :loading="messageLoading || exporting"
           :conversation-starred="activeConversation?.is_starred ?? false"
           :conversation-tags="activeConversation?.tags ?? []"

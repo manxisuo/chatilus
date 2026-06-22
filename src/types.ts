@@ -7,6 +7,7 @@ export interface ConversationSummary {
   message_count: number;
   is_starred: boolean;
   source_path: string;
+  source?: string;
   tags: string[];
 }
 

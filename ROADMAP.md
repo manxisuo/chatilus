@@ -2,21 +2,43 @@
 
 > **ChatLens**：一个轻量、本地优先的 AI 对话历史浏览器。
 >
-> 长期愿景：从「导出数据查看器」演进为本地 **AI Conversation OS**——核心是 **Import + Index + Browse**，而非云平台或插件生态。
+> 长期愿景：从「导出数据查看器」演进为本地 **AI Conversation OS**——核心是 **Import + Index + Browse**；智能分析（总结、RAG）为 v0.5+ 增强，不替代浏览闭环。
 
 ## 当前重点（v0.4）
 
-v0.3（导入、进度、多包合并去重）**已完成**。下一阶段以**多源 Importer** 为主，详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从「单源查看器」升级为**多源 AI 对话历史浏览器**。
 
-### 产品功能
+产品原则：**底层统一，视图分离**——同一 SQLite 库存储所有来源；UI 用 `source` 分组、过滤、标注，不拆库。
+
+详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+### 多源 Importer（PR4a–c）
 
 - [x] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
-- [ ] Claude / Gemini / Cursor 等导出格式（按需逐个新增 Importer，PR4b+）
+- [x] Cursor 本地 `state.vscdb` 导入（PR4b）
+- [ ] Claude / Gemini 等导出格式（按需逐个新增 Importer，PR4c+，有样本再做）
+
+### 多源 UI（PR4d，与 Importer 同属 v0.4）
+
+存储与搜索层已统一；下列为**视图层**，让「All Conversations」成为主入口：
+
+- [ ] 左侧 **Sources** 导航：`All` / `ChatGPT` / `Cursor` / …（含各源计数）
+- [ ] 对话列表 **来源徽标**（如 ChatGPT / Cursor 小标签）
+- [ ] `ConversationListQuery` 增加 `source` 过滤
+- [ ] 搜索结果展示 **来源**（`SearchHit` + UI）
+- [ ] 会话列表 `source` 字段贯通 API（已完成部分：消息角色标签已按源显示）
+- [ ] （可选）图片画廊按对话来源筛选
 
 ### 技术配套
 
 - [x] 导入流程去 ChatGPT 硬编码（`import_data` / `zip` 解压后根目录探测）
 - [x] 各 Importer 独立 `importer_version`（`Importer::version()`）
+- [x] 导入文件选择器支持 `.vscdb`（Cursor）
+- [x] 内部 `id` 规范为 `{source}::{source_id}`（schema v4 迁移）
+
+### 明确不做进 v0.4
+
+- **PR4e 智能分析**（总结、向量检索、聚类、RAG）→ **延后至 v0.5**，不阻塞多源浏览闭环。见下文版本规划说明。
 
 ---
 
@@ -116,7 +138,7 @@ ChatGPT Export（zip / 解压目录）
         └──► SearchEngine → FTS5
         │
         ▼
-  View DTO → Vue（对话列表 · 消息 · 搜索 · 收藏/标签 · 图片）
+  View DTO → Vue（All / 按源视图 · 消息 · 跨源搜索 · 收藏/标签 · 图片）
 ```
 
 ### Rust 目录结构（收敛后）
@@ -289,19 +311,33 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - 多导出包合并 / 去重
 - `schema_version`、`SourceInfo`、`conversations.source` / `source_id`
 
-### v0.4 — 多源与智能分析（当前）
+### v0.4 — 多源浏览（当前）
 
-**多源 Importer**
+**目标**：用户可在同一库中导入、浏览、搜索 ChatGPT / Cursor 等对话；左侧可按来源切换视图，默认 **All** 混排。
 
-- [x] `ImporterRegistry` + 导入流程去硬编码（PR4a）
-- [ ] Claude / Gemini / Cursor 等（PR4b+，按样本逐个实现）
+**PR 拆分**
 
-**智能分析（可选）**
+| PR | 内容 | 状态 |
+|----|------|------|
+| PR4a | `ImporterRegistry` + 去硬编码 | ✅ |
+| PR4b | Cursor Importer | ✅ |
+| PR4c | Claude / Gemini 等（有样本再做） | 待定 |
+| PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | 进行中 |
 
-- [ ] `application/ai/`：AI 总结历史对话
-- [ ] 向量检索（新 `SearchEngine` 实现或扩展）
+**不在 v0.4 范围内**
+
+- PR4e 智能分析 → **v0.5**（见下），避免 Importer + UI 与 AI 基础设施并行，拖慢「多源浏览」这一核心差异化。
+
+### v0.5 — 智能分析（下一里程碑）
+
+v0.4 交付「Import + Index + Browse」多源闭环后，再评估 AI 能力。全部可选、可逐项启用：
+
+- [ ] `application/ai/`：对话总结（需用户配置 API Key 或本地模型）
+- [ ] 向量检索（新 `SearchEngine` 实现或扩展 FTS）
 - [ ] 按主题聚类
 - [ ] 本地知识库 / RAG
+
+> **关于原 PR4e**：不必在 v0.4 内做完，也不必单独发 v0.4.1 补丁版；作为 v0.5 首包即可。若日后只需「单点总结」小功能，再以 v0.5.x 增量发布。
 
 ### v0.5+ — 索引编排（远期愿景）
 

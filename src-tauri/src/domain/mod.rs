@@ -1,3 +1,4 @@
+pub mod composite_id;
 pub mod import_merge;
 pub mod mappers;
 pub mod models;

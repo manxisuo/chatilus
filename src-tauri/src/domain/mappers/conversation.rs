@@ -2,6 +2,8 @@ use crate::models::ConversationSummary;
 
 use super::super::models::{Conversation, DataSource};
 
+use super::super::composite_id::parse_composite_conversation_id;
+
 pub fn conversation_from_row(
     id: String,
     title: String,
@@ -11,12 +13,18 @@ pub fn conversation_from_row(
     message_count: i64,
     is_starred: bool,
     source_path: String,
+    source: String,
     tags: Vec<String>,
 ) -> Conversation {
+    let data_source = DataSource::parse(&source);
+    let source_id = parse_composite_conversation_id(&id)
+        .map(|(_, source_id)| source_id)
+        .unwrap_or_else(|| id.clone());
+
     Conversation {
         id: id.clone(),
-        source: DataSource::ChatGpt,
-        source_id: Some(id),
+        source: data_source,
+        source_id: Some(source_id),
         title,
         created_at,
         updated_at,
@@ -41,6 +49,7 @@ pub fn conversation_to_summary(conversation: Conversation) -> ConversationSummar
         message_count: conversation.message_count,
         is_starred: conversation.is_favorite,
         source_path: conversation.import_path,
+        source: conversation.source.as_str().to_string(),
         tags: conversation.tags,
     }
 }
@@ -56,6 +65,7 @@ impl From<ConversationSummary> for Conversation {
             summary.message_count,
             summary.is_starred,
             summary.source_path,
+            summary.source,
             summary.tags,
         )
     }
@@ -74,7 +84,7 @@ mod tests {
     #[test]
     fn conversation_summary_round_trip() {
         let summary = ConversationSummary {
-            id: "conv-1".to_string(),
+            id: "chatgpt::conv-1".to_string(),
             title: "测试对话".to_string(),
             create_time: Some(1_700_000_000.0),
             update_time: Some(1_700_000_100.0),
@@ -82,6 +92,7 @@ mod tests {
             message_count: 12,
             is_starred: true,
             source_path: "/exports/chatgpt".to_string(),
+            source: "chatgpt".to_string(),
             tags: vec!["工作".to_string(), "Rust".to_string()],
         };
 

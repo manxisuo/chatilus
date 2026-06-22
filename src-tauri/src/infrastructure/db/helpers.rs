@@ -3,7 +3,7 @@ use crate::infrastructure::importers::chatgpt::classify_image_source;
 use crate::models::{AttachmentView, ConversationSummary};
 
 pub(crate) fn map_conversation_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
-    let tag_names: String = row.get(8)?;
+    let tag_names: String = row.get(9)?;
     let tags = if tag_names.is_empty() {
         Vec::new()
     } else {
@@ -19,6 +19,7 @@ pub(crate) fn map_conversation_summary(row: &rusqlite::Row<'_>) -> rusqlite::Res
         row.get(5)?,
         row.get::<_, i64>(6)? != 0,
         row.get(7)?,
+        row.get(8)?,
         tags,
     )
     .into())

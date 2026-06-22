@@ -10,7 +10,13 @@ pub struct ConversationSummary {
     pub message_count: i64,
     pub is_starred: bool,
     pub source_path: String,
+    #[serde(default = "default_conversation_source")]
+    pub source: String,
     pub tags: Vec<String>,
+}
+
+fn default_conversation_source() -> String {
+    "chatgpt".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

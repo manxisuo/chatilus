@@ -12,6 +12,7 @@ const props = defineProps<{
   loading: boolean;
   conversationStarred: boolean;
   conversationTags: string[];
+  dataSource?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -45,9 +46,24 @@ function formatTime(timestamp: number | null) {
   return new Date(timestamp * 1000).toLocaleString("zh-CN");
 }
 
+function assistantLabel(source?: string | null) {
+  switch (source?.toLowerCase()) {
+    case "cursor":
+      return "Cursor";
+    case "claude":
+      return "Claude";
+    case "gemini":
+      return "Gemini";
+    case "chatgpt":
+      return "ChatGPT";
+    default:
+      return "助手";
+  }
+}
+
 function roleLabel(role: string) {
   if (role === "user") return "你";
-  if (role === "assistant") return "ChatGPT";
+  if (role === "assistant") return assistantLabel(props.dataSource);
   return role;
 }
 

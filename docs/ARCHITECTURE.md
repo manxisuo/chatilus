@@ -2,7 +2,7 @@
 
 > 本文描述 **架构收敛（PR 1–5）完成后的当前结构**。技术路线与版本规划见 [ROADMAP.md](../ROADMAP.md)。
 >
-> **当前阶段**：v0.3（导入、进度、多包合并去重）已完成；下一阶段为 **v0.4 多源 Importer**（及可选 AI 分析）。技术路线见 [ROADMAP.md](../ROADMAP.md)。
+> **当前阶段**：v0.3 已完成；**v0.4** 为多源 Importer（PR4a–c）+ 多源 UI（PR4d）；智能分析延后至 **v0.5**。见 [ROADMAP.md](../ROADMAP.md)。
 
 ## 核心原则
 
@@ -194,7 +194,7 @@ ImageRef { asset_id }
 
 | key | 示例 value | 用途 |
 |-----|------------|------|
-| `schema_version` | `3` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 3`） |
+| `schema_version` | `4` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 4`） |
 | `app_version` | `0.1.0` | 最近一次打开数据库的应用版本（`CARGO_PKG_VERSION`） |
 
 v1 迁移：将早期库中散落的 `ALTER TABLE`（`is_starred`、`attachments`）纳入版本框架。
@@ -203,7 +203,11 @@ v2 迁移：`import_jobs` 表；`imports` 表增加 `source` / `export_label` / 
 
 v3 迁移：`conversations.source` / `conversations.source_id`；旧数据回填为 `chatgpt` + `id`。
 
-### SourceInfo（v0.3）
+v4 迁移：会话主键改为 `{source}::{source_id}`；级联更新 `messages` / `conversation_tags`，并重建 `messages_fts`。
+
+### conversations.source / source_id（v3–v4）
+
+domain 模型已有 `source` / `sourceId`。v3 补齐 DB 列；v4 起库内 `conversations.id` = `{source}::{source_id}`，Importer 仍只产出平台侧 `source_id`，复合 ID 在持久化层生成。
 
 导入时记录来源元数据，便于多包合并与调试：
 
@@ -215,11 +219,7 @@ importer_version: 0.3
 
 可挂在 `imports` 表扩展字段或 `ImportJob` 结果中，写入 `NormalizedImportResult`。
 
-### conversations.source / source_id（v3，已实现）
-
-domain 模型已有 `source` / `sourceId`；DB 列在 v3 迁移中补齐。ChatGPT 导入时 `source_id` = 对话 UUID。
-
-### 多包合并 / 去重（v3，已实现）
+### SourceInfo（v0.3）
 
 - **包内去重**：`domain/import_merge.rs` 按对话 `id` 合并，消息按源 `message.id` 去重。
 - **跨包合并**：持久化时不再 `DELETE` 全量消息，改为按 `conversation_id::message_id` upsert，保留其他导出包中的独有消息。
@@ -231,7 +231,11 @@ domain 模型已有 `source` / `sourceId`；DB 列在 v3 迁移中补齐。ChatG
 - `application/import_data` 与 `archive/zip_import` 经 registry 选择 Importer，不再硬编码 `ChatGptImporter`。
 - 新源接入：实现 `Importer` trait 并加入 `default_importer_registry()` 即可。
 
----
+### CursorImporter（v4 PR4b，已实现）
+
+- 读取 Cursor 本地 `globalStorage/state.vscdb`（只读 `immutable=1`），解析 `composerData:*` 与 `bubbleId:{composerId}:*`。
+- 支持导入路径：`state.vscdb` 文件、`globalStorage` 目录、或 `Cursor/User` 目录。
+- 会话标题来自 `composer.composerHeaders`（Cursor 3.0+）或 `composerData` 内嵌元数据；消息按 `fullConversationHeadersOnly` 顺序还原。
 
 ## 导入生命周期（v0.3 规划）
 
@@ -295,6 +299,7 @@ src-tauri/src/
 │   └── mappers/                # Domain ↔ View DTO
 ├── infrastructure/
 │   ├── importers/chatgpt/      # 解析、媒体、ChatGptImporter
+│   ├── importers/cursor/       # state.vscdb 解析、CursorImporter
 │   ├── db/                     # SQLite + *_repository.rs
 │   ├── search/                 # sqlite_fts.rs
 │   └── media/                  # 导出目录媒体索引

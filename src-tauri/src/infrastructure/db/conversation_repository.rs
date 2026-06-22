@@ -3,6 +3,7 @@ use std::path::Path;
 
 use rusqlite::{params, OptionalExtension, Transaction};
 
+use crate::domain::composite_id::{composite_conversation_id, message_storage_id};
 use crate::domain::models::DataSource;
 use crate::domain::ports::{
     ConversationListQuery, ConversationRepository, ImportPersistCounts, ImportedConversation,
@@ -23,7 +24,7 @@ impl ConversationRepository for Database {
     fn list(&self, query: ConversationListQuery) -> Result<Vec<ConversationSummary>, String> {
         let mut sql = String::from(
             "SELECT c.id, c.title, c.create_time, c.update_time, c.model, c.message_count,
-                    c.is_starred, c.source_path,
+                    c.is_starred, c.source_path, COALESCE(c.source, 'chatgpt') AS source,
                     COALESCE(GROUP_CONCAT(t.name, char(31)), '') AS tag_names
              FROM conversations c
              LEFT JOIN conversation_tags ct ON ct.conversation_id = c.id
@@ -220,7 +221,11 @@ impl ConversationRepository for Database {
             } else {
                 updated_conversations += 1;
             }
-            message_count += merge_messages(&tx, conversation)?;
+            message_count += merge_messages(
+                &tx,
+                conversation,
+                &composite_conversation_id(data_source, &conversation.id),
+            )?;
         }
 
         tx.commit()
@@ -241,7 +246,9 @@ fn upsert_conversation(
     source_path: &str,
     data_source: DataSource,
 ) -> Result<bool, String> {
-    let existing = read_conversation_metadata(tx, &conversation.id)?;
+    let source_id = conversation.id.clone();
+    let storage_id = composite_conversation_id(data_source, &source_id);
+    let existing = read_conversation_metadata(tx, &storage_id)?;
     let is_new = existing.is_none();
     let metadata = pick_conversation_metadata(conversation, existing.as_ref());
 
@@ -258,7 +265,7 @@ fn upsert_conversation(
             source = excluded.source,
             source_id = excluded.source_id",
         params![
-            conversation.id,
+            storage_id,
             metadata.title,
             metadata.create_time,
             metadata.update_time,
@@ -266,7 +273,7 @@ fn upsert_conversation(
             metadata.model,
             conversation.messages.len() as i64,
             data_source.as_str(),
-            conversation.id,
+            source_id,
         ],
     )
     .map_err(|e| format!("写入会话失败: {e}"))?;
@@ -346,11 +353,12 @@ fn min_option_time(left: Option<f64>, right: Option<f64>) -> Option<f64> {
 fn merge_messages(
     tx: &Transaction<'_>,
     conversation: &ImportedConversation,
+    storage_id: &str,
 ) -> Result<usize, String> {
     let mut touched = 0usize;
 
     for message in &conversation.messages {
-        let stored_id = format!("{}::{}", conversation.id, message.id);
+        let stored_id = message_storage_id(storage_id, &message.id);
         let attachments = imported_attachments_to_views(&message.attachments);
         let attachments_json = serde_json::to_string(&attachments)
             .map_err(|e| format!("序列化附件失败: {e}"))?;
@@ -366,7 +374,7 @@ fn merge_messages(
                 attachments = excluded.attachments",
             params![
                 stored_id,
-                conversation.id,
+                storage_id,
                 message.role,
                 message.content,
                 message.create_time,
@@ -378,9 +386,9 @@ fn merge_messages(
         touched += 1;
     }
 
-    reorder_conversation_messages(tx, &conversation.id)?;
-    refresh_conversation_message_count(tx, &conversation.id)?;
-    reindex_conversation_messages(tx, &conversation.id, &conversation.title)?;
+    reorder_conversation_messages(tx, storage_id)?;
+    refresh_conversation_message_count(tx, storage_id)?;
+    reindex_conversation_messages(tx, storage_id, &conversation.title)?;
 
     Ok(touched)
 }
@@ -531,21 +539,94 @@ mod merge_tests {
         let message_count: i64 = db
             .conn
             .query_row(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-1'",
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = 'chatgpt::conv-1'",
                 [],
                 |row| row.get(0),
             )
             .expect("count messages");
         assert_eq!(message_count, 3);
 
+        let conversation_id: String = db
+            .conn
+            .query_row("SELECT id FROM conversations", [], |row| row.get(0))
+            .expect("conversation id");
+        assert_eq!(conversation_id, "chatgpt::conv-1");
+
         let source_id: String = db
             .conn
             .query_row(
-                "SELECT source_id FROM conversations WHERE id = 'conv-1'",
+                "SELECT source_id FROM conversations WHERE id = 'chatgpt::conv-1'",
                 [],
                 |row| row.get(0),
             )
             .expect("source id");
         assert_eq!(source_id, "conv-1");
+    }
+
+    #[test]
+    fn distinct_sources_with_same_source_id_do_not_collide() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-source-id-test-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        let shared_source_id = "shared-composer-id";
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: shared_source_id.to_string(),
+                title: "ChatGPT".to_string(),
+                create_time: None,
+                update_time: None,
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "from chatgpt".to_string(),
+                    create_time: None,
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/chatgpt",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("chatgpt import");
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: shared_source_id.to_string(),
+                title: "Cursor".to_string(),
+                create_time: None,
+                update_time: None,
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "from cursor".to_string(),
+                    create_time: None,
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/cursor",
+            DataSource::Cursor,
+            0,
+        )
+        .expect("cursor import");
+
+        let conversation_count: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))
+            .expect("conversation count");
+        assert_eq!(conversation_count, 2);
     }
 }

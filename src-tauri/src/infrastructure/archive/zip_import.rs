@@ -54,27 +54,40 @@ pub fn resolve_import_path_with_registry(
         });
     }
 
-    if is_zip_file(input_path) {
-        report(on_progress.as_ref(), "extracting", 0, 1, 0.02);
-        let cleanup = TempExtractDir {
-            path: create_extract_dir(input_path)?,
-        };
-        extract_zip(input_path, cleanup.path())?;
-        report(on_progress.as_ref(), "extracting", 1, 1, 0.18);
-        extract_nested_zips(cleanup.path(), on_progress.clone())?;
-        let (export_dir, detect) = registry.find_export_root(cleanup.path())?;
-        let export_label = export_label_from_path(input_path);
-        return Ok(ResolvedImportPath {
-            export_dir,
-            cleanup: Some(cleanup),
-            export_label,
-            importer_id: detect.importer_id,
-            importer_display_name: detect.display_name,
-        });
+    if input_path.is_file() {
+        if is_zip_file(input_path) {
+            report(on_progress.as_ref(), "extracting", 0, 1, 0.02);
+            let cleanup = TempExtractDir {
+                path: create_extract_dir(input_path)?,
+            };
+            extract_zip(input_path, cleanup.path())?;
+            report(on_progress.as_ref(), "extracting", 1, 1, 0.18);
+            extract_nested_zips(cleanup.path(), on_progress.clone())?;
+            let (export_dir, detect) = registry.find_export_root(cleanup.path())?;
+            let export_label = export_label_from_path(input_path);
+            return Ok(ResolvedImportPath {
+                export_dir,
+                cleanup: Some(cleanup),
+                export_label,
+                importer_id: detect.importer_id,
+                importer_display_name: detect.display_name,
+            });
+        }
+
+        if let Ok(detect) = registry.detect(input_path) {
+            let export_label = export_label_from_path(input_path);
+            return Ok(ResolvedImportPath {
+                export_dir: input_path.to_path_buf(),
+                cleanup: None,
+                export_label,
+                importer_id: detect.importer_id,
+                importer_display_name: detect.display_name,
+            });
+        }
     }
 
     Err(format!(
-        "路径不存在或不是支持的导入格式（目录 / zip）: {}",
+        "路径不存在或不是支持的导入格式（目录 / zip / Cursor state.vscdb）: {}",
         input_path.display()
     ))
 }
@@ -275,5 +288,28 @@ mod tests {
         assert!(find_conversation_files(&resolved.export_dir).is_ok());
         assert_eq!(resolved.export_label, "sample-export");
         assert_eq!(resolved.importer_id, "chatgpt");
+    }
+
+    #[test]
+    fn resolves_cursor_vscdb_file() {
+        use crate::infrastructure::importers::cursor::resolve_cursor_db_path;
+
+        let db = std::env::var("APPDATA")
+            .map(|appdata| {
+                std::path::PathBuf::from(appdata)
+                    .join("Cursor")
+                    .join("User")
+                    .join("globalStorage")
+                    .join("state.vscdb")
+            })
+            .unwrap_or_default();
+        if !db.is_file() {
+            return;
+        }
+
+        let resolved = resolve_import_path(&db, None).expect("resolve");
+        assert_eq!(resolved.importer_id, "cursor");
+        assert_eq!(resolved.export_dir, db);
+        assert_eq!(resolve_cursor_db_path(&resolved.export_dir).as_deref(), Some(db.as_path()));
     }
 }
