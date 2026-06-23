@@ -224,6 +224,7 @@ impl ConversationRepository for Database {
                 Ok(TimelineMonthBucket {
                     month: row.get(0)?,
                     conversation_count: row.get(1)?,
+                    image_count: 0,
                 })
             })
             .map_err(|e| format!("查询时间线月份失败: {e}"))?;

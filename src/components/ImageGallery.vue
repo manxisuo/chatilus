@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { readImageDataUrl, listImages } from "../api";
+import { readImageDataUrl, listImages, countImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
 import type { ImageGalleryItem, SourceCount } from "../types";
 import {
@@ -28,6 +28,7 @@ const emit = defineEmits<{
 
 const PAGE_SIZE = 60;
 const images = ref<ImageGalleryItem[]>([]);
+const scopedTotal = ref<number | null>(null);
 const loading = ref(false);
 const loadingMore = ref(false);
 const hasMore = ref(true);
@@ -37,6 +38,9 @@ const lightboxIndex = ref(0);
 const imageSrcCache = reactive<Record<string, string>>({});
 
 const visibleTotal = computed(() => {
+  if (props.filterMonth || props.filterConversationId) {
+    return scopedTotal.value;
+  }
   if (props.filterSource) {
     const entry = props.imageCountsBySource.find(
       (item) => item.source === props.filterSource,
@@ -261,6 +265,19 @@ async function onImageError(path: string) {
   }
 }
 
+async function refreshScopedTotal() {
+  if (!props.filterMonth && !props.filterConversationId) {
+    scopedTotal.value = null;
+    return;
+  }
+  scopedTotal.value = await countImages(
+    showUploads.value,
+    props.filterSource,
+    props.filterMonth,
+    props.filterConversationId,
+  );
+}
+
 async function loadImages(reset = true) {
   if (reset) {
     if (loading.value) return;
@@ -272,6 +289,9 @@ async function loadImages(reset = true) {
   }
 
   try {
+    if (reset) {
+      await refreshScopedTotal();
+    }
     const offset = reset ? 0 : images.value.length;
     const batch = await listImages(
       PAGE_SIZE,
@@ -292,7 +312,11 @@ async function loadImages(reset = true) {
       ];
     }
 
-    hasMore.value = batch.length === PAGE_SIZE;
+    if (scopedTotal.value != null) {
+      hasMore.value = images.value.length < scopedTotal.value;
+    } else {
+      hasMore.value = batch.length === PAGE_SIZE;
+    }
   } finally {
     loading.value = false;
     loadingMore.value = false;

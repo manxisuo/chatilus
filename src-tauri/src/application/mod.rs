@@ -8,7 +8,7 @@ mod search;
 mod tags;
 mod timeline;
 
-pub use assets::list_images;
+pub use assets::{count_images, list_images};
 pub use conversations::{
     export_conversation_markdown, get_conversation, list_conversations, set_conversation_starred,
     set_conversation_tags,

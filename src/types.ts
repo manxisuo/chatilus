@@ -102,6 +102,7 @@ export interface SourceCount {
 export interface TimelineMonthBucket {
   month: string;
   conversation_count: number;
+  image_count?: number;
 }
 
 export interface DatabaseStats {

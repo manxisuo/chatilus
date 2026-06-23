@@ -141,6 +141,20 @@ export function listImages(
   });
 }
 
+export function countImages(
+  includeUploads = true,
+  conversationSource?: string | null,
+  month?: string | null,
+  conversationId?: string | null,
+) {
+  return invoke<number>("count_images", {
+    includeUploads,
+    conversationSource: conversationSource ?? null,
+    month: month ?? null,
+    conversationId: conversationId ?? null,
+  });
+}
+
 export function readImageDataUrl(path: string) {
   return invoke<string>("read_image_data_url", { path });
 }

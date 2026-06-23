@@ -25,3 +25,19 @@ pub fn list_images(
     )
     .map(|assets| assets.iter().map(asset_to_gallery_item).collect())
 }
+
+pub fn count_images(
+    db: &Database,
+    include_uploads: bool,
+    conversation_source: Option<&str>,
+    month: Option<&str>,
+    conversation_id: Option<&str>,
+) -> Result<i64, String> {
+    AssetRepository::count_filtered(
+        db,
+        include_uploads,
+        conversation_source,
+        month,
+        conversation_id,
+    )
+}

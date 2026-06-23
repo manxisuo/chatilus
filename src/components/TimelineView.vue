@@ -26,6 +26,9 @@ const hasMore = ref(true);
 const activeMonth = ref<string | null>(null);
 const feedRef = ref<HTMLElement | null>(null);
 const monthNavRef = ref<HTMLElement | null>(null);
+const jumpingToMonth = ref(false);
+
+const FEED_PADDING_TOP = 16;
 
 const visibleTotal = computed(() => {
   if (props.filterSource) {
@@ -135,6 +138,8 @@ const groupedSections = computed(() => {
         months.value.find((item) => item.month === key)?.conversation_count ??
         groups.get(key)?.length ??
         0,
+      imageCount:
+        months.value.find((item) => item.month === key)?.image_count ?? 0,
     }))
     .filter((section) => section.conversations.length > 0);
 
@@ -145,6 +150,7 @@ const groupedSections = computed(() => {
       label: monthLabel(key),
       conversations: items,
       count: items.length,
+      imageCount: 0,
     });
   }
 
@@ -207,7 +213,9 @@ async function reload() {
 
 function onFeedScroll(event: Event) {
   const el = event.target as HTMLElement;
-  updateActiveMonthFromScroll(el);
+  if (!jumpingToMonth.value) {
+    updateActiveMonthFromScroll(el);
+  }
 
   if (!hasMore.value || loading.value || loadingMore.value) return;
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
@@ -217,10 +225,12 @@ function onFeedScroll(event: Event) {
 
 function updateActiveMonthFromScroll(container: HTMLElement) {
   const sections = container.querySelectorAll<HTMLElement>("[data-timeline-month]");
-  const anchor = container.scrollTop + 72;
+  const containerTop = container.getBoundingClientRect().top;
+  const anchor = 72;
   let current: string | null = null;
   for (const section of sections) {
-    if (section.offsetTop <= anchor) {
+    const sectionTop = section.getBoundingClientRect().top - containerTop;
+    if (sectionTop <= anchor) {
       current = section.dataset.timelineMonth ?? null;
     }
   }
@@ -237,11 +247,6 @@ function scrollMonthNavIntoView(month: string) {
 }
 
 async function ensureMonthLoaded(month: string) {
-  const loaded = conversations.value.some(
-    (conversation) => conversationMonth(conversation) === month,
-  );
-  if (loaded) return;
-
   const batch = await listTimeline({
     source: props.filterSource,
     month,
@@ -250,30 +255,42 @@ async function ensureMonthLoaded(month: string) {
   mergeConversations(batch);
 }
 
-function scrollFeedToMonth(container: HTMLElement, month: string, smooth = true) {
+function elementScrollTop(container: HTMLElement, element: HTMLElement): number {
+  return (
+    element.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop
+  );
+}
+
+function scrollFeedToMonth(container: HTMLElement, month: string) {
   const section = container.querySelector<HTMLElement>(`[data-timeline-month="${month}"]`);
-  const header = section?.querySelector<HTMLElement>(".section-header");
-  if (!header) return;
-
-  const containerRect = container.getBoundingClientRect();
-  const headerRect = header.getBoundingClientRect();
-  const scrollTop = headerRect.top - containerRect.top + container.scrollTop;
-
-  container.scrollTo({
-    top: Math.max(0, scrollTop),
-    behavior: smooth ? "smooth" : "auto",
-  });
+  if (!section) return;
+  container.scrollTop = Math.max(0, elementScrollTop(container, section) - FEED_PADDING_TOP);
 }
 
 async function jumpToMonth(month: string) {
+  jumpingToMonth.value = true;
   activeMonth.value = month;
-  await ensureMonthLoaded(month);
-  await nextTick();
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  try {
+    await ensureMonthLoaded(month);
+    await nextTick();
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
 
-  const container = feedRef.value;
-  if (!container) return;
-  scrollFeedToMonth(container, month);
+    const container = feedRef.value;
+    if (!container) return;
+    scrollFeedToMonth(container, month);
+    scrollMonthNavIntoView(month);
+    requestAnimationFrame(() => {
+      scrollFeedToMonth(container, month);
+    });
+  } finally {
+    requestAnimationFrame(() => {
+      jumpingToMonth.value = false;
+    });
+  }
 }
 
 function setFilterSource(source: string | null) {
@@ -356,13 +373,15 @@ onMounted(() => {
                   }}<template v-if="section.count > section.conversations.length">
                     / {{ section.count }}</template
                   >
+                  条对话
                 </span>
                 <button
+                  v-if="section.imageCount > 0"
                   type="button"
                   class="section-link"
                   @click="emit('openGallery', { month: section.key })"
                 >
-                  本月图片
+                  {{ section.imageCount }} 张 · 本月图片
                 </button>
               </div>
             </div>
@@ -670,10 +689,16 @@ onMounted(() => {
 .item-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-top: 8px;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--cl-text-muted);
+}
+
+.item-meta > span {
+  line-height: 1.4;
 }
 
 .item-star {

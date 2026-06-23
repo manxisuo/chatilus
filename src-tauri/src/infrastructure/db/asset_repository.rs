@@ -15,7 +15,7 @@ use crate::models::SourceCount;
 
 use super::Database;
 
-const IMAGE_MONTH_SQL: &str =
+const MESSAGE_MONTH_SQL: &str =
     "strftime('%Y-%m', datetime(COALESCE(m.create_time, 0), 'unixepoch', 'localtime'))";
 
 struct ImageFilters<'a> {
@@ -78,6 +78,31 @@ impl AssetRepository for Database {
     fn image_counts_by_conversation_source(&self) -> Result<Vec<SourceCount>, String> {
         image_counts_by_conversation_source(&self.conn)
     }
+
+    fn count_filtered(
+        &self,
+        include_uploads: bool,
+        conversation_source: Option<&str>,
+        month: Option<&str>,
+        conversation_id: Option<&str>,
+    ) -> Result<i64, String> {
+        let filters = ImageFilters {
+            include_uploads,
+            conversation_source: normalized_source(conversation_source),
+            month: normalized_source(month),
+            conversation_id: normalized_source(conversation_id),
+        };
+        let from_attachments = count_images_from_attachments(&self.conn, &filters)?;
+        let from_raw_json = count_images_from_raw_json(&self.conn, &filters)?;
+        Ok(from_attachments + from_raw_json)
+    }
+
+    fn image_counts_by_message_month(
+        &self,
+        conversation_source: Option<&str>,
+    ) -> Result<HashMap<String, i64>, String> {
+        image_counts_by_message_month(&self.conn, conversation_source)
+    }
 }
 
 fn normalized_source(source: Option<&str>) -> Option<&str> {
@@ -93,8 +118,8 @@ fn append_attachment_filters(sql: &mut String, bind: &mut Vec<Box<dyn ToSql>>, f
         bind.push(Box::new(source.to_string()));
     }
     if let Some(month) = filters.month {
-        sql.push_str(" AND ");
-        sql.push_str(IMAGE_MONTH_SQL);
+        sql.push_str(" AND COALESCE(m.create_time, 0) > 0 AND ");
+        sql.push_str(MESSAGE_MONTH_SQL);
         sql.push_str(" = ?");
         bind.push(Box::new(month.to_string()));
     }
@@ -183,8 +208,8 @@ fn list_assets_from_raw_json(
         bind.push(Box::new(source.to_string()));
     }
     if let Some(month) = filters.month {
-        sql.push_str(" AND ");
-        sql.push_str(IMAGE_MONTH_SQL);
+        sql.push_str(" AND COALESCE(m.create_time, 0) > 0 AND ");
+        sql.push_str(MESSAGE_MONTH_SQL);
         sql.push_str(" = ?");
         bind.push(Box::new(month.to_string()));
     }
@@ -307,6 +332,16 @@ fn count_images_from_raw_json(
         sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
         bind.push(Box::new(source.to_string()));
     }
+    if let Some(month) = filters.month {
+        sql.push_str(" AND COALESCE(m.create_time, 0) > 0 AND ");
+        sql.push_str(MESSAGE_MONTH_SQL);
+        sql.push_str(" = ?");
+        bind.push(Box::new(month.to_string()));
+    }
+    if let Some(conversation_id) = filters.conversation_id {
+        sql.push_str(" AND m.conversation_id = ?");
+        bind.push(Box::new(conversation_id.to_string()));
+    }
 
     let mut stmt = conn
         .prepare(&sql)
@@ -332,11 +367,7 @@ fn count_images_from_raw_json(
         let (message_id, role, raw_json, source_path, conversation_source) =
             row.map_err(|e| format!("统计图片失败: {e}"))?;
         let _ = message_id;
-        if let Some(source) = filters.conversation_source {
-            if conversation_source != source {
-                continue;
-            }
-        }
+        let _ = conversation_source;
         let Some(raw_json) = raw_json else {
             continue;
         };
@@ -358,6 +389,96 @@ fn count_images_from_raw_json(
     }
 
     Ok(count)
+}
+
+fn image_counts_by_message_month(
+    conn: &rusqlite::Connection,
+    conversation_source: Option<&str>,
+) -> Result<HashMap<String, i64>, String> {
+    let mut counts: HashMap<String, i64> = HashMap::new();
+
+    let mut sql = String::from("SELECT ");
+    sql.push_str(MESSAGE_MONTH_SQL);
+    sql.push_str(
+        " AS month_key, COUNT(*)
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN json_each(m.attachments) AS je
+         WHERE m.attachments IS NOT NULL
+           AND m.attachments != '[]'
+           AND json_extract(je.value, '$.path') IS NOT NULL
+           AND COALESCE(m.create_time, 0) > 0",
+    );
+    let mut bind: Vec<Box<dyn ToSql>> = Vec::new();
+    if let Some(source) = normalized_source(conversation_source) {
+        sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+        bind.push(Box::new(source.to_string()));
+    }
+    sql.push_str(" GROUP BY month_key HAVING month_key IS NOT NULL");
+
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+    let param_refs: Vec<&dyn ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+    for row in rows {
+        let (month, count) = row.map_err(|e| format!("统计月份图片失败: {e}"))?;
+        *counts.entry(month).or_insert(0) += count;
+    }
+
+    let mut sql = String::from("SELECT ");
+    sql.push_str(MESSAGE_MONTH_SQL);
+    sql.push_str(
+        " AS month_key, m.role, m.raw_json, c.source_path
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.raw_json LIKE '%image_asset_pointer%'
+           AND (m.attachments IS NULL OR m.attachments = '[]' OR m.attachments = '')
+           AND COALESCE(m.create_time, 0) > 0",
+    );
+    let mut bind: Vec<Box<dyn ToSql>> = Vec::new();
+    if let Some(source) = normalized_source(conversation_source) {
+        sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+        bind.push(Box::new(source.to_string()));
+    }
+
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+    let param_refs: Vec<&dyn ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+
+    let mut media_cache: HashMap<String, MediaIndex> = HashMap::new();
+    for row in rows {
+        let (month_key, role, raw_json, source_path) =
+            row.map_err(|e| format!("统计月份图片失败: {e}"))?;
+        let Some(raw_json) = raw_json else {
+            continue;
+        };
+        let index = media_cache
+            .entry(source_path.clone())
+            .or_insert_with(|| MediaIndex::build(Path::new(&source_path)));
+        let pointers = extract_attachment_infos_from_message_json(&raw_json);
+        let attachments = imported_attachments_to_views(&resolve_imported_attachments(
+            &pointers, &role, index,
+        ));
+        *counts.entry(month_key).or_insert(0) += attachments.len() as i64;
+    }
+
+    Ok(counts)
 }
 
 fn count_images_by_source(conn: &rusqlite::Connection) -> Result<(i64, i64, i64), String> {

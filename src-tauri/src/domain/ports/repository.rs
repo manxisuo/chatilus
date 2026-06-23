@@ -93,4 +93,15 @@ pub trait AssetRepository {
     ) -> Result<i64, String>;
     fn count_by_source(&self) -> Result<(i64, i64, i64), String>;
     fn image_counts_by_conversation_source(&self) -> Result<Vec<crate::models::SourceCount>, String>;
+    fn count_filtered(
+        &self,
+        include_uploads: bool,
+        conversation_source: Option<&str>,
+        month: Option<&str>,
+        conversation_id: Option<&str>,
+    ) -> Result<i64, String>;
+    fn image_counts_by_message_month(
+        &self,
+        conversation_source: Option<&str>,
+    ) -> Result<std::collections::HashMap<String, i64>, String>;
 }
