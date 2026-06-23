@@ -32,6 +32,13 @@ pub fn list_conversations(
     )
 }
 
+pub fn get_conversation(
+    db: &Database,
+    conversation_id: &str,
+) -> Result<Option<ConversationSummary>, String> {
+    ConversationRepository::get_summary(db, conversation_id)
+}
+
 pub fn set_conversation_starred(
     db: &Database,
     conversation_id: &str,

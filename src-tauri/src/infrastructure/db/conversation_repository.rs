@@ -103,6 +103,26 @@ impl ConversationRepository for Database {
             .map_err(|e| format!("读取会话失败: {e}"))
     }
 
+    fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT c.id, c.title, c.create_time, c.update_time, c.model, c.message_count,
+                        c.is_starred, c.source_path, COALESCE(c.source, 'chatgpt') AS source,
+                        COALESCE(GROUP_CONCAT(t.name, char(31)), '') AS tag_names
+                 FROM conversations c
+                 LEFT JOIN conversation_tags ct ON ct.conversation_id = c.id
+                 LEFT JOIN tags t ON t.id = ct.tag_id
+                 WHERE c.id = ?1
+                 GROUP BY c.id",
+            )
+            .map_err(|e| format!("查询会话失败: {e}"))?;
+
+        stmt.query_row(params![conversation_id], map_conversation_summary)
+            .optional()
+            .map_err(|e| format!("读取会话失败: {e}"))
+    }
+
     fn set_starred(&self, conversation_id: &str, starred: bool) -> Result<(), String> {
         let updated = self
             .conn

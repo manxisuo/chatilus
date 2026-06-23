@@ -13,6 +13,7 @@ import {
   deleteTag,
   exportConversationMarkdown,
   getMessages,
+  getConversation,
   getStats,
   listConversations,
   listTags,
@@ -38,6 +39,7 @@ const messages = ref<Awaited<ReturnType<typeof getMessages>>>([]);
 const searchHits = ref<SearchHit[]>([]);
 const tags = ref<TagView[]>([]);
 const activeId = ref<string | null>(null);
+const fetchedConversation = ref<ConversationSummary | null>(null);
 const listLoading = ref(false);
 const messageLoading = ref(false);
 const importing = ref(false);
@@ -188,25 +190,22 @@ const activeConversation = computed(() =>
   conversations.value.find((item) => item.id === activeId.value) ?? null,
 );
 
-const activeSearchHit = computed(
-  () => searchHits.value.find((hit) => hit.message_id === activeSearchHitId.value) ?? null,
+const displayConversation = computed(
+  () => activeConversation.value ?? fetchedConversation.value,
 );
 
 const displayConversationTitle = computed(
-  () =>
-    activeConversation.value?.title ??
-    activeSearchHit.value?.conversation_title ??
-    "对话详情",
+  () => displayConversation.value?.title ?? "对话详情",
 );
 
 const displayConversationSource = computed(
-  () => activeConversation.value?.source ?? activeSearchHit.value?.source ?? "chatgpt",
+  () => displayConversation.value?.source ?? "chatgpt",
 );
 
 const activeTagIds = computed(() => {
-  if (!activeConversation.value) return [];
+  if (!displayConversation.value) return [];
   return tags.value
-    .filter((tag) => activeConversation.value!.tags.includes(tag.name))
+    .filter((tag) => displayConversation.value!.tags.includes(tag.name))
     .map((tag) => tag.id);
 });
 
@@ -281,6 +280,14 @@ async function loadMessages(conversationId: string) {
   } finally {
     messageLoading.value = false;
   }
+}
+
+async function ensureConversationSummary(conversationId: string) {
+  if (conversations.value.some((item) => item.id === conversationId)) {
+    fetchedConversation.value = null;
+    return;
+  }
+  fetchedConversation.value = await getConversation(conversationId);
 }
 
 const importPhaseLabel = computed(() => {
@@ -493,10 +500,14 @@ function searchHitRoleLabel(hit: SearchHit) {
 }
 
 async function toggleConversationStar() {
-  if (!activeConversation.value) return;
-  const next = !activeConversation.value.is_starred;
-  await setConversationStarred(activeConversation.value.id, next);
-  activeConversation.value.is_starred = next;
+  if (!displayConversation.value) return;
+  const next = !displayConversation.value.is_starred;
+  await setConversationStarred(displayConversation.value.id, next);
+  if (activeConversation.value) {
+    activeConversation.value.is_starred = next;
+  } else if (fetchedConversation.value) {
+    fetchedConversation.value.is_starred = next;
+  }
   await refreshStats();
   await loadConversations();
 }
@@ -516,9 +527,9 @@ async function toggleMessageStar(messageId: string, starred: boolean) {
 }
 
 async function handleExportMarkdown() {
-  if (!activeConversation.value) return;
+  if (!displayConversation.value) return;
 
-  const defaultName = `${activeConversation.value.title.replace(/[\\/:*?"<>|]/g, "_")}.md`;
+  const defaultName = `${displayConversation.value.title.replace(/[\\/:*?"<>|]/g, "_")}.md`;
   const outputPath = await save({
     defaultPath: defaultName,
     filters: [{ name: "Markdown", extensions: ["md"] }],
@@ -530,7 +541,7 @@ async function handleExportMarkdown() {
   exporting.value = true;
   try {
     const result = await exportConversationMarkdown(
-      activeConversation.value.id,
+      displayConversation.value.id,
       outputPath,
     );
     ElMessage.success(`已导出 ${result.message_count} 条消息`);
@@ -566,10 +577,14 @@ async function handleDeleteTag(tagId: number) {
 }
 
 async function handleSaveTags(tagIds: number[]) {
-  if (!activeConversation.value) return;
+  if (!displayConversation.value) return;
   try {
-    const tagNames = await setConversationTags(activeConversation.value.id, tagIds);
-    activeConversation.value.tags = tagNames;
+    const tagNames = await setConversationTags(displayConversation.value.id, tagIds);
+    if (activeConversation.value) {
+      activeConversation.value.tags = tagNames;
+    } else if (fetchedConversation.value) {
+      fetchedConversation.value.tags = tagNames;
+    }
     await refreshTags();
     await loadConversations();
     ElMessage.success("标签已更新");
@@ -580,9 +595,10 @@ async function handleSaveTags(tagIds: number[]) {
 
 watch(activeId, async (id) => {
   if (id) {
-    await loadMessages(id);
+    await Promise.all([loadMessages(id), ensureConversationSummary(id)]);
   } else {
     messages.value = [];
+    fetchedConversation.value = null;
   }
 });
 
@@ -817,20 +833,20 @@ onMounted(async () => {
             :title="displayConversationTitle"
             :data-source="displayConversationSource"
             :loading="messageLoading || exporting"
-            :conversation-starred="activeConversation?.is_starred ?? false"
-            :conversation-tags="activeConversation?.tags ?? []"
+            :conversation-starred="displayConversation?.is_starred ?? false"
+            :conversation-tags="displayConversation?.tags ?? []"
             :highlight-message-id="activeSearchHitId"
             @toggle-conversation-star="toggleConversationStar"
             @export-markdown="handleExportMarkdown"
             @toggle-message-star="toggleMessageStar"
           />
           <ConversationInfo
-            v-if="activeConversation"
-            :conversation="activeConversation"
+            v-if="displayConversation"
+            :conversation="displayConversation"
             :messages="messages"
           />
         </div>
-        <div v-if="activeConversation" class="tag-fab">
+        <div v-if="displayConversation" class="tag-fab">
           <el-button size="small" @click="tagDialogVisible = true">管理标签</el-button>
         </div>
       </el-main>

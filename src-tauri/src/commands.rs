@@ -104,6 +104,15 @@ pub fn list_conversations(
 }
 
 #[tauri::command]
+pub fn get_conversation(
+    state: State<'_, AppState>,
+    conversation_id: String,
+) -> Result<Option<ConversationSummary>, String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    application::get_conversation(&db, &conversation_id)
+}
+
+#[tauri::command]
 pub fn get_messages(
     state: State<'_, AppState>,
     conversation_id: String,

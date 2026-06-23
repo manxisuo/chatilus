@@ -47,6 +47,10 @@ export function listConversations(options?: {
   });
 }
 
+export function getConversation(conversationId: string) {
+  return invoke<ConversationSummary | null>("get_conversation", { conversationId });
+}
+
 export function getMessages(conversationId: string) {
   return invoke<MessageView[]>("get_messages", { conversationId });
 }

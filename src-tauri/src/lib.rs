@@ -6,7 +6,8 @@ mod infrastructure;
 mod models;
 
 use commands::{
-    create_tag, delete_tag, export_conversation_markdown, get_import_job, get_messages, get_stats,
+    create_tag, delete_tag, export_conversation_markdown, get_conversation, get_import_job,
+    get_messages, get_stats,
     import_export_dir, init_state, list_conversations, list_images, list_tags, read_image_data_url,
     search_messages, set_conversation_starred, set_conversation_tags, set_message_starred,
     start_import,
@@ -28,6 +29,7 @@ pub fn run() {
             start_import,
             get_import_job,
             list_conversations,
+            get_conversation,
             list_images,
             get_messages,
             search_messages,

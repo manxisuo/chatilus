@@ -34,6 +34,7 @@ pub struct ImportPersistCounts {
 
 pub trait ConversationRepository {
     fn list(&self, query: ConversationListQuery) -> Result<Vec<ConversationSummary>, String>;
+    fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String>;
     fn set_starred(&self, conversation_id: &str, starred: bool) -> Result<(), String>;
     fn set_tags(
         &self,
