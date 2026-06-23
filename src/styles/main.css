@@ -8,6 +8,8 @@ html[data-theme="light"] {
   --cl-message-bg: #ffffff;
   --cl-code-bg: #f6f8fa;
   --cl-code-text: #24292f;
+  --cl-sidebar-width: 320px;
+  --cl-content-max-width: 860px;
 }
 
 html[data-theme="dark"] {

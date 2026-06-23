@@ -836,7 +836,7 @@ onMounted(async () => {
     </el-dialog>
 
     <el-container v-if="viewMode === 'chats'" class="body">
-      <el-aside width="320px" class="sidebar">
+      <el-aside class="sidebar" :style="{ width: 'var(--cl-sidebar-width)' }">
         <div v-if="!searchMode && !starredMessagesMode" class="sidebar-controls">
           <div class="source-pills">
             <button
@@ -1266,6 +1266,8 @@ onMounted(async () => {
 }
 
 .sidebar {
+  width: var(--cl-sidebar-width);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--cl-border);

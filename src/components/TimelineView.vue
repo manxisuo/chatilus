@@ -353,6 +353,7 @@ onMounted(() => {
       </aside>
 
       <div ref="feedRef" class="timeline-feed" @scroll.passive="onFeedScroll">
+        <div class="timeline-feed-inner">
         <el-skeleton v-if="loading" animated :rows="10" />
         <el-empty
           v-else-if="conversations.length === 0"
@@ -448,6 +449,7 @@ onMounted(() => {
           </section>
           <div class="timeline-footer">{{ footerText }}</div>
         </template>
+        </div>
       </div>
     </div>
   </div>
@@ -530,16 +532,16 @@ onMounted(() => {
 }
 
 .month-nav {
-  width: 148px;
+  width: var(--cl-sidebar-width);
   flex-shrink: 0;
   border-right: 1px solid var(--cl-border);
   display: flex;
   flex-direction: column;
-  background: var(--cl-bg);
+  background: var(--cl-panel);
 }
 
 .month-nav-title {
-  padding: 14px 14px 8px;
+  padding: 14px 16px 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--cl-text-muted);
@@ -548,7 +550,7 @@ onMounted(() => {
 .month-nav-scroll {
   flex: 1;
   overflow: auto;
-  padding: 0 8px 12px;
+  padding: 0 12px 12px;
 }
 
 .month-nav-item {
@@ -559,9 +561,9 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--cl-text);
   cursor: pointer;
   text-align: left;
@@ -593,9 +595,15 @@ onMounted(() => {
 
 .timeline-feed {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 16px 24px 24px;
   position: relative;
+}
+
+.timeline-feed-inner {
+  max-width: var(--cl-content-max-width);
+  margin: 0 auto;
 }
 
 .timeline-section + .timeline-section {
