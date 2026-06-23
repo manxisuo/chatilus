@@ -16,6 +16,14 @@ pub struct ConversationListQuery {
     pub offset: i64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct TimelineListQuery {
+    pub source: Option<String>,
+    pub month: Option<String>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct AssetListQuery {
     pub limit: i64,
@@ -34,6 +42,14 @@ pub struct ImportPersistCounts {
 
 pub trait ConversationRepository {
     fn list(&self, query: ConversationListQuery) -> Result<Vec<ConversationSummary>, String>;
+    fn list_timeline(
+        &self,
+        query: TimelineListQuery,
+    ) -> Result<Vec<ConversationSummary>, String>;
+    fn list_timeline_months(
+        &self,
+        source: Option<&str>,
+    ) -> Result<Vec<crate::models::TimelineMonthBucket>, String>;
     fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String>;
     fn set_starred(&self, conversation_id: &str, starred: bool) -> Result<(), String>;
     fn set_tags(

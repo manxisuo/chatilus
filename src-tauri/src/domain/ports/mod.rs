@@ -12,6 +12,6 @@ pub use importer::{
 };
 pub use repository::{
     AssetListQuery, AssetRepository, ConversationListQuery, ConversationRepository,
-    ImportPersistCounts, MessageRepository,
+    ImportPersistCounts, MessageRepository, TimelineListQuery,
 };
 pub use search_engine::{SearchEngine, SearchIndexEntry, SearchQuery, SearchResult};

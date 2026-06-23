@@ -13,6 +13,8 @@ pub struct ConversationSummary {
     #[serde(default = "default_conversation_source")]
     pub source: String,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity_month: Option<String>,
 }
 
 fn default_conversation_source() -> String {
@@ -140,6 +142,12 @@ pub struct ImageGalleryItem {
 pub struct SourceCount {
     pub source: String,
     pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineMonthBucket {
+    pub month: String,
+    pub conversation_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

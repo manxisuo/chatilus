@@ -9,7 +9,7 @@ use crate::db::Database;
 use crate::domain::models::ImportJob;
 use crate::models::{
     ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportJobView,
-    ImportResult, MessageView, SearchHit, TagView,
+    ImportResult, MessageView, SearchHit, TagView, TimelineMonthBucket,
 };
 
 pub struct AppState {
@@ -250,6 +250,33 @@ fn mime_from_path(path: &PathBuf) -> &'static str {
         "svg" => "image/svg+xml",
         _ => "image/jpeg",
     }
+}
+
+#[tauri::command]
+pub fn list_timeline_months(
+    state: State<'_, AppState>,
+    source: Option<String>,
+) -> Result<Vec<TimelineMonthBucket>, String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    application::list_timeline_months(&db, source.as_deref())
+}
+
+#[tauri::command]
+pub fn list_timeline(
+    state: State<'_, AppState>,
+    source: Option<String>,
+    month: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<Vec<ConversationSummary>, String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    application::list_timeline(
+        &db,
+        source.as_deref(),
+        month.as_deref(),
+        limit.unwrap_or(100),
+        offset.unwrap_or(0),
+    )
 }
 
 #[tauri::command]

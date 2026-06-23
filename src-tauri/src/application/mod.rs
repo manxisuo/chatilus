@@ -6,6 +6,7 @@ mod import_runner;
 mod messages;
 mod search;
 mod tags;
+mod timeline;
 
 pub use assets::list_images;
 pub use conversations::{
@@ -18,3 +19,4 @@ pub use import_runner::spawn_import_job;
 pub use messages::{get_messages, list_starred_messages, set_message_starred};
 pub use search::search_messages;
 pub use tags::{create_tag, delete_tag, list_tags};
+pub use timeline::{list_timeline, list_timeline_months};

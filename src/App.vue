@@ -7,6 +7,7 @@ import ConversationList from "./components/ConversationList.vue";
 import ConversationInfo from "./components/ConversationInfo.vue";
 import ImageGallery from "./components/ImageGallery.vue";
 import MessageView from "./components/MessageView.vue";
+import TimelineView from "./components/TimelineView.vue";
 import TagDialog from "./components/TagDialog.vue";
 import {
   createTag,
@@ -74,7 +75,7 @@ const filterHasAttachments = ref(false);
 const filterTagId = ref<number | null>(null);
 const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
-const viewMode = ref<"chats" | "images">("chats");
+const viewMode = ref<"chats" | "timeline" | "images">("chats");
 const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
 
 const appearanceOptions: Array<{ value: AppearanceMode; label: string }> = [
@@ -139,6 +140,12 @@ const navItems = computed(() => [
     id: "chats" as const,
     icon: "💬",
     label: "对话",
+    count: stats.value?.conversation_count ?? null,
+  },
+  {
+    id: "timeline" as const,
+    icon: "🗓",
+    label: "时间线",
     count: stats.value?.conversation_count ?? null,
   },
   {
@@ -539,6 +546,14 @@ function selectConversation(id: string) {
 }
 
 function openConversationFromGallery(conversationId: string) {
+  viewMode.value = "chats";
+  activeId.value = conversationId;
+}
+
+function openConversationFromTimeline(conversationId: string) {
+  searchMode.value = false;
+  starredMessagesMode.value = false;
+  activeSearchHitId.value = null;
   viewMode.value = "chats";
   activeId.value = conversationId;
 }
@@ -1022,6 +1037,16 @@ onMounted(async () => {
         </div>
       </el-main>
     </el-container>
+
+    <el-main v-else-if="viewMode === 'timeline'" class="main gallery-main">
+      <TimelineView
+        :key="`timeline:${stats?.conversation_count ?? 0}:${filterSource ?? 'all'}`"
+        v-model:filter-source="filterSource"
+        :total-count="stats?.conversation_count ?? null"
+        :conversation-counts-by-source="stats?.conversation_counts_by_source ?? []"
+        @open-conversation="openConversationFromTimeline"
+      />
+    </el-main>
 
     <el-main v-else class="main gallery-main">
       <ImageGallery

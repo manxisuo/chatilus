@@ -9,6 +9,7 @@ import type {
   MessageView,
   SearchHit,
   TagView,
+  TimelineMonthBucket,
 } from "./types";
 
 export function importExportDir(path: string) {
@@ -63,6 +64,26 @@ export function listStarredMessages(options?: {
   return invoke<SearchHit[]>("list_starred_messages", {
     source: options?.source ?? null,
     limit: options?.limit ?? 200,
+    offset: options?.offset ?? 0,
+  });
+}
+
+export function listTimelineMonths(source?: string | null) {
+  return invoke<TimelineMonthBucket[]>("list_timeline_months", {
+    source: source ?? null,
+  });
+}
+
+export function listTimeline(options?: {
+  source?: string | null;
+  month?: string | null;
+  limit?: number;
+  offset?: number;
+}) {
+  return invoke<ConversationSummary[]>("list_timeline", {
+    source: options?.source ?? null,
+    month: options?.month ?? null,
+    limit: options?.limit ?? 100,
     offset: options?.offset ?? 0,
   });
 }

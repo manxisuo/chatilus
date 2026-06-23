@@ -51,6 +51,7 @@ pub fn conversation_to_summary(conversation: Conversation) -> ConversationSummar
         source_path: conversation.import_path,
         source: conversation.source.as_str().to_string(),
         tags: conversation.tags,
+        activity_month: None,
     }
 }
 
@@ -94,6 +95,7 @@ mod tests {
             source_path: "/exports/chatgpt".to_string(),
             source: "chatgpt".to_string(),
             tags: vec!["工作".to_string(), "Rust".to_string()],
+            activity_month: None,
         };
 
         let domain: Conversation = summary.clone().into();

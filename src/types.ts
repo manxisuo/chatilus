@@ -9,6 +9,7 @@ export interface ConversationSummary {
   source_path: string;
   source?: string;
   tags: string[];
+  activity_month?: string | null;
 }
 
 export interface AttachmentView {
@@ -94,6 +95,11 @@ export interface ImageGalleryItem {
 export interface SourceCount {
   source: string;
   count: number;
+}
+
+export interface TimelineMonthBucket {
+  month: string;
+  conversation_count: number;
 }
 
 export interface DatabaseStats {

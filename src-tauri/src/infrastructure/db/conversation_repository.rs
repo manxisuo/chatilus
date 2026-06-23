@@ -7,18 +7,27 @@ use crate::domain::composite_id::{composite_conversation_id, message_storage_id}
 use crate::domain::models::DataSource;
 use crate::domain::ports::{
     ConversationListQuery, ConversationRepository, ImportPersistCounts, ImportedConversation,
-    MessageRepository,
+    MessageRepository, TimelineListQuery,
 };
 use crate::domain::ports::SearchIndexEntry;
 use crate::infrastructure::importers::chatgpt::attachments::imported_attachments_to_views;
 use crate::infrastructure::search::{index_message, remove_conversation_index};
-use crate::models::{ConversationSummary, ExportResult};
+use crate::models::{ConversationSummary, ExportResult, TimelineMonthBucket};
 
 use super::helpers::{
     format_timestamp, map_conversation_summary, role_heading,
 };
 use super::tag_repository::get_conversation_tag_names;
 use super::Database;
+
+const ACTIVITY_MONTH_SQL: &str =
+    "strftime('%Y-%m', datetime(COALESCE(c.update_time, c.create_time), 'unixepoch', 'localtime'))";
+
+fn map_timeline_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
+    let mut summary = map_conversation_summary(row)?;
+    summary.activity_month = row.get(10)?;
+    Ok(summary)
+}
 
 impl ConversationRepository for Database {
     fn list(&self, query: ConversationListQuery) -> Result<Vec<ConversationSummary>, String> {
@@ -101,6 +110,113 @@ impl ConversationRepository for Database {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("读取会话失败: {e}"))
+    }
+
+    fn list_timeline(
+        &self,
+        query: TimelineListQuery,
+    ) -> Result<Vec<ConversationSummary>, String> {
+        let mut sql = String::from(
+            "SELECT c.id, c.title, c.create_time, c.update_time, c.model, c.message_count,
+                    c.is_starred, c.source_path, COALESCE(c.source, 'chatgpt') AS source,
+                    COALESCE(GROUP_CONCAT(t.name, char(31)), '') AS tag_names,
+                    ",
+        );
+        sql.push_str(ACTIVITY_MONTH_SQL);
+        sql.push_str(
+            " AS activity_month
+             FROM conversations c
+             LEFT JOIN conversation_tags ct ON ct.conversation_id = c.id
+             LEFT JOIN tags t ON t.id = ct.tag_id
+             WHERE COALESCE(c.update_time, c.create_time, 0) > 0",
+        );
+        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(source) = query
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            bind.push(Box::new(source.to_string()));
+        }
+        if let Some(month) = query
+            .month
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            sql.push_str(" AND ");
+            sql.push_str(ACTIVITY_MONTH_SQL);
+            sql.push_str(" = ?");
+            bind.push(Box::new(month.to_string()));
+        }
+
+        sql.push_str(
+            " GROUP BY c.id
+              ORDER BY COALESCE(c.update_time, c.create_time, 0) DESC
+              LIMIT ? OFFSET ?",
+        );
+        bind.push(Box::new(query.limit));
+        bind.push(Box::new(query.offset));
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| format!("查询时间线失败: {e}"))?;
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+        let rows = stmt
+            .query_map(param_refs.as_slice(), map_timeline_conversation)
+            .map_err(|e| format!("查询时间线失败: {e}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取时间线失败: {e}"))
+    }
+
+    fn list_timeline_months(
+        &self,
+        source: Option<&str>,
+    ) -> Result<Vec<TimelineMonthBucket>, String> {
+        let mut sql = String::from("SELECT ");
+        sql.push_str(ACTIVITY_MONTH_SQL);
+        sql.push_str(
+            " AS month_key,
+                    COUNT(*) AS conversation_count
+             FROM conversations c
+             WHERE COALESCE(c.update_time, c.create_time, 0) > 0",
+        );
+        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
+            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            bind.push(Box::new(source.to_string()));
+        }
+
+        sql.push_str(
+            " GROUP BY month_key
+              HAVING month_key IS NOT NULL
+              ORDER BY month_key DESC",
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| format!("查询时间线月份失败: {e}"))?;
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(TimelineMonthBucket {
+                    month: row.get(0)?,
+                    conversation_count: row.get(1)?,
+                })
+            })
+            .map_err(|e| format!("查询时间线月份失败: {e}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取时间线月份失败: {e}"))
     }
 
     fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String> {
@@ -545,6 +661,7 @@ mod merge_tests {
     use crate::domain::models::DataSource;
     use crate::domain::ports::{
         ConversationListQuery, ImportedAttachment, ImportedConversation, ImportedMessage,
+        TimelineListQuery,
     };
 
     fn sample_conversation(message_ids: &[&str]) -> ImportedConversation {
@@ -810,5 +927,167 @@ mod merge_tests {
             .expect("roles");
 
         assert_eq!(roles, vec!["user".to_string(), "assistant".to_string()]);
+    }
+
+    #[test]
+    fn timeline_orders_by_activity_time_without_starred_boost() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-timeline-order-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "older-starred".to_string(),
+                title: "Older starred".to_string(),
+                create_time: Some(100.0),
+                update_time: Some(100.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "old".to_string(),
+                    create_time: Some(100.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/a",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("older import");
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "newer-plain".to_string(),
+                title: "Newer plain".to_string(),
+                create_time: Some(200.0),
+                update_time: Some(200.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "new".to_string(),
+                    create_time: Some(200.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/b",
+            DataSource::Cursor,
+            0,
+        )
+        .expect("newer import");
+
+        db.conn
+            .execute(
+                "UPDATE conversations SET is_starred = 1 WHERE id = 'chatgpt::older-starred'",
+                [],
+            )
+            .expect("star older");
+
+        let timeline = ConversationRepository::list_timeline(
+            &db,
+            TimelineListQuery {
+                limit: 10,
+                offset: 0,
+                ..TimelineListQuery::default()
+            },
+        )
+        .expect("timeline");
+
+        assert_eq!(timeline.len(), 2);
+        assert_eq!(timeline[0].id, "cursor::newer-plain");
+        assert_eq!(timeline[1].id, "chatgpt::older-starred");
+    }
+
+    #[test]
+    fn timeline_month_buckets_and_filter() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-timeline-months-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "june-chatgpt".to_string(),
+                title: "June ChatGPT".to_string(),
+                create_time: Some(1_718_208_000.0),
+                update_time: Some(1_718_208_000.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "june".to_string(),
+                    create_time: Some(1_718_208_000.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/chatgpt",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("june chatgpt");
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "july-cursor".to_string(),
+                title: "July Cursor".to_string(),
+                create_time: Some(1_720_886_400.0),
+                update_time: Some(1_720_886_400.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "july".to_string(),
+                    create_time: Some(1_720_886_400.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+            }],
+            "/cursor",
+            DataSource::Cursor,
+            0,
+        )
+        .expect("july cursor");
+
+        let months = ConversationRepository::list_timeline_months(&db, None).expect("months");
+        assert_eq!(months.len(), 2);
+        assert_eq!(months[0].month, "2024-07");
+        assert_eq!(months[1].month, "2024-06");
+
+        let cursor_months =
+            ConversationRepository::list_timeline_months(&db, Some("cursor")).expect("cursor months");
+        assert_eq!(cursor_months.len(), 1);
+        assert_eq!(cursor_months[0].month, "2024-07");
+
+        let june_only = ConversationRepository::list_timeline(
+            &db,
+            TimelineListQuery {
+                month: Some("2024-06".to_string()),
+                limit: 10,
+                offset: 0,
+                ..TimelineListQuery::default()
+            },
+        )
+        .expect("june timeline");
+        assert_eq!(june_only.len(), 1);
+        assert_eq!(june_only[0].title, "June ChatGPT");
     }
 }
