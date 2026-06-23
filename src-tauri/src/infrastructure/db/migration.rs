@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 5;
+pub const CURRENT_SCHEMA_VERSION: i32 = 6;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -34,6 +34,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
         3 => migrate_v3(&tx),
         4 => migrate_v4(&tx),
         5 => migrate_v5(&tx),
+        6 => migrate_v6(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -256,6 +257,95 @@ fn migrate_v5(conn: &Connection) -> Result<(), String> {
 
     upsert_meta(conn, "schema_version", "5")?;
     Ok(())
+}
+
+/// v6：物化图片资产表，消除图库 json_each / raw_json 全表扫描。
+fn migrate_v6(conn: &Connection) -> Result<(), String> {
+    use super::asset_index::{backfill_all_assets, create_assets_schema};
+
+    create_assets_schema(conn)?;
+    backfill_all_assets(conn)?;
+    upsert_meta(conn, "schema_version", "6")?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod migrate_v6_tests {
+    use super::*;
+    use rusqlite::params;
+    use rusqlite::Connection;
+
+    #[test]
+    fn migrate_v6_materializes_assets_from_attachments() {
+        let conn = Connection::open_in_memory().expect("open");
+        conn.execute_batch(
+            "
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta (key, value) VALUES ('schema_version', '5');
+
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                create_time REAL,
+                update_time REAL,
+                source_path TEXT NOT NULL,
+                model TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                source TEXT,
+                source_id TEXT
+            );
+
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                create_time REAL,
+                sort_order INTEGER NOT NULL,
+                raw_json TEXT,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                attachments TEXT
+            );
+            ",
+        )
+        .expect("seed");
+
+        conn.execute(
+            "INSERT INTO conversations (
+                id, title, create_time, update_time, source_path, model, message_count, source, source_id
+             ) VALUES ('chatgpt::c1', 'Image chat', 1, 2, '/export', NULL, 1, 'chatgpt', 'c1')",
+            [],
+        )
+        .expect("conversation");
+
+        let attachments = serde_json::json!([{
+            "path": "/tmp/test.png",
+            "file_key": "test.png",
+            "source": "generated"
+        }])
+        .to_string();
+
+        conn.execute(
+            "INSERT INTO messages (
+                id, conversation_id, role, content, create_time, sort_order, raw_json, attachments
+             ) VALUES ('chatgpt::c1::m1', 'chatgpt::c1', 'assistant', 'image', 1, 0, '{}', ?1)",
+            params![attachments],
+        )
+        .expect("message");
+
+        migrate_v6(&conn).expect("migrate v6");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM assets", [], |row| row.get(0))
+            .expect("count assets");
+        assert_eq!(count, 1);
+
+        let path: String = conn
+            .query_row("SELECT local_path FROM assets", [], |row| row.get(0))
+            .expect("path");
+        assert_eq!(path, "/tmp/test.png");
+    }
 }
 
 #[cfg(test)]

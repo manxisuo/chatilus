@@ -17,6 +17,7 @@ use crate::models::{ConversationSummary, ExportResult, TimelineMonthBucket};
 use super::helpers::{
     format_timestamp, map_conversation_summary, role_heading,
 };
+use super::asset_index::reindex_conversation_assets;
 use super::tag_repository::get_conversation_tag_names;
 use super::Database;
 
@@ -404,6 +405,8 @@ impl ConversationRepository for Database {
                 &tx,
                 conversation,
                 &composite_conversation_id(data_source, &conversation.id),
+                data_source.as_str(),
+                source_path,
             )?;
         }
 
@@ -533,6 +536,8 @@ fn merge_messages(
     tx: &Transaction<'_>,
     conversation: &ImportedConversation,
     storage_id: &str,
+    conversation_source: &str,
+    source_path: &str,
 ) -> Result<usize, String> {
     let mut touched = 0usize;
 
@@ -568,6 +573,13 @@ fn merge_messages(
     reorder_conversation_messages(tx, storage_id)?;
     refresh_conversation_message_count(tx, storage_id)?;
     reindex_conversation_messages(tx, storage_id, &conversation.title)?;
+    reindex_conversation_assets(
+        tx,
+        storage_id,
+        &conversation.title,
+        conversation_source,
+        source_path,
+    )?;
 
     Ok(touched)
 }

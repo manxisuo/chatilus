@@ -8,6 +8,7 @@ use crate::domain::models::SourceInfo;
 use crate::domain::ports::{ConversationRepository, NormalizedImportResult};
 use crate::models::ImportResult;
 
+mod asset_index;
 mod asset_repository;
 mod conversation_repository;
 mod helpers;
