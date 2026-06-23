@@ -962,6 +962,7 @@ onMounted(async () => {
   border-right: 1px solid var(--cl-border);
   background: var(--cl-panel);
   min-height: 0;
+  overflow: hidden;
 }
 
 .source-nav {
