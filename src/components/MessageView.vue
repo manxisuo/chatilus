@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl } from "../api";
 import { renderMarkdown } from "../utils/markdown";
@@ -13,6 +13,7 @@ const props = defineProps<{
   conversationStarred: boolean;
   conversationTags: string[];
   dataSource?: string | null;
+  highlightMessageId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -38,6 +39,17 @@ watch(
   () => props.messages,
   () => {
     lightboxVisible.value = false;
+  },
+);
+
+watch(
+  () => [props.messages, props.highlightMessageId] as const,
+  async () => {
+    if (!props.highlightMessageId || props.messages.length === 0) return;
+    await nextTick();
+    document
+      .getElementById(`message-${props.highlightMessageId}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
   },
 );
 
@@ -156,8 +168,15 @@ const renderedMessages = computed(() =>
         <article
           v-for="message in renderedMessages"
           :key="message.id"
+          :id="`message-${message.id}`"
           class="message"
-          :class="[message.role, { starred: message.is_starred }]"
+          :class="[
+            message.role,
+            {
+              starred: message.is_starred,
+              highlighted: message.id === highlightMessageId,
+            },
+          ]"
         >
           <div class="message-head">
             <div class="head-left">
@@ -276,6 +295,11 @@ const renderedMessages = computed(() =>
 
 .message.starred {
   border-color: rgba(230, 162, 60, 0.45);
+}
+
+.message.highlighted {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
 }
 
 .message.user {

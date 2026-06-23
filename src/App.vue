@@ -55,6 +55,7 @@ const stats = ref<DatabaseStats | null>(null);
 const listQuery = ref("");
 const searchQuery = ref("");
 const searchMode = ref(false);
+const activeSearchHitId = ref<string | null>(null);
 const starredOnly = ref(false);
 const filterHasImages = ref(false);
 const filterHasCode = ref(false);
@@ -185,6 +186,21 @@ const visibleSourceNavItems = computed(() =>
 
 const activeConversation = computed(() =>
   conversations.value.find((item) => item.id === activeId.value) ?? null,
+);
+
+const activeSearchHit = computed(
+  () => searchHits.value.find((hit) => hit.message_id === activeSearchHitId.value) ?? null,
+);
+
+const displayConversationTitle = computed(
+  () =>
+    activeConversation.value?.title ??
+    activeSearchHit.value?.conversation_title ??
+    "对话详情",
+);
+
+const displayConversationSource = computed(
+  () => activeConversation.value?.source ?? activeSearchHit.value?.source ?? "chatgpt",
 );
 
 const activeTagIds = computed(() => {
@@ -323,6 +339,7 @@ async function finishImport(job: ImportJobView) {
     searchMode.value = false;
     searchQuery.value = "";
     searchHits.value = [];
+    activeSearchHitId.value = null;
     await refreshStats();
     await refreshTags();
     await loadConversations();
@@ -419,20 +436,29 @@ function handleImportCommand(command: string) {
   void handleImportDir();
 }
 
+function clearSearch() {
+  searchMode.value = false;
+  searchHits.value = [];
+  activeSearchHitId.value = null;
+}
+
 async function handleSearch() {
   const query = searchQuery.value.trim();
   if (!query) {
     searchMode.value = false;
     searchHits.value = [];
+    activeSearchHitId.value = null;
     return;
   }
 
   searchMode.value = true;
   searchHits.value = await searchMessages(query);
+  activeSearchHitId.value = null;
 }
 
 function selectConversation(id: string) {
   searchMode.value = false;
+  activeSearchHitId.value = null;
   viewMode.value = "chats";
   activeId.value = id;
 }
@@ -443,7 +469,7 @@ function openConversationFromGallery(conversationId: string) {
 }
 
 function openSearchHit(hit: SearchHit) {
-  searchMode.value = false;
+  activeSearchHitId.value = hit.message_id;
   activeId.value = hit.conversation_id;
 }
 
@@ -606,10 +632,7 @@ onMounted(async () => {
           placeholder="全文搜索消息…"
           class="search-input"
           @keyup.enter="handleSearch"
-          @clear="
-            searchMode = false;
-            searchHits = [];
-          "
+          @clear="clearSearch"
         />
         <el-button @click="handleSearch">搜索</el-button>
         <el-dropdown trigger="click" @command="handleImportCommand">
@@ -749,6 +772,7 @@ onMounted(async () => {
             v-for="hit in searchHits"
             :key="hit.message_id"
             class="search-hit"
+            :class="{ active: hit.message_id === activeSearchHitId }"
             @click="openSearchHit(hit)"
           >
             <div class="hit-header">
@@ -790,11 +814,12 @@ onMounted(async () => {
         <div class="main-layout">
           <MessageView
             :messages="messages"
-            :title="activeConversation?.title ?? '对话详情'"
-            :data-source="activeConversation?.source ?? 'chatgpt'"
+            :title="displayConversationTitle"
+            :data-source="displayConversationSource"
             :loading="messageLoading || exporting"
             :conversation-starred="activeConversation?.is_starred ?? false"
             :conversation-tags="activeConversation?.tags ?? []"
+            :highlight-message-id="activeSearchHitId"
             @toggle-conversation-star="toggleConversationStar"
             @export-markdown="handleExportMarkdown"
             @toggle-message-star="toggleMessageStar"
@@ -1124,6 +1149,12 @@ onMounted(async () => {
 
 .search-hit:hover {
   background: rgba(64, 158, 255, 0.08);
+}
+
+.search-hit.active {
+  background: rgba(64, 158, 255, 0.15);
+  border-left: 3px solid var(--el-color-primary);
+  padding-left: 13px;
 }
 
 .hit-header {
