@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import ConversationList from "./components/ConversationList.vue";
+import ConversationInfo from "./components/ConversationInfo.vue";
 import ImageGallery from "./components/ImageGallery.vue";
 import MessageView from "./components/MessageView.vue";
 import TagDialog from "./components/TagDialog.vue";
@@ -729,17 +730,24 @@ onMounted(async () => {
       </el-aside>
 
       <el-main class="main">
-        <MessageView
-          :messages="messages"
-          :title="activeConversation?.title ?? '对话详情'"
-          :data-source="activeConversation?.source ?? 'chatgpt'"
-          :loading="messageLoading || exporting"
-          :conversation-starred="activeConversation?.is_starred ?? false"
-          :conversation-tags="activeConversation?.tags ?? []"
-          @toggle-conversation-star="toggleConversationStar"
-          @export-markdown="handleExportMarkdown"
-          @toggle-message-star="toggleMessageStar"
-        />
+        <div class="main-layout">
+          <MessageView
+            :messages="messages"
+            :title="activeConversation?.title ?? '对话详情'"
+            :data-source="activeConversation?.source ?? 'chatgpt'"
+            :loading="messageLoading || exporting"
+            :conversation-starred="activeConversation?.is_starred ?? false"
+            :conversation-tags="activeConversation?.tags ?? []"
+            @toggle-conversation-star="toggleConversationStar"
+            @export-markdown="handleExportMarkdown"
+            @toggle-message-star="toggleMessageStar"
+          />
+          <ConversationInfo
+            v-if="activeConversation"
+            :conversation="activeConversation"
+            :messages="messages"
+          />
+        </div>
         <div v-if="activeConversation" class="tag-fab">
           <el-button size="small" @click="tagDialogVisible = true">管理标签</el-button>
         </div>
@@ -773,6 +781,8 @@ onMounted(async () => {
 .app-shell {
   height: 100vh;
   background: var(--cl-bg);
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -897,6 +907,7 @@ onMounted(async () => {
 
 .body {
   min-height: 0;
+  flex: 1;
 }
 
 .sidebar {
@@ -1037,12 +1048,28 @@ onMounted(async () => {
   position: relative;
   padding: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-layout :deep(.message-view) {
+  flex: 1;
+  min-width: 0;
 }
 
 .gallery-main {
   padding: 0;
   overflow: hidden;
-  height: calc(100vh - 56px);
+  flex: 1;
+  min-height: 0;
 }
 
 .tag-fab {
