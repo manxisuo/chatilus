@@ -1,9 +1,18 @@
 use crate::db::Database;
 use crate::domain::ports::MessageRepository;
-use crate::models::MessageView;
+use crate::models::{MessageView, SearchHit};
 
 pub fn get_messages(db: &Database, conversation_id: &str) -> Result<Vec<MessageView>, String> {
     MessageRepository::list_by_conversation(db, conversation_id)
+}
+
+pub fn list_starred_messages(
+    db: &Database,
+    source: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<SearchHit>, String> {
+    MessageRepository::list_starred(db, source, limit, offset)
 }
 
 pub fn set_message_starred(

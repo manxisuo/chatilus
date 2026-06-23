@@ -16,6 +16,7 @@ import {
   getConversation,
   getStats,
   listConversations,
+  listStarredMessages,
   listTags,
   searchMessages,
   setConversationStarred,
@@ -42,6 +43,8 @@ import {
 const conversations = ref<ConversationSummary[]>([]);
 const messages = ref<Awaited<ReturnType<typeof getMessages>>>([]);
 const searchHits = ref<SearchHit[]>([]);
+const starredMessageHits = ref<SearchHit[]>([]);
+const starredMessagesLoading = ref(false);
 const tags = ref<TagView[]>([]);
 const activeId = ref<string | null>(null);
 const fetchedConversation = ref<ConversationSummary | null>(null);
@@ -64,6 +67,7 @@ const searchQuery = ref("");
 const searchMode = ref(false);
 const activeSearchHitId = ref<string | null>(null);
 const starredOnly = ref(false);
+const starredMessagesMode = ref(false);
 const filterHasImages = ref(false);
 const filterHasCode = ref(false);
 const filterHasAttachments = ref(false);
@@ -119,6 +123,7 @@ const dashboardStats = computed(() => {
     { label: "图片", value: s.image_count, icon: "🖼" },
     { label: "来源", value: sourceCount.value, icon: "📦" },
     { label: "收藏对话", value: s.starred_conversation_count, icon: "★" },
+    { label: "收藏消息", value: s.starred_message_count, icon: "☆" },
     { label: "标签", value: s.tag_count, icon: "🏷" },
     {
       label: "最近导入",
@@ -152,6 +157,7 @@ const loadingMore = ref(false);
 const listTotalHint = computed(() => {
   if (
     starredOnly.value ||
+    starredMessagesMode.value ||
     filterHasImages.value ||
     filterHasCode.value ||
     filterHasAttachments.value ||
@@ -243,6 +249,18 @@ async function refreshStats() {
 
 async function refreshTags() {
   tags.value = await listTags();
+}
+
+async function loadStarredMessages() {
+  starredMessagesLoading.value = true;
+  try {
+    starredMessageHits.value = await listStarredMessages({
+      source: filterSource.value,
+      limit: 500,
+    });
+  } finally {
+    starredMessagesLoading.value = false;
+  }
 }
 
 async function loadConversations(reset = true) {
@@ -477,6 +495,26 @@ function clearSearch() {
   activeSearchHitId.value = null;
 }
 
+function toggleStarredOnlyFilter() {
+  const next = !starredOnly.value;
+  starredOnly.value = next;
+  if (next) {
+    starredMessagesMode.value = false;
+  }
+}
+
+async function toggleStarredMessagesFilter() {
+  const next = !starredMessagesMode.value;
+  starredMessagesMode.value = next;
+  if (next) {
+    starredOnly.value = false;
+    searchMode.value = false;
+    searchHits.value = [];
+    activeSearchHitId.value = null;
+    await loadStarredMessages();
+  }
+}
+
 async function handleSearch() {
   const query = searchQuery.value.trim();
   if (!query) {
@@ -487,12 +525,14 @@ async function handleSearch() {
   }
 
   searchMode.value = true;
+  starredMessagesMode.value = false;
   searchHits.value = await searchMessages(query);
   activeSearchHitId.value = null;
 }
 
 function selectConversation(id: string) {
   searchMode.value = false;
+  starredMessagesMode.value = false;
   activeSearchHitId.value = null;
   viewMode.value = "chats";
   activeId.value = id;
@@ -552,6 +592,12 @@ async function toggleMessageStar(messageId: string, starred: boolean) {
   const item = messages.value.find((message) => message.id === messageId);
   if (item) item.is_starred = starred;
   await refreshStats();
+  if (starredMessagesMode.value) {
+    await loadStarredMessages();
+    if (!starred && activeSearchHitId.value === messageId) {
+      activeSearchHitId.value = null;
+    }
+  }
 }
 
 async function handleExportMarkdown() {
@@ -633,6 +679,10 @@ watch(activeId, async (id) => {
 watch(
   [listQuery, starredOnly, filterHasImages, filterHasCode, filterHasAttachments, filterTagId, filterSource],
   async () => {
+  if (starredMessagesMode.value) {
+    await loadStarredMessages();
+    return;
+  }
   if (!searchMode.value) {
     await loadConversations();
   }
@@ -750,7 +800,7 @@ onMounted(async () => {
 
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside width="320px" class="sidebar">
-        <div v-if="!searchMode" class="sidebar-controls">
+        <div v-if="!searchMode && !starredMessagesMode" class="sidebar-controls">
           <div class="source-pills">
             <button
               v-for="item in visibleSourceNavItems"
@@ -778,9 +828,17 @@ onMounted(async () => {
                 type="button"
                 class="filter-chip"
                 :class="{ active: starredOnly }"
-                @click="starredOnly = !starredOnly"
+                @click="toggleStarredOnlyFilter"
               >
-                收藏
+                收藏对话
+              </button>
+              <button
+                type="button"
+                class="filter-chip"
+                :class="{ active: starredMessagesMode }"
+                @click="toggleStarredMessagesFilter"
+              >
+                收藏消息
               </button>
               <button
                 type="button"
@@ -825,6 +883,29 @@ onMounted(async () => {
           </div>
         </div>
 
+        <div v-else-if="!searchMode && starredMessagesMode" class="sidebar-controls sidebar-controls-compact">
+          <div class="source-pills">
+            <button
+              v-for="item in visibleSourceNavItems"
+              :key="item.id ?? 'all'"
+              type="button"
+              class="source-pill"
+              :class="{ active: filterSource === item.id }"
+              @click="filterSource = item.id"
+            >
+              <span>{{ item.id === null ? "全部" : item.label }}</span>
+              <span class="source-pill-count">{{ item.count }}</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="filter-chip filter-chip-wide active"
+            @click="toggleStarredMessagesFilter"
+          >
+            收藏消息 ✕
+          </button>
+        </div>
+
         <div v-if="searchMode" class="search-results">
           <div class="section-title">
             搜索结果
@@ -858,6 +939,47 @@ onMounted(async () => {
             </div>
             <div class="hit-snippet" v-html="hit.snippet" />
           </button>
+        </div>
+
+        <div v-else-if="starredMessagesMode" class="search-results">
+          <div class="section-title">
+            收藏消息
+            <span v-if="starredMessageHits.length > 0" class="search-count">
+              {{ starredMessageHits.length }} 条
+            </span>
+          </div>
+          <el-skeleton v-if="starredMessagesLoading" animated :rows="6" />
+          <el-empty
+            v-else-if="starredMessageHits.length === 0"
+            description="暂无收藏消息，在对话中点击消息旁的 ☆ 即可收藏"
+          />
+          <template v-else>
+            <button
+              v-for="hit in starredMessageHits"
+              :key="hit.message_id"
+              class="search-hit"
+              :class="{ active: hit.message_id === activeSearchHitId }"
+              @click="openSearchHit(hit)"
+            >
+              <div class="hit-header">
+                <el-tag
+                  size="small"
+                  :type="sourceTagType(hit.source)"
+                  effect="plain"
+                >
+                  {{ sourceLabel(hit.source) }}
+                </el-tag>
+                <div class="hit-title">{{ hit.conversation_title }}</div>
+              </div>
+              <div class="hit-meta">
+                <span class="hit-role">{{ searchHitRoleLabel(hit) }}</span>
+                <span v-if="hit.create_time" class="hit-time">
+                  {{ formatHitTime(hit.create_time) }}
+                </span>
+              </div>
+              <div class="hit-snippet">{{ hit.snippet }}</div>
+            </button>
+          </template>
         </div>
 
         <ConversationList
@@ -1164,6 +1286,14 @@ onMounted(async () => {
   gap: 4px;
   flex: 1;
   min-width: 0;
+}
+
+.sidebar-controls-compact {
+  gap: 10px;
+}
+
+.filter-chip-wide {
+  align-self: flex-start;
 }
 
 .filter-chip {

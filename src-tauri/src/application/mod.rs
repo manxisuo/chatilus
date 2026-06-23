@@ -15,6 +15,6 @@ pub use conversations::{
 pub use import_data::{import_export_dir, run_import, run_import_resolved};
 pub use import_job_store::{new_import_job_store, SharedImportJobStore};
 pub use import_runner::spawn_import_job;
-pub use messages::{get_messages, set_message_starred};
+pub use messages::{get_messages, list_starred_messages, set_message_starred};
 pub use search::search_messages;
 pub use tags::{create_tag, delete_tag, list_tags};

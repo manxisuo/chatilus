@@ -55,6 +55,18 @@ export function getMessages(conversationId: string) {
   return invoke<MessageView[]>("get_messages", { conversationId });
 }
 
+export function listStarredMessages(options?: {
+  source?: string | null;
+  limit?: number;
+  offset?: number;
+}) {
+  return invoke<SearchHit[]>("list_starred_messages", {
+    source: options?.source ?? null,
+    limit: options?.limit ?? 200,
+    offset: options?.offset ?? 0,
+  });
+}
+
 export function searchMessages(query: string, limit = 100) {
   return invoke<SearchHit[]>("search_messages", { query, limit });
 }

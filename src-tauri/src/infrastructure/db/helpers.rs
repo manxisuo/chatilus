@@ -25,6 +25,15 @@ pub(crate) fn map_conversation_summary(row: &rusqlite::Row<'_>) -> rusqlite::Res
     .into())
 }
 
+pub(crate) fn message_snippet(content: &str, max_chars: usize) -> String {
+    let collapsed: String = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= max_chars {
+        return collapsed;
+    }
+    let truncated: String = collapsed.chars().take(max_chars).collect();
+    format!("{truncated}…")
+}
+
 pub(crate) fn clean_content_placeholders(content: String) -> String {
     content
         .lines()

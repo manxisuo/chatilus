@@ -13,7 +13,7 @@ use crate::infrastructure::importers::chatgpt::{
 use crate::infrastructure::media::MediaIndex;
 use crate::models::MessageView;
 
-use super::helpers::{clean_content_placeholders, parse_attachments_json};
+use super::helpers::{clean_content_placeholders, message_snippet, parse_attachments_json};
 use super::Database;
 
 impl MessageRepository for Database {
@@ -116,6 +116,58 @@ impl MessageRepository for Database {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("读取消息失败: {e}"))
+    }
+
+    fn list_starred(
+        &self,
+        source: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::models::SearchHit>, String> {
+        let mut sql = String::from(
+            "SELECT m.id, m.conversation_id, c.title, m.role, m.content, m.create_time,
+                    COALESCE(c.source, 'chatgpt') AS source
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+             WHERE m.is_starred = 1",
+        );
+        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
+            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            bind.push(Box::new(source.to_string()));
+        }
+
+        sql.push_str(
+            " ORDER BY COALESCE(m.create_time, 0) DESC, m.id DESC
+              LIMIT ? OFFSET ?",
+        );
+        bind.push(Box::new(limit));
+        bind.push(Box::new(offset));
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| format!("查询收藏消息失败: {e}"))?;
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let content = clean_content_placeholders(row.get(4)?);
+                Ok(crate::models::SearchHit {
+                    message_id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    conversation_title: row.get(2)?,
+                    role: row.get(3)?,
+                    snippet: message_snippet(&content, 160),
+                    create_time: row.get(5)?,
+                    source: row.get(6)?,
+                })
+            })
+            .map_err(|e| format!("查询收藏消息失败: {e}"))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取收藏消息失败: {e}"))
     }
 
     fn set_starred(&self, message_id: &str, starred: bool) -> Result<(), String> {

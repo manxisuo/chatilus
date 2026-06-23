@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl } from "../api";
 import { renderMarkdown } from "../utils/markdown";
@@ -25,6 +25,151 @@ const emit = defineEmits<{
 const imageSrcCache = reactive<Record<string, string>>({});
 const lightboxVisible = ref(false);
 const lightboxIndex = ref(0);
+const messagesContainerRef = ref<HTMLElement | null>(null);
+
+let scrollSession = 0;
+let resizeObserver: ResizeObserver | null = null;
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+let scrollWatchTimer: ReturnType<typeof setTimeout> | null = null;
+
+function stopScrollWatch() {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (resizeTimer) {
+    clearTimeout(resizeTimer);
+    resizeTimer = null;
+  }
+  if (scrollWatchTimer) {
+    clearTimeout(scrollWatchTimer);
+    scrollWatchTimer = null;
+  }
+}
+
+onUnmounted(stopScrollWatch);
+
+watch(
+  () => props.messages,
+  () => {
+    lightboxVisible.value = false;
+    stopScrollWatch();
+  },
+);
+
+function layoutAffectingImages(
+  container: HTMLElement,
+  target: HTMLElement,
+): HTMLImageElement[] {
+  const images: HTMLImageElement[] = [];
+  for (const message of container.querySelectorAll("article.message")) {
+    images.push(...message.querySelectorAll<HTMLImageElement>("img"));
+    if (message === target) break;
+  }
+  return images;
+}
+
+function waitForImages(images: HTMLImageElement[]): Promise<void> {
+  const pending = images.filter((image) => !image.complete);
+  if (pending.length === 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    let remaining = pending.length;
+    const done = () => {
+      remaining -= 1;
+      if (remaining === 0) resolve();
+    };
+    for (const image of pending) {
+      image.addEventListener("load", done, { once: true });
+      image.addEventListener("error", done, { once: true });
+    }
+  });
+}
+
+function scrollElementIntoCenter(
+  container: HTMLElement,
+  target: HTMLElement,
+  smooth = true,
+) {
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const offset = targetRect.top - containerRect.top + container.scrollTop;
+  const scrollTop =
+    offset - container.clientHeight / 2 + target.clientHeight / 2;
+  container.scrollTo({
+    top: Math.max(0, scrollTop),
+    behavior: smooth ? "smooth" : "auto",
+  });
+}
+
+function startScrollWatch(
+  session: number,
+  container: HTMLElement,
+  target: HTMLElement,
+) {
+  stopScrollWatch();
+
+  const correct = () => {
+    if (session !== scrollSession || !props.highlightMessageId) return;
+    const currentTarget = document.getElementById(
+      `message-${props.highlightMessageId}`,
+    );
+    if (!currentTarget) return;
+    scrollElementIntoCenter(container, currentTarget, false);
+  };
+
+  const scheduleCorrection = () => {
+    if (session !== scrollSession) return;
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(correct, 50);
+  };
+
+  resizeObserver = new ResizeObserver(scheduleCorrection);
+  resizeObserver.observe(container);
+  for (const message of container.querySelectorAll("article.message")) {
+    resizeObserver.observe(message);
+    if (message === target) break;
+  }
+
+  scrollWatchTimer = setTimeout(() => {
+    if (session === scrollSession) stopScrollWatch();
+  }, 4000);
+}
+
+async function scrollToHighlightedMessage() {
+  const session = ++scrollSession;
+  stopScrollWatch();
+
+  if (!props.highlightMessageId || props.loading || props.messages.length === 0) {
+    return;
+  }
+
+  await nextTick();
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  if (session !== scrollSession) return;
+
+  const container = messagesContainerRef.value;
+  const target = document.getElementById(`message-${props.highlightMessageId}`);
+  if (!container || !target) return;
+
+  await waitForImages(layoutAffectingImages(container, target));
+  if (session !== scrollSession) return;
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (session !== scrollSession) return;
+
+  const currentTarget = document.getElementById(`message-${props.highlightMessageId}`);
+  if (!container || !currentTarget) return;
+
+  scrollElementIntoCenter(container, currentTarget, true);
+  startScrollWatch(session, container, currentTarget);
+}
+
+watch(
+  () => [props.highlightMessageId, props.loading, props.messages] as const,
+  () => {
+    void scrollToHighlightedMessage();
+  },
+);
 
 const galleryImages = computed(() =>
   props.messages.flatMap((message) =>
@@ -33,24 +178,6 @@ const galleryImages = computed(() =>
       fileKey: attachment.file_key,
     })),
   ),
-);
-
-watch(
-  () => props.messages,
-  () => {
-    lightboxVisible.value = false;
-  },
-);
-
-watch(
-  () => [props.messages, props.highlightMessageId] as const,
-  async () => {
-    if (!props.highlightMessageId || props.messages.length === 0) return;
-    await nextTick();
-    document
-      .getElementById(`message-${props.highlightMessageId}`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
-  },
 );
 
 function formatTime(timestamp: number | null) {
@@ -128,6 +255,20 @@ const renderedMessages = computed(() =>
     }))
     .filter((message) => message.html.trim() || message.attachments.length > 0),
 );
+
+const eagerImageMessageIds = computed(() => {
+  if (!props.highlightMessageId) return null;
+  const ids = new Set<string>();
+  for (const message of renderedMessages.value) {
+    ids.add(message.id);
+    if (message.id === props.highlightMessageId) break;
+  }
+  return ids;
+});
+
+function shouldEagerLoadImages(messageId: string) {
+  return eagerImageMessageIds.value?.has(messageId) ?? false;
+}
 </script>
 
 <template>
@@ -164,7 +305,7 @@ const renderedMessages = computed(() =>
           <el-button text @click="emit('exportMarkdown')">导出 Markdown</el-button>
         </div>
       </header>
-      <div class="messages">
+      <div ref="messagesContainerRef" class="messages">
         <article
           v-for="message in renderedMessages"
           :key="message.id"
@@ -211,7 +352,7 @@ const renderedMessages = computed(() =>
                 :src="imageSrc(attachment.path)"
                 :alt="attachment.file_key"
                 class="thumb"
-                loading="lazy"
+                :loading="shouldEagerLoadImages(message.id) ? 'eager' : 'lazy'"
                 @error="onImageError(attachment.path)"
                 @click="openLightbox(attachment.path)"
               />

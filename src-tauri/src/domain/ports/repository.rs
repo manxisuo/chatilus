@@ -57,6 +57,12 @@ pub trait ConversationRepository {
 
 pub trait MessageRepository {
     fn list_by_conversation(&self, conversation_id: &str) -> Result<Vec<MessageView>, String>;
+    fn list_starred(
+        &self,
+        source: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::models::SearchHit>, String>;
     fn set_starred(&self, message_id: &str, starred: bool) -> Result<(), String>;
 }
 

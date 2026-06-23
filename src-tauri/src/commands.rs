@@ -142,6 +142,22 @@ pub fn set_conversation_starred(
 }
 
 #[tauri::command]
+pub fn list_starred_messages(
+    state: State<'_, AppState>,
+    source: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<Vec<SearchHit>, String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    application::list_starred_messages(
+        &db,
+        source.as_deref(),
+        limit.unwrap_or(200),
+        offset.unwrap_or(0),
+    )
+}
+
+#[tauri::command]
 pub fn set_message_starred(
     state: State<'_, AppState>,
     message_id: String,
