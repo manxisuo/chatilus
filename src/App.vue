@@ -574,7 +574,10 @@ onMounted(async () => {
   <el-container class="app-shell">
     <el-header class="topbar" height="56px">
       <div class="brand">
-        <strong class="brand-name">ChatLens</strong>
+        <div class="brand-text">
+          <strong class="brand-name">ChatLens</strong>
+          <span class="brand-tagline">Browse your AI memory</span>
+        </div>
         <nav class="nav-tabs" aria-label="主视图">
           <button
             v-for="item in navItems"
@@ -861,6 +864,19 @@ onMounted(async () => {
   align-items: center;
   gap: 20px;
   min-width: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.brand-tagline {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  letter-spacing: 0.01em;
 }
 
 .brand-name {

@@ -332,7 +332,7 @@ onMounted(() => {
   <div class="image-gallery">
     <header class="gallery-header">
       <div class="gallery-header-main">
-        <p class="subtitle">浏览所有对话中的图片，点击可放大查看</p>
+        <p class="subtitle">浏览所有对话中的图片，点击放大，或跳回所属对话</p>
         <p v-if="statsText && !filterSource" class="stats">{{ statsText }}</p>
         <div class="source-nav">
           <button

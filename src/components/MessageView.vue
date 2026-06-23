@@ -123,7 +123,7 @@ const renderedMessages = computed(() =>
     <div v-if="loading" class="loading-wrap">
       <el-skeleton animated :rows="10" />
     </div>
-    <el-empty v-else-if="messages.length === 0" description="选择左侧对话以查看消息" />
+    <el-empty v-else-if="messages.length === 0" description="从左侧选择一段对话，开始浏览你的 AI 记忆" />
     <template v-else>
       <header class="header">
         <div class="header-main">

@@ -48,6 +48,8 @@ v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从�
 
 已有、不重复建设：`messages(conversation_id, sort_order)`、`conversations(update_time)`、`conversations(is_starred, update_time)`、`messages_fts`（FTS5）。
 
+EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tags_tag` 已命中；来源列表因 `COALESCE(source)` + 先排 `is_starred` 暂未用到 `idx_conversations_source_update`（见「后续任务分层」可选优化项）。
+
 **明确不在 PR5 范围**（见下文「后续任务分层」）：`assets` 表索引（当前无独立表）、`imports` / `import_jobs` 低优先级索引、FTS `bm25()` 排序改造。
 
 ### 明确不做进 v0.4
@@ -62,15 +64,17 @@ v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从�
 
 ### 接下来要做（近期：产品化浏览体验）
 
-- [ ] 顶部统计增强：展示对话、图片、来源、收藏、标签数量，以及最近导入时间，让首页更像 Dashboard。
-- [ ] 左侧过滤区整理：将收藏、有图片、有代码、有附件等过滤项归到 Filter 区，Tags 独立展示，降低后台管理感。
-- [ ] 消息阅读区优化：宽屏下限制正文最大宽度或增加右侧 Conversation Info（来源、模型、时间跨度、图片数、标签）。
-- [ ] 图片画廊增强：按时间分组（今天 / 昨天 / 本周 / 月份），并提供「打开所属对话」入口。
-- [ ] 搜索结果体验小步增强：更清晰展示来源、时间、会话上下文和命中片段。
-- [ ] 产品定位文案收敛：围绕「Browse your AI memory」验证主页说明、空状态和 README 表述。
-- [ ] 核心查询 `EXPLAIN QUERY PLAN` 抽检：会话列表、打开对话、标签筛选、图库扫描，确认索引命中情况。
+- [x] 顶部统计增强：展示对话、图片、来源、收藏、标签数量，以及最近导入时间，让首页更像 Dashboard。
+- [x] 左侧过滤区整理：将收藏、有图片、有代码、有附件等过滤项归到 Filter 区，Tags 独立展示，降低后台管理感。
+- [x] 消息阅读区优化：宽屏下限制正文最大宽度或增加右侧 Conversation Info（来源、模型、时间跨度、图片数、标签）。
+- [x] 图片画廊增强：按时间分组（今天 / 昨天 / 本周 / 月份），并提供「打开所属对话」入口。
+- [x] 搜索结果体验小步增强：更清晰展示来源、时间、会话上下文和命中片段。
+- [x] 产品定位文案收敛：围绕「Browse your AI memory」验证主页说明、空状态和 README 表述。
+- [x] 核心查询 `EXPLAIN QUERY PLAN` 抽检：会话列表、打开对话、标签筛选、图库扫描，确认索引命中情况（2026-06：打开对话 / 标签筛选命中 v5 索引；图库仍为 `SCAN messages`，见下文 assets 物化）。
 
 ### 后面要做（中期：知识管理与索引深化）
+
+- [ ] （可选）来源列表查询优化：`conversation_repository.list` 将 `COALESCE(source, …)` 改为 `source = ?`（导入已保证非 NULL），或评估复合索引 `(source, is_starred, update_time)`；当前约 1.5k 会话体量可暂缓。
 
 - [ ] Timeline：按时间混排 ChatGPT / Cursor / Gemini 等来源，支持按来源过滤与月份导航。
 - [ ] Global Search++：在现有 FTS5 基础上将搜索改为显式 `bm25()` 排序，并逐步考虑时间、来源、收藏等权重。
