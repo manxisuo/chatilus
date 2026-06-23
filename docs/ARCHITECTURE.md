@@ -194,7 +194,7 @@ ImageRef { asset_id }
 
 | key | 示例 value | 用途 |
 |-----|------------|------|
-| `schema_version` | `4` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 4`） |
+| `schema_version` | `5` | 驱动有序迁移（当前 `CURRENT_SCHEMA_VERSION = 5`） |
 | `app_version` | `0.1.0` | 最近一次打开数据库的应用版本（`CARGO_PKG_VERSION`） |
 
 v1 迁移：将早期库中散落的 `ALTER TABLE`（`is_starred`、`attachments`）纳入版本框架。

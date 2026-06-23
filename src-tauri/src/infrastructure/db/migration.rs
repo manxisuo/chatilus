@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 4;
+pub const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -33,6 +33,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
         2 => migrate_v2(&tx),
         3 => migrate_v3(&tx),
         4 => migrate_v4(&tx),
+        5 => migrate_v5(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -232,6 +233,106 @@ fn rebuild_messages_fts(conn: &Connection) -> Result<(), String> {
     )
     .map_err(|e| format!("迁移 v4: 重建 messages_fts 失败: {e}"))?;
     Ok(())
+}
+
+/// v5：为核心查询路径补充性能索引（来源过滤、标签筛选、Timeline 预埋、导入唯一性）。
+fn migrate_v5(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_conversations_source_update
+            ON conversations(source, update_time DESC);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_source_source_id
+            ON conversations(source, source_id);
+
+        CREATE INDEX IF NOT EXISTS idx_messages_create_time
+            ON messages(create_time DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_conversation_tags_tag
+            ON conversation_tags(tag_id, conversation_id);
+        ",
+    )
+    .map_err(|e| format!("迁移 v5: 创建性能索引失败: {e}"))?;
+
+    upsert_meta(conn, "schema_version", "5")?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod migrate_v5_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn migrate_v5_creates_performance_indexes() {
+        let conn = Connection::open_in_memory().expect("open");
+        conn.execute_batch(
+            "
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta (key, value) VALUES ('schema_version', '4');
+
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                create_time REAL,
+                update_time REAL,
+                source_path TEXT NOT NULL,
+                model TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                source TEXT,
+                source_id TEXT
+            );
+
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                create_time REAL,
+                sort_order INTEGER NOT NULL,
+                raw_json TEXT,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                attachments TEXT
+            );
+
+            CREATE TABLE conversation_tags (
+                conversation_id TEXT NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (conversation_id, tag_id)
+            );
+            ",
+        )
+        .expect("seed");
+
+        migrate_v5(&conn).expect("migrate v5");
+
+        let indexes: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'index' AND name LIKE 'idx_%'
+                 ORDER BY name",
+            )
+            .expect("prepare")
+            .query_map([], |row| row.get(0))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect();
+
+        assert!(indexes.contains(&"idx_conversations_source_source_id".to_string()));
+        assert!(indexes.contains(&"idx_conversations_source_update".to_string()));
+        assert!(indexes.contains(&"idx_conversation_tags_tag".to_string()));
+        assert!(indexes.contains(&"idx_messages_create_time".to_string()));
+
+        let version: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("schema version");
+        assert_eq!(version, "5");
+    }
 }
 
 #[cfg(test)]
