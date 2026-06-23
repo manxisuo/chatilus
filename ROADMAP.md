@@ -24,7 +24,7 @@ Archive（归档）  →  Retrieve（检索）  →  Organize（组织）  →  
 |------|------|----------|--------------|
 | **Archive** | 多源数据进库、可读可搜 | 导入、浏览、FTS、图库、过滤、导出 | ~90% |
 | **Retrieve** | 跨源、跨时间找到那条记忆 | 全文搜索、来源/时间上下文、钻取到对话 | ~60% |
-| **Organize** | 按时间/项目/主题组织记忆 | Timeline、Workspace、Topic、Tag | ~25% |
+| **Organize** | 按时间/项目/主题组织记忆 | Timeline、Workspace、Topic、Tag | ~35% |
 | **Insight** | 在组织之上理解与回顾 | 可溯源总结、模式发现、主题演变 | 0%（远期） |
 
 检索（Retrieve）贯穿各层：搜索是检索，Timeline 按月浏览也是检索，Workspace 按项目看仍是检索。
@@ -51,11 +51,11 @@ AI 能力放在 `application/ai/`，不进入 domain 核心。
 
 ## 当前重点（v0.6）
 
-v0.5 **Timeline** 与收藏消息列表 **已完成**。下一里程碑：
+v0.5 **Timeline**、收藏消息列表与图库 **assets 物化** **已完成**。下一里程碑：
 
 > **Workspace / Project** —— 将多源会话归入同一工作项目，在项目视图内聚合对话、图片与搜索。
 
-v0.5 并行项（未做）：Global Search++（`bm25()`）、图库 `assets` 物化。
+v0.5 顺延项（未做）：Global Search++（`bm25()`）、来源列表查询索引优化。
 
 ### 多源 Importer（PR4a–c）
 
@@ -82,20 +82,27 @@ v0.5 并行项（未做）：Global Search++（`bm25()`）、图库 `assets` 物
 - [x] 导入文件选择器支持 `.vscdb`（Cursor）
 - [x] 内部 `id` 规范为 `{source}::{source_id}`（schema v4 迁移）
 
-### 性能索引（PR5，schema v5）
+### 性能索引（PR5 + schema v6 assets）
 
-围绕真实查询路径补充 SQLite 索引（`CURRENT_SCHEMA_VERSION = 5`）：
+**PR5（schema v5）** — 围绕会话 / 消息 / 标签查询路径：
 
 - [x] `conversations(source, update_time)`：Sources 导航按来源过滤 + 时间排序
 - [x] `UNIQUE (source, source_id)`：导入去重业务唯一键
 - [x] `messages(create_time)`：为 Timeline 预埋
 - [x] `conversation_tags(tag_id, conversation_id)`：按标签筛会话
 
+**schema v6 — 图片资产物化 `assets` 表**
+
+- [x] 物化表 + `created_at` / `conversation_source` / `conversation_id` 索引
+- [x] 迁移全库回填；导入时按会话 `reindex_conversation_assets`
+- [x] 图库列表 / 统计 / Timeline 月份图片数改查 `assets`（消除 `json_each` 与 `raw_json` 运行时水合）
+- [x] Timeline / 对话列表 `has_images` 改查 `assets`
+
 已有、不重复建设：`messages(conversation_id, sort_order)`、`conversations(update_time)`、`conversations(is_starred, update_time)`、`messages_fts`（FTS5）。
 
-EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tags_tag` 已命中；来源列表因 `COALESCE(source)` + 先排 `is_starred` 暂未用到 `idx_conversations_source_update`（见「后续任务分层」可选优化项）。
+EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tags_tag` 已命中；图库 / Timeline 图片统计已走 `assets` 索引；来源列表因 `COALESCE(source)` + 先排 `is_starred` 暂未用到 `idx_conversations_source_update`（见「后续任务分层」可选优化项）。
 
-**明确不在 PR5 范围**（见下文「后续任务分层」）：`assets` 表索引（当前无独立表）、`imports` / `import_jobs` 低优先级索引、FTS `bm25()` 排序改造。
+**明确不在 PR5/v6 范围**：`imports` / `import_jobs` 低优先级索引、FTS `bm25()` 排序改造。
 
 ### 明确不做进 v0.4
 
@@ -113,7 +120,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 - [x] 搜索场景 `get_conversation` 补全对话信息侧栏
 - [x] 外观：浅色 / 深色 / 跟随系统（含 Element Plus 与原生窗口主题）
 - [x] 产品定位文案：*Browse your AI memory*
-- [x] 核心查询 `EXPLAIN QUERY PLAN` 抽检（2026-06：打开对话 / 标签筛选命中 v5 索引；图库仍 `SCAN messages`）
+- [x] 核心查询 `EXPLAIN QUERY PLAN` 抽检（2026-06：打开对话 / 标签筛选命中 v5 索引；图库 / Timeline 图片统计已走 `assets` v6 索引）
 
 ---
 
@@ -131,16 +138,24 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 **v0.5 已完成 — Timeline**
 
 - [x] 新视图：按月份混排 ChatGPT / Cursor / Gemini 等来源的会话
-- [x] 月份导航与来源过滤
+- [x] 月份导航与来源过滤；左侧栏与对话页同宽，内容区限宽居中
+- [x] 月 → 日 → 会话三级结构（按活动时间分组）
+- [x] 每月来源分布统计（`source_counts`）；月份导航显示图片数
 - [x] 从 Timeline 钻取到对话、最新消息、本月/对话图片
+- [x] 本月图片数与图库 scoped 统计对齐（按消息 `create_time` 月份）
+- [x] 月份跳转滚动定位修复；会话卡片元数据排版
 - [x] 收藏消息列表（独立入口，与收藏对话拆分）
 - [x] 利用 `conversations(update_time)` 与 `messages(create_time)` 索引
 
-**v0.5 并行 / 支撑（未完成）**
+**v0.5 顺延 / 支撑（未完成）**
 
 - [ ] Global Search++（第一阶段）：显式 `bm25()` 排序；时间、来源、收藏等权重可后续迭代
 - [ ] （可选）来源列表查询优化：`COALESCE(source)` → `source = ?`，或复合索引 `(source, is_starred, update_time)`
-- [ ] **图片资产物化**（若图库/Timeline 图片热点需进一步性能）：独立 `assets` 表
+
+**v0.5 可选增强（Timeline，非阻塞 v0.6）**
+
+- [ ] 右侧月度洞察面板（统计摘要，为 Topic 预留）
+- [ ] Topic Bubble：标题关键词 / 标签聚合（无 AI）
 
 ### 再往后（v0.6–v0.7：Organize）
 
@@ -364,7 +379,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | key | TEXT PK | 如 `schema_version`、`app_version` |
 | value | TEXT | 版本号或元数据 |
 
-用于统一 `v4 → v5` 等 schema 迁移，替代零散 `ALTER TABLE`。
+用于统一 `v4 → v6` 等 schema 迁移，替代零散 `ALTER TABLE`。当前版本：**6**（含 `assets` 物化）。
 
 ### conversations
 
@@ -400,6 +415,22 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | conversation_id | 对话 ID（UNINDEXED） |
 | conversation_title | 对话标题（可搜索） |
 | content | 消息正文 |
+
+### assets（schema v6，物化图片索引）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| message_id, file_key | TEXT PK | 所属消息 + 文件键 |
+| conversation_id | TEXT FK | 所属对话 |
+| conversation_source | TEXT | 来源（chatgpt / cursor / …） |
+| role | TEXT | 消息角色 |
+| conversation_title | TEXT | 会话标题（冗余，便于列表） |
+| local_path | TEXT | 本地图片路径 |
+| image_source | TEXT | generated / upload 等 |
+| prompt | TEXT | 生成提示（可选） |
+| created_at | REAL | 消息时间（用于月份统计与排序） |
+
+导入与迁移时从 `messages.attachments` / `raw_json` 水合写入；图库与 Timeline 图片统计只读此表。
 
 ---
 
@@ -445,16 +476,20 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | PR4c | Claude / Gemini 等（有样本再做） | Gemini ✅ / Claude 待定 |
 | PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | ✅ |
 | PR5 | schema v5 性能索引（来源 / 标签 / Timeline 预埋 / 导入唯一键） | ✅ |
+| PR5+ | schema v6 `assets` 物化（图库 / Timeline 图片性能） | ✅ |
 
 产品化浏览与交互打磨见上文「v0.4 收尾与 v0.5 产品化」。
 
-### v0.5 — Timeline（已完成）
+### v0.5 — Timeline + 图库性能（已完成）
 
 - [x] **Timeline 视图**：跨来源按月份混排会话
-- [x] 月份导航 + 来源过滤 + 钻取到对话 / 最新消息 / 图库（本月或所属对话）
+- [x] 月份导航 + 来源过滤 + 日分组 + 月内来源统计
+- [x] 钻取到对话 / 最新消息 / 图库（本月或所属对话）
+- [x] 布局：侧栏对齐对话页、内容区限宽；本月图片数与图库对齐
 - [x] 收藏消息列表与跨对话消息定位修复
-- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文（顺延）
-- [ ] （可选）`assets` 物化，支撑图库性能（顺延）
+- [x] **assets 物化**（schema v6）：图库 / 统计 / `has_images` 改查物化表
+- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文（顺延至 v0.6 并行）
+- [ ] （可选）来源列表 `COALESCE(source)` 查询优化（顺延）
 
 ### v0.6 — Workspace / Project
 
