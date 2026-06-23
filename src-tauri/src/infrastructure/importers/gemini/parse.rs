@@ -10,7 +10,8 @@ struct ActivityEntry {
     create_time: Option<f64>,
     response_html: String,
     generated_images: usize,
-    image_sources: Vec<String>,
+    response_image_sources: Vec<String>,
+    user_image_sources: Vec<String>,
 }
 
 pub fn parse_activity_html(html: &str) -> Vec<ImportedConversation> {
@@ -73,7 +74,9 @@ fn parse_outer_cell(chunk: &str) -> Option<ActivityEntry> {
     }
 
     let response_html = response_parts.join("<br>");
-    let image_sources = extract_image_sources(&response_html);
+    let response_image_sources = extract_image_sources(&response_html);
+    let upload_html = extract_upload_content_cell(chunk).unwrap_or_default();
+    let user_image_sources = extract_image_sources(upload_html);
     let create_time = parse_takeout_timestamp(&timestamp_text);
 
     Some(ActivityEntry {
@@ -81,8 +84,9 @@ fn parse_outer_cell(chunk: &str) -> Option<ActivityEntry> {
         timestamp_text,
         create_time,
         response_html,
-        generated_images: generated_images.max(image_sources.len()),
-        image_sources,
+        generated_images: generated_images.max(response_image_sources.len()),
+        response_image_sources,
+        user_image_sources,
     })
 }
 
@@ -91,18 +95,23 @@ fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation
     let title = truncate_title(&entry.prompt);
     let response_text = html_fragment_to_text(&entry.response_html);
 
-    let image_source = if entry.generated_images > 0 || !entry.image_sources.is_empty() {
-        "generated"
-    } else {
-        "unknown"
-    };
-
-    let attachments: Vec<ImportedAttachment> = entry
-        .image_sources
+    let user_attachments: Vec<ImportedAttachment> = entry
+        .user_image_sources
         .iter()
         .map(|pointer| ImportedAttachment {
             pointer: pointer.clone(),
-            source: image_source.to_string(),
+            source: "upload".to_string(),
+            prompt: Some(entry.prompt.clone()),
+            path: None,
+        })
+        .collect();
+
+    let assistant_attachments: Vec<ImportedAttachment> = entry
+        .response_image_sources
+        .iter()
+        .map(|pointer| ImportedAttachment {
+            pointer: pointer.clone(),
+            source: "generated".to_string(),
             prompt: Some(entry.prompt.clone()),
             path: None,
         })
@@ -116,9 +125,10 @@ fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation
         raw_json: serde_json::json!({
             "prompt": entry.prompt,
             "timestamp": entry.timestamp_text,
+            "upload_images": entry.user_image_sources,
         })
         .to_string(),
-        attachments: Vec::new(),
+        attachments: user_attachments,
     };
 
     let assistant_message = ImportedMessage {
@@ -131,7 +141,7 @@ fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation
             "generated_images": entry.generated_images,
         })
         .to_string(),
-        attachments,
+        attachments: assistant_attachments,
     };
 
     Some(ImportedConversation {
@@ -161,6 +171,24 @@ fn extract_primary_content_cell(chunk: &str) -> Option<&str> {
 
     let end = rest.find("</div><div class=\"content-cell")?;
     Some(&rest[..end])
+}
+
+fn extract_upload_content_cell(chunk: &str) -> Option<&str> {
+    let marker =
+        "content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1 mdl-typography--text-right";
+    let start = chunk.find(marker)?;
+    let rest = &chunk[start + marker.len()..];
+    let rest = rest
+        .strip_prefix('>')
+        .or_else(|| rest.strip_prefix("\">"))
+        .unwrap_or(rest);
+    let end = rest.find("</div>")?;
+    let content = rest[..end].trim();
+    if content.is_empty() {
+        None
+    } else {
+        Some(content)
+    }
 }
 
 fn split_html_lines(content: &str) -> Vec<String> {
@@ -341,8 +369,26 @@ mod tests {
         let entry = parse_outer_cell(chunk).expect("entry");
         assert_eq!(entry.prompt, "can you draw pics");
         assert_eq!(entry.generated_images, 1);
-        assert_eq!(entry.image_sources, vec!["10618735082309819750-dfbf8f6d1499c15d.png"]);
+        assert_eq!(
+            entry.response_image_sources,
+            vec!["10618735082309819750-dfbf8f6d1499c15d.png"]
+        );
+        assert!(entry.user_image_sources.is_empty());
         assert!(entry.create_time.is_some());
+    }
+
+    #[test]
+    fn parses_user_upload_from_right_column() {
+        let chunk = r#"<div class="outer-cell mdl-cell mdl-cell--12-col mdl-shadow--2dp"><div class="mdl-grid"><div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1">Prompted?analyze this image<br>2026年1月19日 12:12:29 CST<br><p>Here is my analysis</p>
+</div><div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1 mdl-typography--text-right"><img src="1000017899-9dc5337270f5c185.png" class="image-preview"><br></div><div class="content-cell mdl-cell mdl-cell--12-col mdl-typography--caption">"#;
+
+        let entry = parse_outer_cell(chunk).expect("entry");
+        assert_eq!(entry.user_image_sources, vec!["1000017899-9dc5337270f5c185.png"]);
+        assert!(entry.response_image_sources.is_empty());
+
+        let conversation = activity_to_conversation(entry).expect("conversation");
+        assert_eq!(conversation.messages[0].attachments.len(), 1);
+        assert_eq!(conversation.messages[0].attachments[0].source, "upload");
     }
 
     #[test]

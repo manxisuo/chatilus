@@ -170,5 +170,15 @@ mod tests {
             .filter(|attachment| attachment.path.is_some())
             .count();
         assert!(with_images > 0, "expected gemini images to resolve to local paths");
+
+        let upload_images = result
+            .package
+            .conversations
+            .iter()
+            .flat_map(|conversation| &conversation.messages)
+            .flat_map(|message| &message.attachments)
+            .filter(|attachment| attachment.source == "upload" && attachment.path.is_some())
+            .count();
+        assert!(upload_images > 0, "expected gemini user upload images to resolve");
     }
 }
