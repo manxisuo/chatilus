@@ -64,6 +64,11 @@ function assistantLabel(source?: string | null) {
 function roleLabel(role: string) {
   if (role === "user") return "你";
   if (role === "assistant") return assistantLabel(props.dataSource);
+  if (role === "system") {
+    return props.dataSource?.toLowerCase() === "cursor"
+      ? "Cursor"
+      : "系统";
+  }
   return role;
 }
 

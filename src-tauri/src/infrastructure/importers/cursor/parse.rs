@@ -108,11 +108,7 @@ fn bubble_to_message(bubble_id: &str, bubble: &Value) -> Option<ImportedMessage>
         return None;
     }
 
-    let role = match bubble.get("type").and_then(|v| v.as_i64()) {
-        Some(1) => "user",
-        Some(2) => "assistant",
-        _ => "unknown",
-    };
+    let role = infer_bubble_role(bubble, text);
 
     let create_time = timestamp_value_to_seconds(bubble.get("createdAt"));
 
@@ -126,6 +122,32 @@ fn bubble_to_message(bubble_id: &str, bubble: &Value) -> Option<ImportedMessage>
         raw_json,
         attachments: Vec::new(),
     })
+}
+
+fn infer_bubble_role(bubble: &Value, text: &str) -> &'static str {
+    if is_cursor_system_notification(text) {
+        return "system";
+    }
+
+    if is_cursor_assistant_payload(text) {
+        return "assistant";
+    }
+
+    match bubble.get("type").and_then(|v| v.as_i64()) {
+        Some(1) => "user",
+        Some(2) => "assistant",
+        _ => "unknown",
+    }
+}
+
+fn is_cursor_system_notification(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<system_notification>")
+}
+
+fn is_cursor_assistant_payload(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<assistant_message>")
 }
 
 fn timestamp_value_to_seconds(value: Option<&Value>) -> Option<f64> {
@@ -214,6 +236,19 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i64> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn classifies_system_notification_as_system_role() {
+        let bubble = json!({
+            "bubbleId": "sys-1",
+            "type": 1,
+            "createdAt": "2026-06-07T01:39:00.000Z",
+            "text": "<timestamp>Sunday, Jun 7, 2026, 1:39 AM (UTC+8)</timestamp>\n<system_notification>\nThe following task has finished.\n</system_notification>"
+        });
+
+        let message = bubble_to_message("sys-1", &bubble).expect("message");
+        assert_eq!(message.role, "system");
+    }
 
     #[test]
     fn parses_cursor_bubble_message() {
