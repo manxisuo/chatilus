@@ -90,18 +90,66 @@ function monthLabel(key: string): string {
   return `${year}年${Number(month)}月`;
 }
 
-function formatTime(timestamp: number | null) {
+function formatClock(timestamp: number | null) {
   if (!timestamp) return "";
   return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
+function dayKey(timestamp: number | null): string | null {
+  if (!timestamp) return null;
+  const date = new Date(timestamp * 1000);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function dayLabel(key: string): string {
+  const [, month, day] = key.split("-");
+  return `${Number(month)}月${Number(day)}日`;
+}
+
 function conversationMonth(conversation: ConversationSummary): string | null {
   return conversation.activity_month ?? monthKey(activityTime(conversation));
+}
+
+function groupDays(items: ConversationSummary[]) {
+  const groups = new Map<string, ConversationSummary[]>();
+  for (const conversation of items) {
+    const key = dayKey(activityTime(conversation));
+    if (!key) continue;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(conversation);
+    groups.set(key, bucket);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([key, dayConversations]) => ({
+      key,
+      label: dayLabel(key),
+      conversations: dayConversations.sort(
+        (left, right) => (activityTime(right) ?? 0) - (activityTime(left) ?? 0),
+      ),
+    }));
+}
+
+function sourceCountsForMonth(monthKey: string, items: ConversationSummary[]): SourceCount[] {
+  const fromBackend = months.value.find((item) => item.month === monthKey)?.source_counts;
+  if (fromBackend && fromBackend.length > 0) {
+    return fromBackend;
+  }
+
+  const tallies = new Map<string, number>();
+  for (const conversation of items) {
+    const source = conversation.source ?? "chatgpt";
+    tallies.set(source, (tallies.get(source) ?? 0) + 1);
+  }
+  return [...tallies.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((left, right) => right.count - left.count || left.source.localeCompare(right.source));
 }
 
 function mergeConversations(batch: ConversationSummary[]) {
@@ -130,17 +178,21 @@ const groupedSections = computed(() => {
       : [...groups.keys()].sort((left, right) => right.localeCompare(left));
 
   const sections = orderedMonths
-    .map((key) => ({
-      key,
-      label: monthLabel(key),
-      conversations: groups.get(key) ?? [],
-      count:
-        months.value.find((item) => item.month === key)?.conversation_count ??
-        groups.get(key)?.length ??
-        0,
-      imageCount:
-        months.value.find((item) => item.month === key)?.image_count ?? 0,
-    }))
+    .map((key) => {
+      const monthConversations = groups.get(key) ?? [];
+      return {
+        key,
+        label: monthLabel(key),
+        conversations: monthConversations,
+        days: groupDays(monthConversations),
+        count:
+          months.value.find((item) => item.month === key)?.conversation_count ??
+          monthConversations.length,
+        imageCount:
+          months.value.find((item) => item.month === key)?.image_count ?? 0,
+        sourceCounts: sourceCountsForMonth(key, monthConversations),
+      };
+    })
     .filter((section) => section.conversations.length > 0);
 
   for (const [key, items] of groups) {
@@ -149,8 +201,10 @@ const groupedSections = computed(() => {
       key,
       label: monthLabel(key),
       conversations: items,
+      days: groupDays(items),
       count: items.length,
       imageCount: 0,
+      sourceCounts: sourceCountsForMonth(key, items),
     });
   }
 
@@ -347,7 +401,12 @@ onMounted(() => {
             @click="jumpToMonth(bucket.month)"
           >
             <span class="month-nav-label">{{ monthLabel(bucket.month) }}</span>
-            <span class="month-nav-count">{{ bucket.conversation_count }}</span>
+            <span class="month-nav-meta">
+              <span class="month-nav-count">{{ bucket.conversation_count }}</span>
+              <span v-if="bucket.image_count" class="month-nav-images">
+                {{ bucket.image_count }} 图
+              </span>
+            </span>
           </button>
         </div>
       </aside>
@@ -367,7 +426,18 @@ onMounted(() => {
             :data-timeline-month="section.key"
           >
             <div class="section-header">
-              <h3 class="section-title">{{ section.label }}</h3>
+              <div class="section-header-main">
+                <h3 class="section-title">{{ section.label }}</h3>
+                <div v-if="section.sourceCounts.length" class="section-sources">
+                  <span
+                    v-for="item in section.sourceCounts"
+                    :key="item.source"
+                    class="section-source-pill"
+                  >
+                    {{ sourceLabel(item.source) }} {{ item.count }}
+                  </span>
+                </div>
+              </div>
               <div class="section-header-actions">
                 <span class="section-count">
                   {{ section.conversations.length
@@ -386,66 +456,73 @@ onMounted(() => {
                 </button>
               </div>
             </div>
-            <button
-              v-for="conversation in section.conversations"
-              :key="conversation.id"
-              type="button"
-              class="timeline-item"
-              @click="emit('openConversation', conversation.id)"
+            <div
+              v-for="day in section.days"
+              :key="day.key"
+              class="timeline-day"
             >
-              <div class="item-top">
-                <el-tag
-                  size="small"
-                  :type="sourceTagType(conversation.source)"
-                  effect="plain"
-                >
-                  {{ sourceLabel(conversation.source) }}
-                </el-tag>
-                <span v-if="activityTime(conversation)" class="item-time">
-                  {{ formatTime(activityTime(conversation)) }}
-                </span>
-              </div>
-              <div class="item-title">{{ conversation.title }}</div>
-              <div class="item-meta">
-                <span>{{ conversation.message_count }} 条消息</span>
-                <span v-if="conversation.model">{{ conversation.model }}</span>
-                <span v-if="conversation.is_starred" class="item-star">★ 已收藏</span>
-              </div>
-              <div
-                v-if="conversation.latest_message_id || conversation.has_images"
-                class="item-actions"
+              <h4 class="day-header">{{ day.label }}</h4>
+              <button
+                v-for="conversation in day.conversations"
+                :key="conversation.id"
+                type="button"
+                class="timeline-item"
+                @click="emit('openConversation', conversation.id)"
               >
-                <button
-                  v-if="conversation.latest_message_id"
-                  type="button"
-                  class="item-action"
-                  @click.stop="
-                    emit('openMessage', conversation.id, conversation.latest_message_id!)
-                  "
+                <div class="item-top">
+                  <el-tag
+                    size="small"
+                    :type="sourceTagType(conversation.source)"
+                    effect="plain"
+                  >
+                    {{ sourceLabel(conversation.source) }}
+                  </el-tag>
+                  <span v-if="activityTime(conversation)" class="item-time">
+                    {{ formatClock(activityTime(conversation)) }}
+                  </span>
+                </div>
+                <div class="item-title">{{ conversation.title }}</div>
+                <div class="item-meta">
+                  <span>{{ conversation.message_count }} 条消息</span>
+                  <span v-if="conversation.model">{{ conversation.model }}</span>
+                  <span v-if="conversation.is_starred" class="item-star">★ 已收藏</span>
+                </div>
+                <div
+                  v-if="conversation.latest_message_id || conversation.has_images"
+                  class="item-actions"
                 >
-                  最新消息
-                </button>
-                <button
-                  v-if="conversation.has_images"
-                  type="button"
-                  class="item-action"
-                  @click.stop="emit('openGallery', { conversationId: conversation.id })"
-                >
-                  图片
-                </button>
-              </div>
-              <div v-if="conversation.tags.length" class="item-tags">
-                <el-tag
-                  v-for="tag in conversation.tags"
-                  :key="tag"
-                  size="small"
-                  type="info"
-                  effect="plain"
-                >
-                  {{ tag }}
-                </el-tag>
-              </div>
-            </button>
+                  <button
+                    v-if="conversation.latest_message_id"
+                    type="button"
+                    class="item-action"
+                    @click.stop="
+                      emit('openMessage', conversation.id, conversation.latest_message_id!)
+                    "
+                  >
+                    最新消息
+                  </button>
+                  <button
+                    v-if="conversation.has_images"
+                    type="button"
+                    class="item-action"
+                    @click.stop="emit('openGallery', { conversationId: conversation.id })"
+                  >
+                    图片
+                  </button>
+                </div>
+                <div v-if="conversation.tags.length" class="item-tags">
+                  <el-tag
+                    v-for="tag in conversation.tags"
+                    :key="tag"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                  >
+                    {{ tag }}
+                  </el-tag>
+                </div>
+              </button>
+            </div>
           </section>
           <div class="timeline-footer">{{ footerText }}</div>
         </template>
@@ -581,6 +658,15 @@ onMounted(() => {
 
 .month-nav-label {
   min-width: 0;
+  flex: 1;
+}
+
+.month-nav-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .month-nav-count {
@@ -589,7 +675,14 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.month-nav-item.active .month-nav-count {
+.month-nav-images {
+  font-size: 10px;
+  color: var(--cl-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.month-nav-item.active .month-nav-count,
+.month-nav-item.active .month-nav-images {
   color: var(--el-color-primary);
 }
 
@@ -612,7 +705,7 @@ onMounted(() => {
 
 .section-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
@@ -625,6 +718,26 @@ onMounted(() => {
     var(--cl-panel) 70%,
     rgba(255, 255, 255, 0)
   );
+}
+
+.section-header-main {
+  min-width: 0;
+}
+
+.section-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.section-source-pill {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  border: 1px solid var(--cl-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--cl-bg);
 }
 
 .section-header-actions {
@@ -655,6 +768,17 @@ onMounted(() => {
 
 .section-count {
   font-size: 12px;
+  color: var(--cl-text-muted);
+}
+
+.timeline-day + .timeline-day {
+  margin-top: 18px;
+}
+
+.day-header {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--cl-text-muted);
 }
 

@@ -154,6 +154,8 @@ pub struct TimelineMonthBucket {
     pub conversation_count: i64,
     #[serde(default)]
     pub image_count: i64,
+    #[serde(default)]
+    pub source_counts: Vec<SourceCount>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

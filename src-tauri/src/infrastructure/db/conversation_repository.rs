@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -12,7 +13,7 @@ use crate::domain::ports::{
 use crate::domain::ports::SearchIndexEntry;
 use crate::infrastructure::importers::chatgpt::attachments::imported_attachments_to_views;
 use crate::infrastructure::search::{index_message, remove_conversation_index};
-use crate::models::{ConversationSummary, ExportResult, TimelineMonthBucket};
+use crate::models::{ConversationSummary, ExportResult, SourceCount, TimelineMonthBucket};
 
 use super::helpers::{
     format_timestamp, map_conversation_summary, role_heading,
@@ -24,12 +25,74 @@ use super::Database;
 const ACTIVITY_MONTH_SQL: &str =
     "strftime('%Y-%m', datetime(COALESCE(c.update_time, c.create_time), 'unixepoch', 'localtime'))";
 
+const HAS_IMAGES_EXISTS_SQL: &str =
+    "EXISTS (SELECT 1 FROM assets a WHERE a.conversation_id = c.id AND a.local_path != '')";
+
+const HAS_ATTACHMENTS_EXISTS_SQL: &str =
+    "EXISTS (
+        SELECT 1 FROM messages m
+        WHERE m.conversation_id = c.id
+          AND m.attachments IS NOT NULL
+          AND m.attachments != ''
+          AND m.attachments != '[]'
+    )";
+
 fn map_timeline_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
     let mut summary = map_conversation_summary(row)?;
     summary.activity_month = row.get(10)?;
     summary.latest_message_id = row.get(11)?;
     summary.has_images = row.get::<_, i64>(12)? != 0;
     Ok(summary)
+}
+
+fn timeline_month_source_counts(
+    conn: &rusqlite::Connection,
+    source: Option<&str>,
+) -> Result<HashMap<String, Vec<SourceCount>>, String> {
+    let mut sql = String::from("SELECT ");
+    sql.push_str(ACTIVITY_MONTH_SQL);
+    sql.push_str(
+        " AS month_key,
+                COALESCE(c.source, 'chatgpt') AS source,
+                COUNT(*) AS count
+         FROM conversations c
+         WHERE COALESCE(c.update_time, c.create_time, 0) > 0",
+    );
+    let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
+        sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+        bind.push(Box::new(source.to_string()));
+    }
+
+    sql.push_str(
+        " GROUP BY month_key, source
+          HAVING month_key IS NOT NULL
+          ORDER BY month_key DESC, count DESC, source ASC",
+    );
+
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("查询时间线月份来源失败: {e}"))?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                SourceCount {
+                    source: row.get(1)?,
+                    count: row.get(2)?,
+                },
+            ))
+        })
+        .map_err(|e| format!("查询时间线月份来源失败: {e}"))?;
+
+    let mut counts: HashMap<String, Vec<SourceCount>> = HashMap::new();
+    for row in rows {
+        let (month, entry) = row.map_err(|e| format!("读取时间线月份来源失败: {e}"))?;
+        counts.entry(month).or_default().push(entry);
+    }
+    Ok(counts)
 }
 
 impl ConversationRepository for Database {
@@ -72,16 +135,18 @@ impl ConversationRepository for Database {
             sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
             bind.push(Box::new(source.to_string()));
         }
-        if query.has_images || query.has_attachments {
-            sql.push_str(
-                " AND EXISTS (
-                    SELECT 1 FROM messages m
-                    WHERE m.conversation_id = c.id
-                      AND m.attachments IS NOT NULL
-                      AND m.attachments != ''
-                      AND m.attachments != '[]'
-                )",
-            );
+        if query.has_images && query.has_attachments {
+            sql.push_str(" AND (");
+            sql.push_str(HAS_IMAGES_EXISTS_SQL);
+            sql.push_str(" OR ");
+            sql.push_str(HAS_ATTACHMENTS_EXISTS_SQL);
+            sql.push_str(")");
+        } else if query.has_images {
+            sql.push_str(" AND ");
+            sql.push_str(HAS_IMAGES_EXISTS_SQL);
+        } else if query.has_attachments {
+            sql.push_str(" AND ");
+            sql.push_str(HAS_ATTACHMENTS_EXISTS_SQL);
         }
         if query.has_code {
             sql.push_str(
@@ -132,13 +197,10 @@ impl ConversationRepository for Database {
                      WHERE m.conversation_id = c.id
                      ORDER BY m.sort_order DESC
                      LIMIT 1) AS latest_message_id,
-                    CASE WHEN EXISTS (
-                        SELECT 1 FROM messages m
-                        WHERE m.conversation_id = c.id
-                          AND m.attachments IS NOT NULL
-                          AND m.attachments != ''
-                          AND m.attachments != '[]'
-                    ) THEN 1 ELSE 0 END AS has_images
+                    CASE WHEN ");
+        sql.push_str(HAS_IMAGES_EXISTS_SQL);
+        sql.push_str(
+            " THEN 1 ELSE 0 END AS has_images
              FROM conversations c
              LEFT JOIN conversation_tags ct ON ct.conversation_id = c.id
              LEFT JOIN tags t ON t.id = ct.tag_id
@@ -226,12 +288,22 @@ impl ConversationRepository for Database {
                     month: row.get(0)?,
                     conversation_count: row.get(1)?,
                     image_count: 0,
+                    source_counts: Vec::new(),
                 })
             })
             .map_err(|e| format!("查询时间线月份失败: {e}"))?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取时间线月份失败: {e}"))
+        let mut months = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取时间线月份失败: {e}"))?;
+        let source_counts = timeline_month_source_counts(&self.conn, source)?;
+        for bucket in &mut months {
+            bucket.source_counts = source_counts
+                .get(&bucket.month)
+                .cloned()
+                .unwrap_or_default();
+        }
+        Ok(months)
     }
 
     fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String> {
@@ -1097,6 +1169,16 @@ mod merge_tests {
         assert_eq!(months.len(), 2);
         assert_eq!(months[0].month, "2024-07");
         assert_eq!(months[1].month, "2024-06");
+        let june_sources: Vec<_> = months[1]
+            .source_counts
+            .iter()
+            .map(|item| item.source.as_str())
+            .collect();
+        assert!(june_sources.contains(&"chatgpt"));
+        assert!(months[0]
+            .source_counts
+            .iter()
+            .any(|item| item.source == "cursor"));
 
         let cursor_months =
             ConversationRepository::list_timeline_months(&db, Some("cursor")).expect("cursor months");

@@ -103,6 +103,7 @@ export interface TimelineMonthBucket {
   month: string;
   conversation_count: number;
   image_count?: number;
+  source_counts?: SourceCount[];
 }
 
 export interface DatabaseStats {
