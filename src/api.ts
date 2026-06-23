@@ -28,6 +28,9 @@ export function listConversations(options?: {
   starredOnly?: boolean;
   tagId?: number | null;
   source?: string | null;
+  hasImages?: boolean;
+  hasCode?: boolean;
+  hasAttachments?: boolean;
   limit?: number;
   offset?: number;
 }) {
@@ -36,6 +39,9 @@ export function listConversations(options?: {
     starredOnly: options?.starredOnly ?? false,
     tagId: options?.tagId ?? null,
     source: options?.source ?? null,
+    hasImages: options?.hasImages ?? false,
+    hasCode: options?.hasCode ?? false,
+    hasAttachments: options?.hasAttachments ?? false,
     limit: options?.limit ?? 200,
     offset: options?.offset ?? 0,
   });

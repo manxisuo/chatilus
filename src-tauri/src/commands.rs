@@ -82,6 +82,9 @@ pub fn list_conversations(
     starred_only: Option<bool>,
     tag_id: Option<i64>,
     source: Option<String>,
+    has_images: Option<bool>,
+    has_code: Option<bool>,
+    has_attachments: Option<bool>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ConversationSummary>, String> {
@@ -92,6 +95,9 @@ pub fn list_conversations(
         starred_only.unwrap_or(false),
         tag_id,
         source.as_deref(),
+        has_images.unwrap_or(false),
+        has_code.unwrap_or(false),
+        has_attachments.unwrap_or(false),
         limit.unwrap_or(200),
         offset.unwrap_or(0),
     )

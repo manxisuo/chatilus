@@ -9,6 +9,9 @@ pub struct ConversationListQuery {
     pub starred_only: bool,
     pub tag_id: Option<i64>,
     pub source: Option<String>,
+    pub has_images: bool,
+    pub has_code: bool,
+    pub has_attachments: bool,
     pub limit: i64,
     pub offset: i64,
 }

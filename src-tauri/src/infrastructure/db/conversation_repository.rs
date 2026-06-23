@@ -60,6 +60,26 @@ impl ConversationRepository for Database {
             sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
             bind.push(Box::new(source.to_string()));
         }
+        if query.has_images || query.has_attachments {
+            sql.push_str(
+                " AND EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.conversation_id = c.id
+                      AND m.attachments IS NOT NULL
+                      AND m.attachments != ''
+                      AND m.attachments != '[]'
+                )",
+            );
+        }
+        if query.has_code {
+            sql.push_str(
+                " AND EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.conversation_id = c.id
+                      AND m.content LIKE '%```%'
+                )",
+            );
+        }
 
         sql.push_str(
             " GROUP BY c.id

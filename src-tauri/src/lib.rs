@@ -92,7 +92,9 @@ mod tests {
         let hits = application::search_messages(&db, "uuid", 5).expect("search");
         assert!(!hits.is_empty());
 
-        let conv_id = application::list_conversations(&db, None, false, None, None, 1, 0)
+        let conv_id = application::list_conversations(
+            &db, None, false, None, None, false, false, false, 1, 0,
+        )
             .expect("list")[0]
             .id
             .clone();

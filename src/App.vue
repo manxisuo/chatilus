@@ -55,6 +55,9 @@ const listQuery = ref("");
 const searchQuery = ref("");
 const searchMode = ref(false);
 const starredOnly = ref(false);
+const filterHasImages = ref(false);
+const filterHasCode = ref(false);
+const filterHasAttachments = ref(false);
 const filterTagId = ref<number | null>(null);
 const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
@@ -115,7 +118,14 @@ const hasMoreConversations = ref(true);
 const loadingMore = ref(false);
 
 const listTotalHint = computed(() => {
-  if (starredOnly.value || filterTagId.value || listQuery.value.trim()) {
+  if (
+    starredOnly.value ||
+    filterHasImages.value ||
+    filterHasCode.value ||
+    filterHasAttachments.value ||
+    filterTagId.value ||
+    listQuery.value.trim()
+  ) {
     return null;
   }
   if (filterSource.value) {
@@ -202,6 +212,9 @@ async function loadConversations(reset = true) {
     const batch = await listConversations({
       query: listQuery.value.trim() || undefined,
       starredOnly: starredOnly.value,
+      hasImages: filterHasImages.value,
+      hasCode: filterHasCode.value,
+      hasAttachments: filterHasAttachments.value,
       tagId: filterTagId.value,
       source: filterSource.value,
       limit: PAGE_SIZE,
@@ -521,7 +534,9 @@ watch(activeId, async (id) => {
   }
 });
 
-watch([listQuery, starredOnly, filterTagId, filterSource], async () => {
+watch(
+  [listQuery, starredOnly, filterHasImages, filterHasCode, filterHasAttachments, filterTagId, filterSource],
+  async () => {
   if (!searchMode.value) {
     await loadConversations();
   }
@@ -634,32 +649,45 @@ onMounted(async () => {
         </div>
 
         <div class="sidebar-tools">
+          <div class="section-title">筛选</div>
           <el-input
             v-model="listQuery"
             clearable
             placeholder="筛选对话标题…"
             :disabled="searchMode"
           />
-          <div class="filters">
+          <div class="filter-group">
             <el-checkbox v-model="starredOnly" :disabled="searchMode">
-              只看收藏
+              收藏
             </el-checkbox>
-            <el-select
-              v-model="filterTagId"
-              clearable
-              placeholder="按标签筛选"
-              :disabled="searchMode"
-              size="small"
-              class="tag-filter"
-            >
-              <el-option
-                v-for="tag in tags"
-                :key="tag.id"
-                :label="tag.name"
-                :value="tag.id"
-              />
-            </el-select>
+            <el-checkbox v-model="filterHasImages" :disabled="searchMode">
+              有图片
+            </el-checkbox>
+            <el-checkbox v-model="filterHasCode" :disabled="searchMode">
+              有代码
+            </el-checkbox>
+            <el-checkbox v-model="filterHasAttachments" :disabled="searchMode">
+              有附件
+            </el-checkbox>
           </div>
+        </div>
+
+        <div v-if="!searchMode && tags.length > 0" class="tag-section">
+          <div class="section-title">标签</div>
+          <el-select
+            v-model="filterTagId"
+            clearable
+            placeholder="按标签筛选"
+            size="small"
+            class="tag-filter"
+          >
+            <el-option
+              v-for="tag in tags"
+              :key="tag.id"
+              :label="`${tag.name} (${tag.conversation_count})`"
+              :value="tag.id"
+            />
+          </el-select>
         </div>
 
         <div v-if="searchMode" class="search-results">
@@ -933,10 +961,23 @@ onMounted(async () => {
   gap: 10px;
 }
 
-.filters {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.sidebar-tools .section-title {
+  padding: 0 0 4px;
+}
+
+.filter-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+}
+
+.tag-section {
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--cl-border);
+}
+
+.tag-section .section-title {
+  padding: 12px 0 8px;
 }
 
 .tag-filter {
