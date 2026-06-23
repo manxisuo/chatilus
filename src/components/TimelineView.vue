@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { listTimeline, listTimelineMonths } from "../api";
+import TimelineMonthInsight from "./TimelineMonthInsight.vue";
 import type { ConversationSummary, SourceCount, TimelineMonthBucket } from "../types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSource";
+import { buildMonthTopics } from "../utils/timelineTopics";
 
 const props = defineProps<{
   totalCount: number | null;
@@ -27,6 +29,8 @@ const activeMonth = ref<string | null>(null);
 const feedRef = ref<HTMLElement | null>(null);
 const monthNavRef = ref<HTMLElement | null>(null);
 const jumpingToMonth = ref(false);
+const monthInsightLoading = ref(false);
+let monthPreloadTimer: ReturnType<typeof setTimeout> | null = null;
 
 const FEED_PADDING_TOP = 16;
 
@@ -211,6 +215,38 @@ const groupedSections = computed(() => {
   return sections.sort((left, right) => right.key.localeCompare(left.key));
 });
 
+const activeMonthBucket = computed(
+  () => months.value.find((item) => item.month === activeMonth.value) ?? null,
+);
+
+const activeMonthConversations = computed(() => {
+  if (!activeMonth.value) return [];
+  return conversations.value.filter(
+    (conversation) => conversationMonth(conversation) === activeMonth.value,
+  );
+});
+
+const activeMonthInsight = computed(() => {
+  const month = activeMonth.value;
+  const items = activeMonthConversations.value;
+  const bucket = activeMonthBucket.value;
+  const days = new Set(
+    items.map((conversation) => dayKey(activityTime(conversation))).filter(Boolean),
+  );
+
+  return {
+    monthLabel: month ? monthLabel(month) : null,
+    loadedCount: items.length,
+    totalCount: bucket?.conversation_count ?? items.length,
+    imageCount: bucket?.image_count ?? 0,
+    messageCount: items.reduce((sum, conversation) => sum + conversation.message_count, 0),
+    starredCount: items.filter((conversation) => conversation.is_starred).length,
+    activeDays: days.size,
+    sourceCounts: month ? sourceCountsForMonth(month, items) : [],
+    topics: buildMonthTopics(items),
+  };
+});
+
 const footerText = computed(() => {
   if (loadingMore.value) return "加载中…";
   if (hasMore.value) {
@@ -359,8 +395,32 @@ watch(
   },
 );
 
+watch(activeMonth, (month) => {
+  if (!month || jumpingToMonth.value) return;
+  if (monthPreloadTimer) clearTimeout(monthPreloadTimer);
+  monthPreloadTimer = setTimeout(() => {
+    const loaded = activeMonthConversations.value.length;
+    const total = activeMonthBucket.value?.conversation_count ?? loaded;
+    if (loaded >= total) return;
+
+    monthInsightLoading.value = true;
+    void ensureMonthLoaded(month).finally(() => {
+      monthInsightLoading.value = false;
+    });
+  }, 300);
+});
+
+function openActiveMonthGallery() {
+  if (!activeMonth.value) return;
+  emit("openGallery", { month: activeMonth.value });
+}
+
 onMounted(() => {
   void reload();
+});
+
+onUnmounted(() => {
+  if (monthPreloadTimer) clearTimeout(monthPreloadTimer);
 });
 </script>
 
@@ -528,6 +588,20 @@ onMounted(() => {
         </template>
         </div>
       </div>
+
+      <TimelineMonthInsight
+        :month-label="activeMonthInsight.monthLabel"
+        :loaded-count="activeMonthInsight.loadedCount"
+        :total-count="activeMonthInsight.totalCount"
+        :image-count="activeMonthInsight.imageCount"
+        :message-count="activeMonthInsight.messageCount"
+        :starred-count="activeMonthInsight.starredCount"
+        :active-days="activeMonthInsight.activeDays"
+        :source-counts="activeMonthInsight.sourceCounts"
+        :topics="activeMonthInsight.topics"
+        :loading="monthInsightLoading"
+        @open-gallery="openActiveMonthGallery"
+      />
     </div>
   </div>
 </template>

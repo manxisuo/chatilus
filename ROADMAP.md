@@ -154,8 +154,8 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 **v0.5 可选增强（Timeline，非阻塞 v0.6）**
 
-- [ ] 右侧月度洞察面板（统计摘要，为 Topic 预留）
-- [ ] Topic Bubble：标题关键词 / 标签聚合（无 AI）
+- [x] 右侧月度洞察面板（统计摘要 + 来源分布 + Topic 区域）
+- [x] Topic Bubble：标题关键词 / 标签聚合（无 AI）
 
 ### 再往后（v0.6–v0.7：Organize）
 

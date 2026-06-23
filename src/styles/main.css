@@ -10,6 +10,7 @@ html[data-theme="light"] {
   --cl-code-text: #24292f;
   --cl-sidebar-width: 320px;
   --cl-content-max-width: 860px;
+  --cl-insight-width: 240px;
 }
 
 html[data-theme="dark"] {
