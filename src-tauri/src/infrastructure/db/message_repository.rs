@@ -28,10 +28,25 @@ impl MessageRepository for Database {
             .optional()
             .map_err(|e| format!("查询对话来源失败: {e}"))?;
 
-        let media_index = source_path
-            .as_deref()
-            .filter(|path| Path::new(path).is_dir())
-            .map(|path| MediaIndex::build(Path::new(path)));
+        let media_index = source_path.as_deref().and_then(|path| {
+            let path = Path::new(path);
+            if path.is_dir() {
+                return Some(MediaIndex::build(path));
+            }
+
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name == "state.vscdb")
+            {
+                return path
+                    .parent()
+                    .and_then(|global_storage| global_storage.parent())
+                    .map(|user_dir| MediaIndex::build_cursor(user_dir));
+            }
+
+            None
+        });
 
         let mut stmt = self
             .conn

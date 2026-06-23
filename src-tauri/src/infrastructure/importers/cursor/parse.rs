@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use crate::domain::ports::{ImportedConversation, ImportedMessage};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
 
 #[derive(Debug, Clone)]
 pub struct CursorComposerMeta {
@@ -104,7 +104,9 @@ fn bubble_to_message(bubble_id: &str, bubble: &Value) -> Option<ImportedMessage>
         .and_then(|v| v.as_str())
         .map(str::trim)
         .unwrap_or_default();
-    if text.is_empty() {
+    let attachments = extract_bubble_attachments(bubble);
+
+    if text.is_empty() && attachments.is_empty() {
         return None;
     }
 
@@ -120,8 +122,181 @@ fn bubble_to_message(bubble_id: &str, bubble: &Value) -> Option<ImportedMessage>
         content: text.to_string(),
         create_time,
         raw_json,
-        attachments: Vec::new(),
+        attachments,
     })
+}
+
+fn extract_bubble_attachments(bubble: &Value) -> Vec<ImportedAttachment> {
+    let mut attachments = extract_bubble_image_attachments(bubble);
+    attachments.extend(extract_generated_image_from_tool(bubble));
+    if let Some(text) = bubble.get("text").and_then(|value| value.as_str()) {
+        attachments.extend(extract_asset_paths_from_text(text));
+    }
+    dedupe_attachments(attachments)
+}
+
+fn extract_bubble_image_attachments(bubble: &Value) -> Vec<ImportedAttachment> {
+    let source = match bubble.get("type").and_then(|v| v.as_i64()) {
+        Some(1) => "upload",
+        Some(2) => "generated",
+        _ => "unknown",
+    };
+
+    bubble
+        .get("images")
+        .and_then(|value| value.as_array())
+        .map(|images| {
+            images
+                .iter()
+                .filter_map(|image| {
+                    let uuid = image.get("uuid").and_then(|value| value.as_str())?;
+                    if uuid.trim().is_empty() {
+                        return None;
+                    }
+                    Some(ImportedAttachment {
+                        pointer: uuid.to_string(),
+                        source: source.to_string(),
+                        prompt: None,
+                        path: None,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn extract_generated_image_from_tool(bubble: &Value) -> Vec<ImportedAttachment> {
+    let Some(tool) = bubble.get("toolFormerData") else {
+        return Vec::new();
+    };
+    if tool.get("name").and_then(|value| value.as_str()) != Some("generate_image") {
+        return Vec::new();
+    }
+
+    let prompt = extract_generate_image_prompt(tool);
+    let Some(file_path) = extract_generate_image_path(tool) else {
+        return Vec::new();
+    };
+
+    vec![ImportedAttachment {
+        pointer: file_path,
+        source: "generated".to_string(),
+        prompt,
+        path: None,
+    }]
+}
+
+fn extract_generate_image_path(tool: &Value) -> Option<String> {
+    if let Some(result) = tool.get("result").and_then(|value| value.as_str()) {
+        if let Some(path) = parse_generate_image_result_path(result) {
+            return Some(path);
+        }
+    }
+
+    for field in ["params", "rawArgs"] {
+        let Some(text) = tool.get(field).and_then(|value| value.as_str()) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            continue;
+        };
+        if let Some(file_name) = value.get("filePath").and_then(|v| v.as_str()) {
+            if looks_like_absolute_image_path(file_name) {
+                return Some(file_name.to_string());
+            }
+            return Some(file_name.to_string());
+        }
+    }
+
+    None
+}
+
+fn parse_generate_image_result_path(result: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(result).ok()?;
+    value
+        .get("success")
+        .and_then(|success| success.get("filePath"))
+        .and_then(|path| path.as_str())
+        .map(str::to_string)
+}
+
+fn extract_generate_image_prompt(tool: &Value) -> Option<String> {
+    for field in ["params", "rawArgs"] {
+        let Some(text) = tool.get(field).and_then(|value| value.as_str()) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(text) else {
+            continue;
+        };
+        if let Some(description) = value.get("description").and_then(|v| v.as_str()) {
+            let trimmed = description.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn extract_asset_paths_from_text(text: &str) -> Vec<ImportedAttachment> {
+    let mut attachments = Vec::new();
+    let lower = text.to_ascii_lowercase();
+
+    for marker in [".cursor/projects/", ".cursor\\projects\\"] {
+        let mut search_from = 0usize;
+        while let Some(rel_index) = lower[search_from..].find(marker) {
+            let start = search_from + rel_index;
+            let tail = &text[start..];
+            let end = tail
+                .find(|ch: char| ch.is_whitespace() || ch == '`' || ch == ')' || ch == ']')
+                .unwrap_or(tail.len());
+            let candidate = tail[..end].trim_matches(|ch: char| {
+                ch == '`' || ch == '(' || ch == ')'
+            });
+            if looks_like_image_path(candidate) {
+                attachments.push(ImportedAttachment {
+                    pointer: candidate.to_string(),
+                    source: "generated".to_string(),
+                    prompt: None,
+                    path: None,
+                });
+            }
+            search_from = start + marker.len();
+        }
+    }
+
+    attachments
+}
+
+fn looks_like_image_path(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
+}
+
+fn looks_like_absolute_image_path(value: &str) -> bool {
+    looks_like_image_path(value)
+        && (value.contains(":\\") || value.starts_with('/') || value.starts_with("\\\\"))
+}
+
+fn dedupe_attachments(attachments: Vec<ImportedAttachment>) -> Vec<ImportedAttachment> {
+    let mut seen = HashSet::new();
+    attachments
+        .into_iter()
+        .filter(|attachment| seen.insert(attachment_dedup_key(&attachment.pointer)))
+        .collect()
+}
+
+fn attachment_dedup_key(pointer: &str) -> String {
+    let trimmed = pointer.trim();
+    if let Some(file_name) = std::path::Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+    {
+        return file_name.to_ascii_lowercase();
+    }
+    trimmed.to_ascii_lowercase()
 }
 
 fn infer_bubble_role(bubble: &Value, text: &str) -> &'static str {
@@ -273,6 +448,90 @@ mod tests {
             "text": "   "
         });
         assert!(bubble_to_message("abc", &bubble).is_none());
+    }
+
+    #[test]
+    fn keeps_image_only_bubbles() {
+        let bubble = json!({
+            "bubbleId": "img-1",
+            "type": 1,
+            "text": "   ",
+            "images": [{
+                "uuid": "f708e67e-8c7c-4f74-ba96-5a567f3bcf1e",
+                "dimension": { "width": 915, "height": 1024 }
+            }]
+        });
+
+        let message = bubble_to_message("img-1", &bubble).expect("message");
+        assert_eq!(message.role, "user");
+        assert!(message.content.is_empty());
+        assert_eq!(message.attachments.len(), 1);
+        assert_eq!(
+            message.attachments[0].pointer,
+            "f708e67e-8c7c-4f74-ba96-5a567f3bcf1e"
+        );
+        assert_eq!(message.attachments[0].source, "upload");
+    }
+
+    #[test]
+    fn extracts_upload_images_from_user_bubble() {
+        let bubble = json!({
+            "bubbleId": "abc",
+            "type": 1,
+            "text": "see this",
+            "images": [
+                { "uuid": "uuid-1" },
+                { "uuid": "uuid-2" }
+            ]
+        });
+
+        let message = bubble_to_message("abc", &bubble).expect("message");
+        assert_eq!(message.attachments.len(), 2);
+        assert!(message
+            .attachments
+            .iter()
+            .all(|attachment| attachment.source == "upload"));
+    }
+
+    #[test]
+    fn extracts_generated_image_from_tool_former_data() {
+        let bubble = json!({
+            "bubbleId": "gen-1",
+            "type": 2,
+            "text": "   ",
+            "toolFormerData": {
+                "name": "generate_image",
+                "params": "{\"description\":\"Java thread diagram\",\"filePath\":\"java-thread-state-transitions.png\"}",
+                "result": "{\"success\":{\"filePath\":\"C:\\\\Users\\\\demo\\\\.cursor\\\\projects\\\\d-Code-ChatLens/assets/java-thread-state-transitions.png\"}}"
+            }
+        });
+
+        let message = bubble_to_message("gen-1", &bubble).expect("message");
+        assert_eq!(message.role, "assistant");
+        assert!(message.content.is_empty());
+        assert_eq!(message.attachments.len(), 1);
+        assert_eq!(message.attachments[0].source, "generated");
+        assert!(message
+            .attachments[0]
+            .pointer
+            .contains("java-thread-state-transitions.png"));
+        assert_eq!(
+            message.attachments[0].prompt.as_deref(),
+            Some("Java thread diagram")
+        );
+    }
+
+    #[test]
+    fn extracts_asset_path_from_assistant_text() {
+        let bubble = json!({
+            "bubbleId": "txt-1",
+            "type": 2,
+            "text": "图在这里：\n\n`C:\\Users\\demo\\.cursor\\projects\\d-Code-ChatLens\\assets\\java-thread-state-transitions.png`"
+        });
+
+        let message = bubble_to_message("txt-1", &bubble).expect("message");
+        assert_eq!(message.attachments.len(), 1);
+        assert_eq!(message.attachments[0].source, "generated");
     }
 
     #[test]

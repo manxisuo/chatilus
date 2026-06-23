@@ -23,6 +23,28 @@ pub fn resolve_cursor_db_path(input: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Returns `Cursor/User` when `input` points at the db file or that directory tree.
+pub fn resolve_cursor_user_dir(input: &Path) -> Option<PathBuf> {
+    if let Some(db_path) = resolve_cursor_db_path(input) {
+        return user_dir_from_db_path(&db_path);
+    }
+
+    let direct = input.join("globalStorage").join("state.vscdb");
+    if direct.is_file() && is_cursor_vscdb(&direct) {
+        return Some(input.to_path_buf());
+    }
+
+    None
+}
+
+fn user_dir_from_db_path(db_path: &Path) -> Option<PathBuf> {
+    let global_storage = db_path.parent()?;
+    if global_storage.file_name().and_then(|name| name.to_str()) != Some("globalStorage") {
+        return None;
+    }
+    global_storage.parent().map(Path::to_path_buf)
+}
+
 pub fn is_cursor_vscdb(path: &Path) -> bool {
     open_cursor_db(path)
         .ok()

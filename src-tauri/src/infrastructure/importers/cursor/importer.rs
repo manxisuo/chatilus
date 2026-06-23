@@ -3,8 +3,10 @@ use crate::domain::ports::{
     ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
     NormalizedImportResult,
 };
+use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
+use crate::infrastructure::media::MediaIndex;
 
-use super::db::{open_cursor_db, parse_all_conversations, resolve_cursor_db_path};
+use super::db::{open_cursor_db, parse_all_conversations, resolve_cursor_db_path, resolve_cursor_user_dir};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CursorImporter;
@@ -72,7 +74,21 @@ impl Importer for CursorImporter {
             });
         }
 
-        let conversations = parse_all_conversations(&conn)?;
+        let mut conversations = parse_all_conversations(&conn)?;
+
+        let user_dir = resolve_cursor_user_dir(&db_path)
+            .ok_or_else(|| format!("无法定位 Cursor User 目录: {}", db_path.display()))?;
+        let media_index = MediaIndex::build_cursor(&user_dir);
+
+        for conversation in &mut conversations {
+            for message in &mut conversation.messages {
+                message.attachments = resolve_imported_attachments(
+                    &message.attachments,
+                    &message.role,
+                    &media_index,
+                );
+            }
+        }
 
         if let Some(callback) = &options.on_progress {
             callback(ImportProgress {
@@ -87,7 +103,7 @@ impl Importer for CursorImporter {
             source: self.source(),
             source_path: db_path.display().to_string(),
             files_processed: 1,
-            media_files_indexed: 0,
+            media_files_indexed: media_index.len(),
             package: ImportPackage { conversations },
         })
     }
@@ -133,5 +149,32 @@ mod tests {
 
         assert_eq!(result.source, DataSource::Cursor);
         assert!(!result.package.conversations.is_empty());
+
+        if result.media_files_indexed > 0 {
+            let with_images = result
+                .package
+                .conversations
+                .iter()
+                .flat_map(|conversation| &conversation.messages)
+                .flat_map(|message| &message.attachments)
+                .filter(|attachment| attachment.path.is_some())
+                .count();
+            assert!(with_images > 0, "expected cursor images to resolve to local paths");
+
+            let generated_images = result
+                .package
+                .conversations
+                .iter()
+                .flat_map(|conversation| &conversation.messages)
+                .flat_map(|message| &message.attachments)
+                .filter(|attachment| {
+                    attachment.source == "generated" && attachment.path.is_some()
+                })
+                .count();
+            assert!(
+                generated_images > 0,
+                "expected cursor generated images to resolve to local paths"
+            );
+        }
     }
 }
