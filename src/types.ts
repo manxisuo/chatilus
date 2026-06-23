@@ -105,6 +105,7 @@ export interface DatabaseStats {
   starred_conversation_count: number;
   starred_message_count: number;
   tag_count: number;
+  last_imported_at: number | null;
   db_path: string;
   conversation_counts_by_source?: SourceCount[];
   image_counts_by_source?: SourceCount[];

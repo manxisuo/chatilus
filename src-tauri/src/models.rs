@@ -152,6 +152,7 @@ pub struct DatabaseStats {
     pub starred_conversation_count: i64,
     pub starred_message_count: i64,
     pub tag_count: i64,
+    pub last_imported_at: Option<f64>,
     pub db_path: String,
     pub conversation_counts_by_source: Vec<SourceCount>,
     pub image_counts_by_source: Vec<SourceCount>,

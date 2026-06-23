@@ -37,6 +37,14 @@ impl Database {
             AssetRepository::count_by_source(self)?;
         let conversation_counts_by_source = self.conversation_counts_by_source()?;
         let image_counts_by_source = AssetRepository::image_counts_by_conversation_source(self)?;
+        let last_imported_at: Option<f64> = self
+            .conn
+            .query_row(
+                "SELECT MAX(imported_at) FROM imports",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("统计最近导入时间失败: {e}"))?;
 
         Ok(DatabaseStats {
             conversation_count,
@@ -47,6 +55,7 @@ impl Database {
             starred_conversation_count,
             starred_message_count,
             tag_count,
+            last_imported_at,
             db_path: self.path.clone(),
             conversation_counts_by_source,
             image_counts_by_source,

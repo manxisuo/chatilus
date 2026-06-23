@@ -60,6 +60,40 @@ const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "images">("chats");
 
+const sourceCount = computed(() => {
+  const entries = stats.value?.conversation_counts_by_source ?? [];
+  return entries.filter((item) => item.count > 0).length;
+});
+
+function formatStatsTime(timestamp: number | null | undefined) {
+  if (!timestamp) return "—";
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const dashboardStats = computed(() => {
+  if (!stats.value) return [];
+  const s = stats.value;
+  return [
+    { label: "对话", value: s.conversation_count, icon: "💬" },
+    { label: "图片", value: s.image_count, icon: "🖼" },
+    { label: "来源", value: sourceCount.value, icon: "📦" },
+    { label: "收藏对话", value: s.starred_conversation_count, icon: "★" },
+    { label: "标签", value: s.tag_count, icon: "🏷" },
+    {
+      label: "最近导入",
+      value: formatStatsTime(s.last_imported_at),
+      icon: "📥",
+      isText: true,
+    },
+  ];
+});
+
 const navItems = computed(() => [
   {
     id: "chats" as const,
@@ -548,6 +582,20 @@ onMounted(async () => {
       </div>
     </el-header>
 
+    <div v-if="stats" class="stats-bar" aria-label="库统计">
+      <div
+        v-for="item in dashboardStats"
+        :key="item.label"
+        class="stat-item"
+      >
+        <span class="stat-icon" aria-hidden="true">{{ item.icon }}</span>
+        <span class="stat-label">{{ item.label }}</span>
+        <span class="stat-value">
+          {{ item.isText ? item.value : Number(item.value).toLocaleString() }}
+        </span>
+      </div>
+    </div>
+
     <el-dialog
       v-model="importDialogVisible"
       title="正在导入"
@@ -706,6 +754,38 @@ onMounted(async () => {
   gap: 16px;
   border-bottom: 1px solid var(--cl-border);
   background: var(--cl-panel);
+}
+
+.stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-bg);
+}
+
+.stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+}
+
+.stat-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.stat-label {
+  font-weight: 500;
+}
+
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-text);
+  font-weight: 600;
 }
 
 .brand {
