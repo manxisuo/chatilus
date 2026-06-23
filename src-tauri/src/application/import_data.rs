@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::db::Database;
@@ -28,7 +29,13 @@ pub fn run_import_resolved(
     resolved: ResolvedImportPath,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
 ) -> Result<ImportResult, String> {
+    let export_dir = if resolved.cleanup.is_some() {
+        persist_export_dir(&db.path, &resolved.export_label, &resolved.export_dir)?
+    } else {
+        resolved.export_dir.clone()
+    };
     let _cleanup = resolved.cleanup;
+
     let registry = default_importer_registry();
     let importer = registry
         .by_id(&resolved.importer_id)
@@ -41,9 +48,7 @@ pub fn run_import_resolved(
     );
 
     let normalized = importer.import(
-        &ImportInput {
-            path: resolved.export_dir,
-        },
+        &ImportInput { path: export_dir },
         &ImportOptions {
             on_progress: on_progress.clone(),
         },
@@ -72,4 +77,65 @@ pub fn run_import_resolved(
     }
 
     Ok(result)
+}
+
+fn imports_cache_root(db_path: &str) -> PathBuf {
+    Path::new(db_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("imports")
+}
+
+fn persist_export_dir(
+    db_path: &str,
+    export_label: &str,
+    source_dir: &Path,
+) -> Result<PathBuf, String> {
+    let safe_label = export_label
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let dest = imports_cache_root(db_path).join(safe_label);
+    if dest.exists() {
+        fs::remove_dir_all(&dest)
+            .map_err(|e| format!("清理旧导入缓存失败 ({}): {e}", dest.display()))?;
+    }
+    copy_dir_recursive(source_dir, &dest)?;
+    Ok(dest)
+}
+
+fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest)
+        .map_err(|e| format!("创建导入缓存目录失败 ({}): {e}", dest.display()))?;
+
+    for entry in fs::read_dir(source)
+        .map_err(|e| format!("读取导出目录失败 ({}): {e}", source.display()))?
+    {
+        let entry = entry.map_err(|e| format!("读取导出目录项失败: {e}"))?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("创建导入缓存目录失败 ({}): {e}", parent.display()))?;
+            }
+            fs::copy(&from, &to).map_err(|e| {
+                format!(
+                    "复制导出文件失败 ({} -> {}): {e}",
+                    from.display(),
+                    to.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }

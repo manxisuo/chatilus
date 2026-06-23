@@ -71,7 +71,16 @@ impl MessageRepository for Database {
                 } else {
                     attachments = attachments
                         .into_iter()
-                        .map(|attachment| enrich_attachment_view(attachment, &role))
+                        .map(|mut attachment| {
+                            if !Path::new(&attachment.path).is_file() {
+                                if let Some(ref index) = media_index {
+                                    if let Some(path) = index.resolve(&attachment.file_key) {
+                                        attachment.path = path.display().to_string();
+                                    }
+                                }
+                            }
+                            enrich_attachment_view(attachment, &role)
+                        })
                         .collect();
                 }
 

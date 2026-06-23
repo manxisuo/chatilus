@@ -408,21 +408,32 @@ fn reorder_conversation_messages(
 ) -> Result<(), String> {
     let mut stmt = tx
         .prepare(
-            "SELECT id, create_time
+            "SELECT id, create_time, role
              FROM messages
              WHERE conversation_id = ?1
-             ORDER BY COALESCE(create_time, 0), id",
+             ORDER BY COALESCE(create_time, 0),
+                      CASE role
+                        WHEN 'user' THEN 0
+                        WHEN 'assistant' THEN 1
+                        WHEN 'system' THEN 2
+                        ELSE 3
+                      END,
+                      id",
         )
         .map_err(|e| format!("读取消息排序失败: {e}"))?;
 
     let rows = stmt
         .query_map(params![conversation_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Option<f64>>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<f64>>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .map_err(|e| format!("读取消息排序失败: {e}"))?;
 
     for (index, row) in rows.enumerate() {
-        let (message_id, _) = row.map_err(|e| format!("读取消息排序失败: {e}"))?;
+        let (message_id, _, _) = row.map_err(|e| format!("读取消息排序失败: {e}"))?;
         tx.execute(
             "UPDATE messages SET sort_order = ?1 WHERE id = ?2",
             params![index as i64, message_id],
@@ -696,5 +707,68 @@ mod merge_tests {
         .expect("list cursor");
         assert_eq!(cursor_only.len(), 1);
         assert_eq!(cursor_only[0].source, "cursor");
+    }
+
+    #[test]
+    fn reorder_puts_user_before_assistant_when_timestamps_match() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-message-order-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        let conversation = ImportedConversation {
+            id: "gemini-activity-1".to_string(),
+            title: "draw pics".to_string(),
+            create_time: Some(1_718_822_931.0),
+            update_time: Some(1_718_822_931.0),
+            model: Some("gemini".to_string()),
+            messages: vec![
+                ImportedMessage {
+                    id: "abc::user".to_string(),
+                    role: "user".to_string(),
+                    content: "can you draw pics".to_string(),
+                    create_time: Some(1_718_822_931.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                },
+                ImportedMessage {
+                    id: "abc::assistant".to_string(),
+                    role: "assistant".to_string(),
+                    content: "sure".to_string(),
+                    create_time: Some(1_718_822_931.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                },
+            ],
+        };
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[conversation],
+            "/gemini",
+            DataSource::Gemini,
+            0,
+        )
+        .expect("gemini import");
+
+        let roles: Vec<String> = db
+            .conn
+            .prepare(
+                "SELECT role FROM messages
+                 WHERE conversation_id = 'gemini::gemini-activity-1'
+                 ORDER BY sort_order",
+            )
+            .expect("prepare")
+            .query_map([], |row| row.get(0))
+            .expect("query")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("roles");
+
+        assert_eq!(roles, vec!["user".to_string(), "assistant".to_string()]);
     }
 }

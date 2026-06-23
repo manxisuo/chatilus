@@ -73,9 +73,10 @@ impl ImporterRegistry {
 }
 
 pub fn default_importer_registry() -> ImporterRegistry {
-    use super::{ChatGptImporter, CursorImporter};
+    use super::{ChatGptImporter, CursorImporter, GeminiImporter};
 
     ImporterRegistry::new(vec![
+        Box::new(GeminiImporter::new()),
         Box::new(ChatGptImporter::new()),
         Box::new(CursorImporter::new()),
     ])

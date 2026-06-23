@@ -540,7 +540,7 @@ onMounted(async () => {
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb）</el-dropdown-item>
+              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb / Gemini Takeout）</el-dropdown-item>
               <el-dropdown-item command="dir">导入目录</el-dropdown-item>
             </el-dropdown-menu>
           </template>

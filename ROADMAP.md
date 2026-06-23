@@ -16,7 +16,8 @@ v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从�
 
 - [x] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
 - [x] Cursor 本地 `state.vscdb` 导入（PR4b）
-- [ ] Claude / Gemini 等导出格式（按需逐个新增 Importer，PR4c+，有样本再做）
+- [ ] Claude 导出格式（按需新增 Importer，PR4c+，有样本再做）
+- [x] Gemini Google Takeout（`My Activity / Gemini Apps` HTML 活动记录）
 
 ### 多源 UI（PR4d，与 Importer 同属 v0.4）
 
@@ -321,7 +322,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 |----|------|------|
 | PR4a | `ImporterRegistry` + 去硬编码 | ✅ |
 | PR4b | Cursor Importer | ✅ |
-| PR4c | Claude / Gemini 等（有样本再做） | 待定 |
+| PR4c | Claude / Gemini 等（有样本再做） | Gemini ✅ / Claude 待定 |
 | PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | ✅ |
 
 **不在 v0.4 范围内**

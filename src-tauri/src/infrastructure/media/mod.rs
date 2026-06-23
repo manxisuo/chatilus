@@ -68,6 +68,17 @@ fn register_file_keys(name: &str, path: &PathBuf, index: &mut HashMap<String, Pa
     if let Some(key) = file_key_from_hash_name(name) {
         index.entry(key).or_insert_with(|| path.clone());
     }
+
+    if is_image_filename(name) {
+        index.entry(name.to_string()).or_insert_with(|| path.clone());
+    }
+}
+
+fn is_image_filename(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]
+        .iter()
+        .any(|ext| lower.ends_with(ext))
 }
 
 /// `file-UZjt2wbMlSFQEdh6nzVVybgI-1000036297.jpg` → `file-UZjt2wbMlSFQEdh6nzVVybgI`
@@ -124,6 +135,7 @@ pub fn normalize_file_key(pointer: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn normalize_pointer() {
@@ -166,5 +178,33 @@ mod tests {
         assert!(index
             .resolve("file-service://file-jYOPKSz8VPyhHyfrastQCE3H")
             .is_some());
+    }
+
+    #[test]
+    fn resolves_gemini_takeout_image_by_filename() {
+        let dir = PathBuf::from(
+            r"D:\Personal\Gemini数据下载\takeout-20260622T160628Z-3-001\Takeout\我的活动\Gemini Apps",
+        );
+        if !dir.is_dir() {
+            return;
+        }
+
+        let index = MediaIndex::build(&dir);
+        assert!(index.len() > 50);
+
+        let sample_name = fs::read_dir(&dir)
+            .expect("read dir")
+            .flatten()
+            .find_map(|entry| {
+                let name = entry.file_name().to_str()?.to_string();
+                if is_image_filename(&name) {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .expect("sample image");
+
+        assert!(index.resolve(&sample_name).is_some());
     }
 }
