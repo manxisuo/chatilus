@@ -15,9 +15,14 @@ use crate::models::SourceCount;
 
 use super::Database;
 
+const IMAGE_MONTH_SQL: &str =
+    "strftime('%Y-%m', datetime(COALESCE(m.create_time, 0), 'unixepoch', 'localtime'))";
+
 struct ImageFilters<'a> {
     include_uploads: bool,
     conversation_source: Option<&'a str>,
+    month: Option<&'a str>,
+    conversation_id: Option<&'a str>,
 }
 
 impl AssetRepository for Database {
@@ -25,6 +30,8 @@ impl AssetRepository for Database {
         let filters = ImageFilters {
             include_uploads: query.include_uploads,
             conversation_source: normalized_source(query.conversation_source.as_deref()),
+            month: normalized_source(query.month.as_deref()),
+            conversation_id: normalized_source(query.conversation_id.as_deref()),
         };
 
         let mut from_attachments =
@@ -56,6 +63,8 @@ impl AssetRepository for Database {
         let filters = ImageFilters {
             include_uploads,
             conversation_source: normalized_source(conversation_source),
+            month: None,
+            conversation_id: None,
         };
         let from_attachments = count_images_from_attachments(&self.conn, &filters)?;
         let from_raw_json = count_images_from_raw_json(&self.conn, &filters)?;
@@ -82,6 +91,16 @@ fn append_attachment_filters(sql: &mut String, bind: &mut Vec<Box<dyn ToSql>>, f
     if let Some(source) = filters.conversation_source {
         sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
         bind.push(Box::new(source.to_string()));
+    }
+    if let Some(month) = filters.month {
+        sql.push_str(" AND ");
+        sql.push_str(IMAGE_MONTH_SQL);
+        sql.push_str(" = ?");
+        bind.push(Box::new(month.to_string()));
+    }
+    if let Some(conversation_id) = filters.conversation_id {
+        sql.push_str(" AND m.conversation_id = ?");
+        bind.push(Box::new(conversation_id.to_string()));
     }
 }
 
@@ -162,6 +181,16 @@ fn list_assets_from_raw_json(
     if let Some(source) = filters.conversation_source {
         sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
         bind.push(Box::new(source.to_string()));
+    }
+    if let Some(month) = filters.month {
+        sql.push_str(" AND ");
+        sql.push_str(IMAGE_MONTH_SQL);
+        sql.push_str(" = ?");
+        bind.push(Box::new(month.to_string()));
+    }
+    if let Some(conversation_id) = filters.conversation_id {
+        sql.push_str(" AND m.conversation_id = ?");
+        bind.push(Box::new(conversation_id.to_string()));
     }
     sql.push_str(" ORDER BY COALESCE(m.create_time, 0) DESC");
 
@@ -465,6 +494,8 @@ mod tests {
                 offset: 0,
                 include_uploads: true,
                 conversation_source: None,
+                month: None,
+                conversation_id: None,
             },
         )
         .expect("list all");
@@ -477,6 +508,8 @@ mod tests {
                 offset: 0,
                 include_uploads: true,
                 conversation_source: Some("chatgpt".to_string()),
+                month: None,
+                conversation_id: None,
             },
         )
         .expect("list chatgpt");

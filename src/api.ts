@@ -128,12 +128,16 @@ export function listImages(
   offset = 0,
   includeUploads = true,
   conversationSource?: string | null,
+  month?: string | null,
+  conversationId?: string | null,
 ) {
   return invoke<ImageGalleryItem[]>("list_images", {
     limit,
     offset,
     includeUploads,
     conversationSource: conversationSource ?? null,
+    month: month ?? null,
+    conversationId: conversationId ?? null,
   });
 }
 

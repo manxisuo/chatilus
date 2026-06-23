@@ -12,6 +12,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   openConversation: [conversationId: string];
+  openMessage: [conversationId: string, messageId: string];
+  openGallery: [options: { month?: string; conversationId?: string }];
   "update:filterSource": [source: string | null];
 }>();
 
@@ -348,12 +350,21 @@ onMounted(() => {
           >
             <div class="section-header">
               <h3 class="section-title">{{ section.label }}</h3>
-              <span class="section-count">
-                {{ section.conversations.length
-                }}<template v-if="section.count > section.conversations.length">
-                  / {{ section.count }}</template
+              <div class="section-header-actions">
+                <span class="section-count">
+                  {{ section.conversations.length
+                  }}<template v-if="section.count > section.conversations.length">
+                    / {{ section.count }}</template
+                  >
+                </span>
+                <button
+                  type="button"
+                  class="section-link"
+                  @click="emit('openGallery', { month: section.key })"
                 >
-              </span>
+                  本月图片
+                </button>
+              </div>
             </div>
             <button
               v-for="conversation in section.conversations"
@@ -379,6 +390,29 @@ onMounted(() => {
                 <span>{{ conversation.message_count }} 条消息</span>
                 <span v-if="conversation.model">{{ conversation.model }}</span>
                 <span v-if="conversation.is_starred" class="item-star">★ 已收藏</span>
+              </div>
+              <div
+                v-if="conversation.latest_message_id || conversation.has_images"
+                class="item-actions"
+              >
+                <button
+                  v-if="conversation.latest_message_id"
+                  type="button"
+                  class="item-action"
+                  @click.stop="
+                    emit('openMessage', conversation.id, conversation.latest_message_id!)
+                  "
+                >
+                  最新消息
+                </button>
+                <button
+                  v-if="conversation.has_images"
+                  type="button"
+                  class="item-action"
+                  @click.stop="emit('openGallery', { conversationId: conversation.id })"
+                >
+                  图片
+                </button>
               </div>
               <div v-if="conversation.tags.length" class="item-tags">
                 <el-tag
@@ -552,6 +586,7 @@ onMounted(() => {
 .section-header {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
   position: sticky;
@@ -563,6 +598,26 @@ onMounted(() => {
     var(--cl-panel) 70%,
     rgba(255, 255, 255, 0)
   );
+}
+
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.section-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+.section-link:hover {
+  text-decoration: underline;
 }
 
 .section-title {
@@ -623,6 +678,28 @@ onMounted(() => {
 
 .item-star {
   color: #e6a23c;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.item-action {
+  border: 1px solid var(--cl-border);
+  background: var(--cl-panel);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+  cursor: pointer;
+}
+
+.item-action:hover {
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary);
 }
 
 .item-tags {

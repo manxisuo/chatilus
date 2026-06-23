@@ -10,6 +10,8 @@ export interface ConversationSummary {
   source?: string;
   tags: string[];
   activity_month?: string | null;
+  latest_message_id?: string | null;
+  has_images?: boolean;
 }
 
 export interface AttachmentView {

@@ -15,6 +15,10 @@ pub struct ConversationSummary {
     pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity_month: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_message_id: Option<String>,
+    #[serde(default)]
+    pub has_images: bool,
 }
 
 fn default_conversation_source() -> String {

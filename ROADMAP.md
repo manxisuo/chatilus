@@ -24,7 +24,7 @@ Archive（归档）  →  Retrieve（检索）  →  Organize（组织）  →  
 |------|------|----------|--------------|
 | **Archive** | 多源数据进库、可读可搜 | 导入、浏览、FTS、图库、过滤、导出 | ~90% |
 | **Retrieve** | 跨源、跨时间找到那条记忆 | 全文搜索、来源/时间上下文、钻取到对话 | ~60% |
-| **Organize** | 按时间/项目/主题组织记忆 | Timeline、Workspace、Topic、Tag | ~10% |
+| **Organize** | 按时间/项目/主题组织记忆 | Timeline、Workspace、Topic、Tag | ~25% |
 | **Insight** | 在组织之上理解与回顾 | 可溯源总结、模式发现、主题演变 | 0%（远期） |
 
 检索（Retrieve）贯穿各层：搜索是检索，Timeline 按月浏览也是检索，Workspace 按项目看仍是检索。
@@ -49,13 +49,13 @@ AI 能力放在 `application/ai/`，不进入 domain 核心。
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## 当前重点（v0.5）
+## 当前重点（v0.6）
 
-v0.4（多源 Import + Index + Browse）与 v0.5 产品化浏览体验 **已完成**。下一里程碑：
+v0.5 **Timeline** 与收藏消息列表 **已完成**。下一里程碑：
 
-> **Timeline** —— 第一个「Wow Feature」：让用户一眼看到「这段时间我和 AI 都在做什么」，无需 API Key、可本地完成。
+> **Workspace / Project** —— 将多源会话归入同一工作项目，在项目视图内聚合对话、图片与搜索。
 
-并行或前置的技术项：Global Search++ 小步、图库 `assets` 物化（EXPLAIN 已证实图库仍全表扫描）。
+v0.5 并行项（未做）：Global Search++（`bm25()`）、图库 `assets` 物化。
 
 ### 多源 Importer（PR4a–c）
 
@@ -121,20 +121,26 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 > 排序原则：**Archive 做扎实 → Organize（Timeline / Workspace / Topic）→ Insight（可溯源 AI）**。不做十个浏览小功能替代 Timeline。
 
-### 接下来要做（v0.5：Timeline 与检索增强）
+### 接下来要做（v0.6：Workspace）
 
-**主里程碑 — Timeline（Wow Feature）**
+**主里程碑 — Workspace / Project**
 
-- [ ] 新视图：按月份混排 ChatGPT / Cursor / Gemini 等来源的会话（及可选关键资产）
-- [ ] 月份导航与来源过滤
-- [ ] 从 Timeline 条目钻取到对话 / 消息 / 图库
-- [ ] 利用已有 `messages(create_time)` 与 `conversations(update_time)` 索引
+- [ ] 手动或规则将多源会话归入 Workspace（ChatLens、Plum、USV…）
+- [ ] 项目视图：会话、图片、标签、搜索在项目内聚合
 
-**并行 / 支撑**
+**v0.5 已完成 — Timeline**
+
+- [x] 新视图：按月份混排 ChatGPT / Cursor / Gemini 等来源的会话
+- [x] 月份导航与来源过滤
+- [x] 从 Timeline 钻取到对话、最新消息、本月/对话图片
+- [x] 收藏消息列表（独立入口，与收藏对话拆分）
+- [x] 利用 `conversations(update_time)` 与 `messages(create_time)` 索引
+
+**v0.5 并行 / 支撑（未完成）**
 
 - [ ] Global Search++（第一阶段）：显式 `bm25()` 排序；时间、来源、收藏等权重可后续迭代
 - [ ] （可选）来源列表查询优化：`COALESCE(source)` → `source = ?`，或复合索引 `(source, is_starred, update_time)`
-- [ ] **图片资产物化**（若 Timeline 需展示图片热点）：独立 `assets` 表，替代 `json_each(attachments)` 全表扫描
+- [ ] **图片资产物化**（若图库/Timeline 图片热点需进一步性能）：独立 `assets` 表
 
 ### 再往后（v0.6–v0.7：Organize）
 
@@ -442,14 +448,13 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 
 产品化浏览与交互打磨见上文「v0.4 收尾与 v0.5 产品化」。
 
-### v0.5 — Timeline（当前里程碑）
+### v0.5 — Timeline（已完成）
 
-v0.4 交付 Archive 闭环后，**优先 Timeline**，而不是继续抛光侧边栏或过早做 AI 总结：
-
-- [ ] **Timeline 视图**：跨来源按月份混排会话，带来「原来这段时间我一直在干这些」的直观价值
-- [ ] 月份导航 + 来源过滤 + 钻取到对话/消息
-- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文
-- [ ] （可选）`assets` 物化，支撑 Timeline 中的图片热点与图库性能
+- [x] **Timeline 视图**：跨来源按月份混排会话
+- [x] 月份导航 + 来源过滤 + 钻取到对话 / 最新消息 / 图库（本月或所属对话）
+- [x] 收藏消息列表与跨对话消息定位修复
+- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文（顺延）
+- [ ] （可选）`assets` 物化，支撑图库性能（顺延）
 
 ### v0.6 — Workspace / Project
 

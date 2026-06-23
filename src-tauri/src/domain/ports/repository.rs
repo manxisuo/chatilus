@@ -30,6 +30,8 @@ pub struct AssetListQuery {
     pub offset: i64,
     pub include_uploads: bool,
     pub conversation_source: Option<String>,
+    pub month: Option<String>,
+    pub conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

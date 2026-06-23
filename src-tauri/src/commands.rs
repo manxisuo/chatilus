@@ -212,6 +212,8 @@ pub fn list_images(
     offset: Option<i64>,
     include_uploads: Option<bool>,
     conversation_source: Option<String>,
+    month: Option<String>,
+    conversation_id: Option<String>,
 ) -> Result<Vec<ImageGalleryItem>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_images(
@@ -220,6 +222,8 @@ pub fn list_images(
         offset.unwrap_or(0),
         include_uploads.unwrap_or(true),
         conversation_source.as_deref(),
+        month.as_deref(),
+        conversation_id.as_deref(),
     )
 }
 

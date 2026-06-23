@@ -16,6 +16,8 @@ const props = defineProps<{
   generatedCount: number | null;
   uploadCount: number | null;
   filterSource: string | null;
+  filterMonth: string | null;
+  filterConversationId: string | null;
   imageCountsBySource: SourceCount[];
 }>();
 
@@ -276,6 +278,8 @@ async function loadImages(reset = true) {
       offset,
       showUploads.value,
       props.filterSource,
+      props.filterMonth,
+      props.filterConversationId,
     );
 
     if (reset) {
@@ -317,7 +321,7 @@ watch(showUploads, () => {
 });
 
 watch(
-  () => props.filterSource,
+  () => [props.filterSource, props.filterMonth, props.filterConversationId] as const,
   () => {
     loadImages(true);
   },
@@ -332,7 +336,11 @@ onMounted(() => {
   <div class="image-gallery">
     <header class="gallery-header">
       <div class="gallery-header-main">
-        <p class="subtitle">浏览所有对话中的图片，点击放大，或跳回所属对话</p>
+        <p class="subtitle">
+          <template v-if="filterConversationId">当前对话的图片</template>
+          <template v-else-if="filterMonth">{{ filterMonth }} 的图片</template>
+          <template v-else>浏览所有对话中的图片，点击放大，或跳回所属对话</template>
+        </p>
         <p v-if="statsText && !filterSource" class="stats">{{ statsText }}</p>
         <div class="source-nav">
           <button

@@ -76,6 +76,8 @@ const filterTagId = ref<number | null>(null);
 const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "timeline" | "images">("chats");
+const galleryMonth = ref<string | null>(null);
+const galleryConversationId = ref<string | null>(null);
 const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
 
 const appearanceOptions: Array<{ value: AppearanceMode; label: string }> = [
@@ -545,17 +547,37 @@ function selectConversation(id: string) {
   activeId.value = id;
 }
 
+function handleNavClick(id: (typeof navItems.value)[number]["id"]) {
+  if (id === "images") {
+    galleryMonth.value = null;
+    galleryConversationId.value = null;
+  }
+  viewMode.value = id;
+}
+
+function clearGalleryScope() {
+  galleryMonth.value = null;
+  galleryConversationId.value = null;
+}
+
 function openConversationFromGallery(conversationId: string) {
+  clearGalleryScope();
   viewMode.value = "chats";
   activeId.value = conversationId;
 }
 
-function openConversationFromTimeline(conversationId: string) {
+function openConversationFromTimeline(conversationId: string, messageId?: string) {
   searchMode.value = false;
   starredMessagesMode.value = false;
-  activeSearchHitId.value = null;
+  activeSearchHitId.value = messageId ?? null;
   viewMode.value = "chats";
   activeId.value = conversationId;
+}
+
+function openGalleryFromTimeline(options: { month?: string; conversationId?: string }) {
+  galleryMonth.value = options.month ?? null;
+  galleryConversationId.value = options.conversationId ?? null;
+  viewMode.value = "images";
 }
 
 function openSearchHit(hit: SearchHit) {
@@ -726,7 +748,7 @@ onMounted(async () => {
             class="nav-tab"
             :class="{ active: viewMode === item.id }"
             type="button"
-            @click="viewMode = item.id"
+            @click="handleNavClick(item.id)"
           >
             <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
@@ -1045,13 +1067,17 @@ onMounted(async () => {
         :total-count="stats?.conversation_count ?? null"
         :conversation-counts-by-source="stats?.conversation_counts_by_source ?? []"
         @open-conversation="openConversationFromTimeline"
+        @open-message="openConversationFromTimeline"
+        @open-gallery="openGalleryFromTimeline"
       />
     </el-main>
 
     <el-main v-else class="main gallery-main">
       <ImageGallery
-        :key="`${stats?.image_count ?? 0}:${filterSource ?? 'all'}`"
+        :key="`${stats?.image_count ?? 0}:${filterSource ?? 'all'}:${galleryMonth ?? ''}:${galleryConversationId ?? ''}`"
         v-model:filter-source="filterSource"
+        :filter-month="galleryMonth"
+        :filter-conversation-id="galleryConversationId"
         :total-count="stats?.image_count ?? null"
         :generated-count="stats?.generated_image_count ?? null"
         :upload-count="stats?.upload_image_count ?? null"

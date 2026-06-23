@@ -26,6 +26,8 @@ const ACTIVITY_MONTH_SQL: &str =
 fn map_timeline_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
     let mut summary = map_conversation_summary(row)?;
     summary.activity_month = row.get(10)?;
+    summary.latest_message_id = row.get(11)?;
+    summary.has_images = row.get::<_, i64>(12)? != 0;
     Ok(summary)
 }
 
@@ -124,7 +126,18 @@ impl ConversationRepository for Database {
         );
         sql.push_str(ACTIVITY_MONTH_SQL);
         sql.push_str(
-            " AS activity_month
+            " AS activity_month,
+                    (SELECT m.id FROM messages m
+                     WHERE m.conversation_id = c.id
+                     ORDER BY m.sort_order DESC
+                     LIMIT 1) AS latest_message_id,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM messages m
+                        WHERE m.conversation_id = c.id
+                          AND m.attachments IS NOT NULL
+                          AND m.attachments != ''
+                          AND m.attachments != '[]'
+                    ) THEN 1 ELSE 0 END AS has_images
              FROM conversations c
              LEFT JOIN conversation_tags ct ON ct.conversation_id = c.id
              LEFT JOIN tags t ON t.id = ct.tag_id
