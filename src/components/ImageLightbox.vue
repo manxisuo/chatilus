@@ -13,10 +13,12 @@ const props = defineProps<{
   resolveSrc: (path: string) => string;
   onImageError?: (path: string) => void;
   captions?: string[];
+  conversationIds?: string[];
 }>();
 
 const emit = defineEmits<{
   "update:visible": [value: boolean];
+  openConversation: [conversationId: string];
 }>();
 
 const currentIndex = ref(0);
@@ -32,6 +34,16 @@ const counterText = computed(() => {
   if (props.images.length === 0) return "";
   return `${currentIndex.value + 1} / ${props.images.length}`;
 });
+
+const currentConversationId = computed(
+  () => props.conversationIds?.[currentIndex.value] ?? null,
+);
+
+function openConversation() {
+  if (!currentConversationId.value) return;
+  emit("openConversation", currentConversationId.value);
+  close();
+}
 
 const canGoPrev = computed(() => currentIndex.value > 0);
 const canGoNext = computed(
@@ -125,7 +137,17 @@ onUnmounted(() => {
         />
         <div class="meta">
           <span v-if="captionText" class="caption">{{ captionText }}</span>
-          <span>{{ counterText }}</span>
+          <div class="meta-actions">
+            <button
+              v-if="currentConversationId"
+              type="button"
+              class="open-conv-btn"
+              @click="openConversation"
+            >
+              打开所属对话
+            </button>
+            <span>{{ counterText }}</span>
+          </div>
         </div>
       </div>
 
@@ -189,6 +211,26 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.open-conv-btn {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.open-conv-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .close-btn {

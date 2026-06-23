@@ -156,6 +156,93 @@ function formatTime(timestamp: number | null) {
   });
 }
 
+function timeGroupKey(timestamp: number | null): string {
+  if (!timestamp) return "unknown";
+
+  const date = new Date(timestamp * 1000);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const itemDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (itemDay.getTime() === startOfToday.getTime()) return "today";
+  if (itemDay.getTime() === startOfYesterday.getTime()) return "yesterday";
+
+  const dayOfWeek = now.getDay();
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
+
+  if (itemDay >= startOfWeek && itemDay < startOfYesterday) return "this-week";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `month:${date.getFullYear()}-${month}`;
+}
+
+function timeGroupLabel(key: string): string {
+  switch (key) {
+    case "today":
+      return "今天";
+    case "yesterday":
+      return "昨天";
+    case "this-week":
+      return "本周";
+    case "unknown":
+      return "未知时间";
+    default:
+      if (key.startsWith("month:")) {
+        const [year, month] = key.slice(6).split("-");
+        return `${year}年${Number(month)}月`;
+      }
+      return key;
+  }
+}
+
+function timeGroupSort(key: string): number {
+  switch (key) {
+    case "today":
+      return 0;
+    case "yesterday":
+      return 1;
+    case "this-week":
+      return 2;
+    case "unknown":
+      return 9999;
+    default:
+      if (key.startsWith("month:")) {
+        return 1000 - Number(key.slice(6).replace("-", ""));
+      }
+      return 5000;
+  }
+}
+
+const imageGroups = computed(() => {
+  const grouped = new Map<
+    string,
+    Array<{ item: ImageGalleryItem; index: number }>
+  >();
+
+  images.value.forEach((item, index) => {
+    const key = timeGroupKey(item.create_time);
+    const bucket = grouped.get(key) ?? [];
+    bucket.push({ item, index });
+    grouped.set(key, bucket);
+  });
+
+  return [...grouped.entries()]
+    .sort(([a], [b]) => timeGroupSort(a) - timeGroupSort(b))
+    .map(([key, items]) => ({
+      key,
+      label: timeGroupLabel(key),
+      items,
+    }));
+});
+
+const lightboxConversationIds = computed(() =>
+  images.value.map((item) => item.conversation_id),
+);
+
 function imageSrc(path: string) {
   if (!imageSrcCache[path]) {
     imageSrcCache[path] = convertFileSrc(path);
@@ -278,53 +365,61 @@ onMounted(() => {
     />
 
     <div v-else class="grid-scroll" @scroll.passive="onScroll">
-      <div class="grid">
-        <article
-          v-for="(item, index) in images"
-          :key="`${item.message_id}:${item.path}`"
-          class="card"
-          :class="{ 'card-upload': item.source === 'upload' }"
-        >
-          <button class="thumb-btn" type="button" @click="openLightbox(index)">
-            <img
-              v-if="imageSrcCache[item.path] !== ''"
-              :src="imageSrc(item.path)"
-              :alt="item.file_key"
-              loading="lazy"
-              @error="onImageError(item.path)"
-            />
-            <div v-else class="thumb-missing">无法加载</div>
-            <span class="source-badge" :class="`source-${item.source}`">
-              {{ imageTypeLabel(item.source) }}
-            </span>
-          </button>
-          <div class="card-meta">
-            <button
-              class="conv-link"
-              type="button"
-              @click="openConversation(item.conversation_id)"
-            >
-              {{ item.conversation_title }}
+      <section
+        v-for="group in imageGroups"
+        :key="group.key"
+        class="time-group"
+      >
+        <h3 class="group-title">{{ group.label }}</h3>
+        <div class="grid">
+          <article
+            v-for="{ item, index } in group.items"
+            :key="`${item.message_id}:${item.path}`"
+            class="card"
+            :class="{ 'card-upload': item.source === 'upload' }"
+          >
+            <button class="thumb-btn" type="button" @click="openLightbox(index)">
+              <img
+                v-if="imageSrcCache[item.path] !== ''"
+                :src="imageSrc(item.path)"
+                :alt="item.file_key"
+                loading="lazy"
+                @error="onImageError(item.path)"
+              />
+              <div v-else class="thumb-missing">无法加载</div>
+              <span class="source-badge" :class="`source-${item.source}`">
+                {{ imageTypeLabel(item.source) }}
+              </span>
             </button>
-            <div class="meta-row">
-              <div class="meta-tags">
-                <el-tag
-                  v-if="!filterSource"
-                  size="small"
-                  :type="conversationSourceTagType(conversationSourceFromId(item.conversation_id))"
-                  effect="plain"
-                >
-                  {{ conversationSourceLabel(conversationSourceFromId(item.conversation_id)) }}
-                </el-tag>
-                <el-tag size="small" :type="imageTypeTagType(item.source)" effect="plain">
-                  {{ imageTypeLabel(item.source) }}
-                </el-tag>
+            <div class="card-meta">
+              <button
+                class="conv-link"
+                type="button"
+                title="打开所属对话"
+                @click="openConversation(item.conversation_id)"
+              >
+                {{ item.conversation_title }}
+              </button>
+              <div class="meta-row">
+                <div class="meta-tags">
+                  <el-tag
+                    v-if="!filterSource"
+                    size="small"
+                    :type="conversationSourceTagType(conversationSourceFromId(item.conversation_id))"
+                    effect="plain"
+                  >
+                    {{ conversationSourceLabel(conversationSourceFromId(item.conversation_id)) }}
+                  </el-tag>
+                  <el-tag size="small" :type="imageTypeTagType(item.source)" effect="plain">
+                    {{ imageTypeLabel(item.source) }}
+                  </el-tag>
+                </div>
+                <span class="time">{{ formatTime(item.create_time) }}</span>
               </div>
-              <span class="time">{{ formatTime(item.create_time) }}</span>
             </div>
-          </div>
-        </article>
-      </div>
+          </article>
+        </div>
+      </section>
       <div class="footer">{{ footerText }}</div>
     </div>
 
@@ -335,6 +430,8 @@ onMounted(() => {
       :resolve-src="imageSrc"
       :on-image-error="onImageError"
       :captions="lightboxCaptions"
+      :conversation-ids="lightboxConversationIds"
+      @open-conversation="openConversation"
     />
   </div>
 </template>
@@ -424,11 +521,27 @@ onMounted(() => {
   min-height: 0;
 }
 
+.time-group {
+  padding-top: 8px;
+}
+
+.time-group:first-child {
+  padding-top: 0;
+}
+
+.group-title {
+  margin: 0;
+  padding: 12px 24px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cl-text-muted);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
-  padding: 20px 24px;
+  padding: 8px 24px 16px;
 }
 
 .card {
