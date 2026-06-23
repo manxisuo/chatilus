@@ -1,16 +1,61 @@
 # ChatLens 技术路线
 
-> **ChatLens**：一个轻量、本地优先的 AI 对话历史浏览器。
+> **ChatLens**：面向个人的 **AI 工作历史浏览器**（Personal AI Work History Browser）。
 >
-> 长期愿景：从「导出数据查看器」演进为本地 **AI Conversation Browser / Personal AI Memory Browser**——核心是 **Import + Index + Browse**；智能分析（总结、RAG）为后续增强，不替代浏览闭环。
+> 回答的问题不是「我记了什么」，而是 **「我和 AI 一起工作过什么？」**
+>
+> 对外标语可继续用 *Browse your AI memory*；对内产品边界是 **多源 AI 对话史的本地索引与回顾**，不是 ChatGPT 导出工具、不是 Obsidian 式 PKM、也不是「Memory OS」。
 
-## 当前重点（v0.4）
+## 产品定位与价值路径
 
-v0.3（导入、进度、多包合并去重）**已完成**。v0.4 目标：从「单源查看器」升级为**多源 AI 对话历史浏览器**。
+### 北极星
 
-产品原则：**底层统一，视图分离**——同一 SQLite 库存储所有来源；UI 用 `source` 分组、过滤、标注，不拆库。
+当用户需要找回 AI 记忆时，**ChatLens 是默认入口**。
+
+工具类产品不必追求日活；目标是「没有它就难受」——换电脑、找旧讨论、跨平台回忆时第一个想到它。
+
+### 价值四层（演进模型）
+
+```text
+Archive（归档）  →  Retrieve（检索）  →  Organize（组织）  →  Insight（理解）
+```
+
+| 层次 | 含义 | 典型能力 | 状态（粗估） |
+|------|------|----------|--------------|
+| **Archive** | 多源数据进库、可读可搜 | 导入、浏览、FTS、图库、过滤、导出 | ~90% |
+| **Retrieve** | 跨源、跨时间找到那条记忆 | 全文搜索、来源/时间上下文、钻取到对话 | ~60% |
+| **Organize** | 按时间/项目/主题组织记忆 | Timeline、Workspace、Topic、Tag | ~10% |
+| **Insight** | 在组织之上理解与回顾 | 可溯源总结、模式发现、主题演变 | 0%（远期） |
+
+检索（Retrieve）贯穿各层：搜索是检索，Timeline 按月浏览也是检索，Workspace 按项目看仍是检索。
+
+### Insight 层原则（远期，不可妥协）
+
+任何 AI 结论必须 **Summary + Evidence** 同时存在：
+
+- 每条总结可点击回到原始会话/消息
+- 不可溯源的总结不做
+
+AI 能力放在 `application/ai/`，不进入 domain 核心。
+
+### 与竞品的关系
+
+| 对比 | ChatLens | Obsidian / Logseq |
+|------|----------|-------------------|
+| 数据性质 | 被动汇聚各平台 AI 对话 | 主动书写笔记 |
+| 核心问题 | 「我以前在哪儿和 AI 讨论过这个？」 | 「我的知识网络是什么？」 |
+
+产品原则（技术）：**底层统一，视图分离**——同一 SQLite 库存储所有来源；UI 用 `source` 分组、过滤、标注，不拆库。
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+## 当前重点（v0.5）
+
+v0.4（多源 Import + Index + Browse）与 v0.5 产品化浏览体验 **已完成**。下一里程碑：
+
+> **Timeline** —— 第一个「Wow Feature」：让用户一眼看到「这段时间我和 AI 都在做什么」，无需 API Key、可本地完成。
+
+并行或前置的技术项：Global Search++ 小步、图库 `assets` 物化（EXPLAIN 已证实图库仍全表扫描）。
 
 ### 多源 Importer（PR4a–c）
 
@@ -54,45 +99,61 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 ### 明确不做进 v0.4
 
-- **PR4e 智能分析**（总结、向量检索、聚类、RAG）→ **延后至 v0.7+**，不阻塞多源浏览、Timeline 与 Workspace。见下文版本规划说明。
+- **PR4e 智能分析**（总结、向量检索、聚类、RAG）→ **延后至 v0.8+**，不阻塞 Timeline 与 Workspace。见下文版本规划。
+
+### v0.4 收尾与 v0.5 产品化（已完成）
+
+多源闭环之外，近期浏览体验与交互打磨：
+
+- [x] 顶部统计 / Dashboard 条（含最近导入时间）
+- [x] 左侧 Filter 区压缩（来源 pill、筛选芯片、标签内联）
+- [x] 消息阅读区 Conversation Info 侧栏（宽屏）
+- [x] 图片画廊按时间分组 + 灯箱内「打开所属对话」
+- [x] 搜索结果增强；搜索模式下保留结果列表、可连续点击命中项
+- [x] 搜索场景 `get_conversation` 补全对话信息侧栏
+- [x] 外观：浅色 / 深色 / 跟随系统（含 Element Plus 与原生窗口主题）
+- [x] 产品定位文案：*Browse your AI memory*
+- [x] 核心查询 `EXPLAIN QUERY PLAN` 抽检（2026-06：打开对话 / 标签筛选命中 v5 索引；图库仍 `SCAN messages`）
 
 ---
 
 ## 后续任务分层
 
-> 排序原则：先把「多源 AI 对话浏览器」做扎实，再做 Timeline / Workspace 等知识管理能力，最后再做 AI 总结、插件化和索引平台。AI 能力不进入 domain 核心。
+> 排序原则：**Archive 做扎实 → Organize（Timeline / Workspace / Topic）→ Insight（可溯源 AI）**。不做十个浏览小功能替代 Timeline。
 
-### 接下来要做（近期：产品化浏览体验）
+### 接下来要做（v0.5：Timeline 与检索增强）
 
-- [x] 顶部统计增强：展示对话、图片、来源、收藏、标签数量，以及最近导入时间，让首页更像 Dashboard。
-- [x] 左侧过滤区整理：将收藏、有图片、有代码、有附件等过滤项归到 Filter 区，Tags 独立展示，降低后台管理感。
-- [x] 消息阅读区优化：宽屏下限制正文最大宽度或增加右侧 Conversation Info（来源、模型、时间跨度、图片数、标签）。
-- [x] 图片画廊增强：按时间分组（今天 / 昨天 / 本周 / 月份），并提供「打开所属对话」入口。
-- [x] 搜索结果体验小步增强：更清晰展示来源、时间、会话上下文和命中片段。
-- [x] 产品定位文案收敛：围绕「Browse your AI memory」验证主页说明、空状态和 README 表述。
-- [x] 核心查询 `EXPLAIN QUERY PLAN` 抽检：会话列表、打开对话、标签筛选、图库扫描，确认索引命中情况（2026-06：打开对话 / 标签筛选命中 v5 索引；图库仍为 `SCAN messages`，见下文 assets 物化）。
+**主里程碑 — Timeline（Wow Feature）**
 
-### 后面要做（中期：知识管理与索引深化）
+- [ ] 新视图：按月份混排 ChatGPT / Cursor / Gemini 等来源的会话（及可选关键资产）
+- [ ] 月份导航与来源过滤
+- [ ] 从 Timeline 条目钻取到对话 / 消息 / 图库
+- [ ] 利用已有 `messages(create_time)` 与 `conversations(update_time)` 索引
 
-- [ ] （可选）来源列表查询优化：`conversation_repository.list` 将 `COALESCE(source, …)` 改为 `source = ?`（导入已保证非 NULL），或评估复合索引 `(source, is_starred, update_time)`；当前约 1.5k 会话体量可暂缓。
+**并行 / 支撑**
 
-- [ ] Timeline：按时间混排 ChatGPT / Cursor / Gemini 等来源，支持按来源过滤与月份导航。
-- [ ] Global Search++：在现有 FTS5 基础上将搜索改为显式 `bm25()` 排序，并逐步考虑时间、来源、收藏等权重。
-- [ ] Workspace / Project：将不同来源的会话归到同一工作项目下，例如 ChatLens、Plum、USV。
-- [ ] 项目视图：在一个 Workspace 内聚合相关对话、图片、标签与搜索结果。
-- [ ] **图片资产物化**：导入时写入独立 `assets` 表，替代 `json_each(attachments)` 全表扫描；再为 `(asset_type, source, created_at)` 等建索引。
-- [ ] Asset 模型增强：为图片资产预留 `thumbnail_path`，为大量图片场景准备缩略图缓存。
-- [ ] 结构化内容块：逐步从纯文本扩展到 Code、Link、File 等 `MessageContent` 类型，提高过滤与搜索能力。
-- [ ] 导入历史索引：`imports(source, imported_at)`、`import_jobs(status, created_at)` 等（排错 / 增量导入，非热路径）。
+- [ ] Global Search++（第一阶段）：显式 `bm25()` 排序；时间、来源、收藏等权重可后续迭代
+- [ ] （可选）来源列表查询优化：`COALESCE(source)` → `source = ?`，或复合索引 `(source, is_starred, update_time)`
+- [ ] **图片资产物化**（若 Timeline 需展示图片热点）：独立 `assets` 表，替代 `json_each(attachments)` 全表扫描
 
-### 很久后要做（远期：智能化与生态）
+### 再往后（v0.6–v0.7：Organize）
 
-- [ ] `application/ai/`：对话总结、自动标签、主题聚类，保持在 application 层编排，不污染 domain。
-- [ ] 向量检索 / Hybrid Search：作为新的 `SearchEngine` 实现或扩展，不替代 FTS5。
-- [ ] 本地知识库 / RAG：在 Import + Index + Browse 稳定后再评估。
-- [ ] `Indexer` 编排层：统一管理 FTS、缩略图、Embedding、摘要等导入后重建任务。
-- [ ] 插件化 Importer：长期可探索动态加载 `*.dll` / `*.wasm`，支持社区贡献 Claude、Cursor 等 Importer。
-- [ ] 多端同步 / 服务端形态：仅在本地桌面闭环成熟后考虑。
+- [ ] **Workspace / Project**：将多源会话归到同一工作项目（如 ChatLens、Plum、USV）
+- [ ] 项目视图：项目内聚合对话、图片、标签、搜索结果
+- [ ] **Topic（主题）**：从标题/内容统计或提取高频主题（与用户 **Tag** 区分：Tag 手动，Topic 系统发现）
+- [ ] Asset 模型增强：`thumbnail_path`，大量图片场景的缩略图缓存
+- [ ] 结构化内容块：`MessageContent` 扩展 Code / Link / File，强化「有代码」等过滤
+- [ ] 导入历史索引：`imports(source, imported_at)` 等（排错 / 增量，非热路径）
+
+### 将来（v0.8+：Insight 与生态）
+
+- [ ] **AI Insight**（可溯源）：对话总结、主题演变、模式发现——每条结论带证据链跳转
+- [ ] 自动标签建议（可选，仍须用户确认）
+- [ ] 向量检索 / Hybrid Search：新 `SearchEngine` 实现，不替代 FTS5
+- [ ] 本地知识库 / RAG：Organize 层稳定后再评估
+- [ ] `Indexer` 编排层：FTS、缩略图、Embedding、摘要等导入后重建
+- [ ] Claude 等 Importer（有样本再做）
+- [ ] 插件化 Importer、多端同步：仅本地闭环成熟后考虑
 
 ---
 
@@ -365,9 +426,9 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - 多导出包合并 / 去重
 - `schema_version`、`SourceInfo`、`conversations.source` / `source_id`
 
-### v0.4 — 多源浏览（当前）
+### v0.4 — 多源浏览 ✅
 
-**目标**：用户可在同一库中导入、浏览、搜索 ChatGPT / Cursor 等对话；左侧可按来源切换视图，默认 **All** 混排。
+**目标**：用户可在同一库中导入、浏览、搜索 ChatGPT / Cursor / Gemini 等对话；左侧可按来源切换，默认 **All** 混排。
 
 **PR 拆分**
 
@@ -379,47 +440,44 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | PR4d | 多源 UI：Sources 导航、列表徽标、搜索来源、按源筛选 | ✅ |
 | PR5 | schema v5 性能索引（来源 / 标签 / Timeline 预埋 / 导入唯一键） | ✅ |
 
-**不在 v0.4 范围内**
+产品化浏览与交互打磨见上文「v0.4 收尾与 v0.5 产品化」。
 
-- PR4e 智能分析 → **v0.7+**（见下），避免 Importer + UI 与 AI 基础设施并行，拖慢「多源浏览」这一核心差异化。
+### v0.5 — Timeline（当前里程碑）
 
-### v0.5 — 产品化浏览与 Timeline（下一里程碑）
+v0.4 交付 Archive 闭环后，**优先 Timeline**，而不是继续抛光侧边栏或过早做 AI 总结：
 
-v0.4 交付「Import + Index + Browse」多源闭环后，下一步先增强浏览体验，而不是直接进入 AI 总结：
+- [ ] **Timeline 视图**：跨来源按月份混排会话，带来「原来这段时间我一直在干这些」的直观价值
+- [ ] 月份导航 + 来源过滤 + 钻取到对话/消息
+- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文
+- [ ] （可选）`assets` 物化，支撑 Timeline 中的图片热点与图库性能
 
-- [ ] 顶部统计 / Dashboard 感增强
-- [ ] 左侧 Filter / Tags 区域整理
-- [ ] 消息阅读区宽屏优化或 Conversation Info 侧栏
-- [ ] 图片画廊按时间分组，增加「打开所属对话」
-- [ ] Timeline：跨来源按时间混排对话和关键资产
-- [ ] Global Search++ 第一阶段：显式 `bm25()` 排序 + 更好的命中上下文 + 时间加权
+### v0.6 — Workspace / Project
 
-> **关于原 PR4e**：智能分析不必在 v0.4 内做完，也不必作为 v0.5 的首要目标；先把多源浏览、时间线和搜索体验打磨到可长期使用。
+- [ ] 手动或规则将多源会话归入 Workspace（ChatLens、Plum、USV…）
+- [ ] 项目视图：会话、图片、标签、搜索在项目内聚合
+- [ ] 搜索权重扩展：时间、来源、收藏、标签
+- [ ] `MessageContent` 结构化块；Asset 缩略图
 
-### v0.6 — Workspace / Project 与结构化资产
+### v0.7 — Topic（主题层）
 
-- [ ] Workspace / Project：将多源会话按真实工作项目聚合
-- [ ] 项目视图：项目下的会话、图片、标签、搜索结果统一浏览
-- [ ] 图片资产物化：导入时写入 `assets` 表，为图库查询建立 `(asset_type, source, created_at)` 等索引
-- [ ] Asset 缩略图：`original_path` / `thumbnail_path`
-- [ ] `MessageContent` 扩展：Code / Link / File 等结构化块
-- [ ] 搜索权重扩展：时间、来源、收藏、标签等信号
+- [ ] 主题发现：从标题/内容统计高频主题（如 Rust、副业、grpc）
+- [ ] 主题页：各来源讨论次数、时间分布、一键钻取
+- [ ] 与用户 **Tag** 并存：Tag = 手动标注，Topic = 系统归纳
 
-### v0.7+ — 智能分析（后续增强）
+### v0.8+ — Insight（可溯源智能分析）
 
-全部可选、可逐项启用；AI 能力放在 `application/ai/`，不进入 domain 核心：
+全部可选；**每条 Insight 必须可回溯到原始会话**：
 
-- [ ] 对话总结（需用户配置 API Key 或本地模型）
-- [ ] 自动标签
-- [ ] 按主题聚类
-- [ ] 向量检索（新 `SearchEngine` 实现或扩展 FTS）
-- [ ] 本地知识库 / RAG
+- [ ] 对话/时期总结（需用户配置 API Key 或本地模型）
+- [ ] 主题演变、关注点位移（如「副业」相关讨论跨年变化）
+- [ ] 自动标签建议（须用户确认）
+- [ ] 向量检索 / Hybrid Search；本地 RAG（Organize 稳定后再评估）
 
 ### v1.0+ — 索引编排与生态（远期愿景）
 
-若索引种类增多（FTS、缩略图、Embedding、摘要），可评估 `Indexer` 编排层，与现有 `SearchEngine` 分工：SearchEngine 负责查询，Indexer 负责导入后重建各类索引。
+若索引种类增多，可评估 `Indexer` 编排层。以下仅在本地闭环成熟后考虑：
 
-- [ ] 插件化 Importer 动态加载（`*.dll` / `*.wasm`）
+- [ ] 插件化 Importer（`*.dll` / `*.wasm`）
 - [ ] 服务端 / 多端同步
 - [ ] LLM API 配置中心
 
