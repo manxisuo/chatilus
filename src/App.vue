@@ -177,6 +177,12 @@ const sourceNavItems = computed(() => {
   return items;
 });
 
+const visibleSourceNavItems = computed(() =>
+  sourceNavItems.value.filter(
+    (item) => item.id === null || item.count > 0 || item.id === filterSource.value,
+  ),
+);
+
 const activeConversation = computed(() =>
   conversations.value.find((item) => item.id === activeId.value) ?? null,
 );
@@ -656,61 +662,79 @@ onMounted(async () => {
 
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside width="320px" class="sidebar">
-        <div v-if="!searchMode" class="source-nav">
-          <div class="section-title">来源</div>
-          <button
-            v-for="item in sourceNavItems"
-            :key="item.id ?? 'all'"
-            type="button"
-            class="source-nav-item"
-            :class="{ active: filterSource === item.id }"
-            @click="filterSource = item.id"
-          >
-            <span>{{ item.label }}</span>
-            <span class="source-nav-count">{{ item.count }}</span>
-          </button>
-        </div>
+        <div v-if="!searchMode" class="sidebar-controls">
+          <div class="source-pills">
+            <button
+              v-for="item in visibleSourceNavItems"
+              :key="item.id ?? 'all'"
+              type="button"
+              class="source-pill"
+              :class="{ active: filterSource === item.id }"
+              @click="filterSource = item.id"
+            >
+              <span>{{ item.id === null ? "全部" : item.label }}</span>
+              <span class="source-pill-count">{{ item.count }}</span>
+            </button>
+          </div>
 
-        <div class="sidebar-tools">
-          <div class="section-title">筛选</div>
           <el-input
             v-model="listQuery"
             clearable
-            placeholder="筛选对话标题…"
-            :disabled="searchMode"
-          />
-          <div class="filter-group">
-            <el-checkbox v-model="starredOnly" :disabled="searchMode">
-              收藏
-            </el-checkbox>
-            <el-checkbox v-model="filterHasImages" :disabled="searchMode">
-              有图片
-            </el-checkbox>
-            <el-checkbox v-model="filterHasCode" :disabled="searchMode">
-              有代码
-            </el-checkbox>
-            <el-checkbox v-model="filterHasAttachments" :disabled="searchMode">
-              有附件
-            </el-checkbox>
-          </div>
-        </div>
-
-        <div v-if="!searchMode && tags.length > 0" class="tag-section">
-          <div class="section-title">标签</div>
-          <el-select
-            v-model="filterTagId"
-            clearable
-            placeholder="按标签筛选"
             size="small"
-            class="tag-filter"
-          >
-            <el-option
-              v-for="tag in tags"
-              :key="tag.id"
-              :label="`${tag.name} (${tag.conversation_count})`"
-              :value="tag.id"
-            />
-          </el-select>
+            placeholder="筛选标题…"
+          />
+
+          <div class="filter-row">
+            <div class="filter-chips">
+              <button
+                type="button"
+                class="filter-chip"
+                :class="{ active: starredOnly }"
+                @click="starredOnly = !starredOnly"
+              >
+                收藏
+              </button>
+              <button
+                type="button"
+                class="filter-chip"
+                :class="{ active: filterHasImages }"
+                @click="filterHasImages = !filterHasImages"
+              >
+                有图
+              </button>
+              <button
+                type="button"
+                class="filter-chip"
+                :class="{ active: filterHasCode }"
+                @click="filterHasCode = !filterHasCode"
+              >
+                有码
+              </button>
+              <button
+                type="button"
+                class="filter-chip"
+                :class="{ active: filterHasAttachments }"
+                @click="filterHasAttachments = !filterHasAttachments"
+              >
+                有附件
+              </button>
+            </div>
+            <el-select
+              v-if="tags.length > 0"
+              v-model="filterTagId"
+              clearable
+              size="small"
+              placeholder="标签"
+              class="tag-filter-inline"
+            >
+              <el-option
+                v-for="tag in tags"
+                :key="tag.id"
+                :label="`${tag.name} (${tag.conversation_count})`"
+                :value="tag.id"
+              />
+            </el-select>
+          </div>
         </div>
 
         <div v-if="searchMode" class="search-results">
@@ -965,81 +989,103 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.source-nav {
-  padding: 8px 0 4px;
+.sidebar-controls {
+  padding: 10px 12px;
   border-bottom: 1px solid var(--cl-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.source-nav-item {
-  width: 100%;
-  border: none;
-  background: transparent;
+.source-pills {
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.source-pill {
+  border: 1px solid var(--cl-border);
+  background: var(--cl-bg);
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
   color: var(--cl-text);
   cursor: pointer;
-  text-align: left;
+  line-height: 1.5;
 }
 
-.source-nav-item:hover {
-  background: rgba(64, 158, 255, 0.06);
+.source-pill:hover {
+  border-color: var(--el-color-primary-light-5);
 }
 
-.source-nav-item.active {
+.source-pill.active {
+  border-color: var(--el-color-primary);
   background: rgba(64, 158, 255, 0.1);
   color: var(--el-color-primary);
   font-weight: 600;
 }
 
-.source-nav-count {
-  font-size: 11px;
+.source-pill-count {
+  font-size: 10px;
   color: var(--cl-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.source-nav-item.active .source-nav-count {
+.source-pill.active .source-pill-count {
   color: var(--el-color-primary);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-chip {
+  border: 1px solid var(--cl-border);
+  background: var(--cl-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.filter-chip:hover {
+  border-color: var(--el-color-primary-light-5);
+  color: var(--cl-text);
+}
+
+.filter-chip.active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.1);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.tag-filter-inline {
+  width: 96px;
+  flex-shrink: 0;
 }
 
 .sidebar > .conversation-list,
 .sidebar > .search-results {
   flex: 1;
   min-height: 0;
-}
-
-.sidebar-tools {
-  padding: 12px;
-  border-bottom: 1px solid var(--cl-border);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sidebar-tools .section-title {
-  padding: 0 0 4px;
-}
-
-.filter-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 8px;
-}
-
-.tag-section {
-  padding: 0 12px 12px;
-  border-bottom: 1px solid var(--cl-border);
-}
-
-.tag-section .section-title {
-  padding: 12px 0 8px;
-}
-
-.tag-filter {
-  width: 100%;
 }
 
 .search-results {
