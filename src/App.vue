@@ -441,6 +441,25 @@ function openSearchHit(hit: SearchHit) {
   activeId.value = hit.conversation_id;
 }
 
+function formatHitTime(timestamp: number | null) {
+  if (!timestamp) return "";
+  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function searchHitRoleLabel(hit: SearchHit) {
+  if (hit.role === "user") return "你";
+  if (hit.role === "assistant") return sourceLabel(hit.source ?? "chatgpt");
+  if (hit.role === "system") {
+    return hit.source?.toLowerCase() === "cursor" ? "Cursor" : "系统";
+  }
+  return hit.role;
+}
+
 async function toggleConversationStar() {
   if (!activeConversation.value) return;
   const next = !activeConversation.value.is_starred;
@@ -692,7 +711,12 @@ onMounted(async () => {
         </div>
 
         <div v-if="searchMode" class="search-results">
-          <div class="section-title">搜索结果</div>
+          <div class="section-title">
+            搜索结果
+            <span v-if="searchHits.length > 0" class="search-count">
+              {{ searchHits.length }} 条
+            </span>
+          </div>
           <el-empty v-if="searchHits.length === 0" description="没有匹配的消息" />
           <button
             v-for="hit in searchHits"
@@ -709,6 +733,12 @@ onMounted(async () => {
                 {{ sourceLabel(hit.source) }}
               </el-tag>
               <div class="hit-title">{{ hit.conversation_title }}</div>
+            </div>
+            <div class="hit-meta">
+              <span class="hit-role">{{ searchHitRoleLabel(hit) }}</span>
+              <span v-if="hit.create_time" class="hit-time">
+                {{ formatHitTime(hit.create_time) }}
+              </span>
             </div>
             <div class="hit-snippet" v-html="hit.snippet" />
           </button>
@@ -1004,6 +1034,19 @@ onMounted(async () => {
   padding: 12px 16px 8px;
   font-size: 12px;
   color: var(--cl-text-muted);
+  font-weight: 600;
+}
+
+.search-results .section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.search-count {
+  font-weight: 500;
+  font-size: 11px;
 }
 
 .search-hit {
@@ -1035,6 +1078,24 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.hit-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--cl-text-muted);
+}
+
+.hit-role {
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+.hit-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .hit-snippet {
