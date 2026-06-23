@@ -6,6 +6,18 @@
     <link rel="icon" type="image/png" sizes="128x128" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChatLens</title>
+    <script>
+      (function () {
+        var mode = localStorage.getItem("chatlens-appearance") || "system";
+        var dark =
+          mode === "dark" ||
+          (mode === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.appearance = mode;
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        if (dark) document.documentElement.classList.add("dark");
+      })();
+    </script>
   </head>
 
   <body>

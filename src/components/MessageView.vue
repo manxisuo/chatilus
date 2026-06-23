@@ -340,8 +340,8 @@ const renderedMessages = computed(() =>
   overflow: auto;
   padding: 12px;
   border-radius: 8px;
-  background: #1e1e1e;
-  color: #dcdcdc;
+  background: var(--cl-code-bg);
+  color: var(--cl-code-text);
 }
 
 .content :deep(code) {

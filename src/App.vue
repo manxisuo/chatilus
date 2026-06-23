@@ -33,6 +33,11 @@ import type {
   TagView,
 } from "./types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "./utils/dataSource";
+import {
+  type AppearanceMode,
+  getStoredAppearance,
+  setAppearance,
+} from "./utils/appearance";
 
 const conversations = ref<ConversationSummary[]>([]);
 const messages = ref<Awaited<ReturnType<typeof getMessages>>>([]);
@@ -66,6 +71,29 @@ const filterTagId = ref<number | null>(null);
 const filterSource = ref<string | null>(null);
 const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "images">("chats");
+const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
+
+const appearanceOptions: Array<{ value: AppearanceMode; label: string }> = [
+  { value: "light", label: "浅色" },
+  { value: "dark", label: "深色" },
+  { value: "system", label: "跟随系统" },
+];
+
+const appearanceButtonLabel = computed(() => {
+  switch (appearanceMode.value) {
+    case "light":
+      return "浅色";
+    case "dark":
+      return "深色";
+    default:
+      return "系统";
+  }
+});
+
+function handleAppearanceCommand(mode: AppearanceMode) {
+  appearanceMode.value = mode;
+  setAppearance(mode);
+}
 
 const sourceCount = computed(() => {
   const entries = stats.value?.conversation_counts_by_source ?? [];
@@ -651,6 +679,27 @@ onMounted(async () => {
           @clear="clearSearch"
         />
         <el-button @click="handleSearch">搜索</el-button>
+        <el-dropdown trigger="click" @command="handleAppearanceCommand">
+          <el-button title="外观">
+            {{ appearanceButtonLabel }}
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="option in appearanceOptions"
+                :key="option.value"
+                :command="option.value"
+              >
+                <span
+                  class="appearance-item"
+                  :class="{ selected: appearanceMode === option.value }"
+                >
+                  {{ option.label }}
+                </span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-dropdown trigger="click" @command="handleImportCommand">
           <el-button type="primary" :loading="importing">
             导入数据
@@ -1014,6 +1063,28 @@ onMounted(async () => {
 
 .search-input {
   width: 280px;
+}
+
+.appearance-item {
+  display: inline-flex;
+  align-items: center;
+  min-width: 88px;
+}
+
+.appearance-item::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  margin-right: 6px;
+}
+
+.appearance-item.selected {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.appearance-item.selected::before {
+  content: "✓";
 }
 
 .body {
