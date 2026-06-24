@@ -1,7 +1,13 @@
+export interface TopicSourceCount {
+  source: string;
+  count: number;
+}
+
 export interface TopicBubble {
   label: string;
   count: number;
   kind: "tag" | "keyword";
+  sourceCounts: TopicSourceCount[];
 }
 
 export interface TopicFilter {
@@ -88,6 +94,15 @@ const STOPWORDS = new Set([
 
 const TITLE_TOKEN_PATTERN = /[\u4e00-\u9fff]{2,}|[a-zA-Z][a-zA-Z0-9_-]{1,}/g;
 
+type TopicKind = TopicBubble["kind"];
+type TopicTallyKey = `${TopicKind}:${string}`;
+
+interface TopicTally {
+  label: string;
+  kind: TopicKind;
+  sources: Map<string, number>;
+}
+
 export function topicFilterKey(filter: TopicFilter): string {
   return `${filter.kind}:${filter.label}`;
 }
@@ -137,35 +152,80 @@ export function filterConversationsByTopic<T extends { title: string; tags: stri
   return conversations.filter((conversation) => conversationMatchesTopic(conversation, filter));
 }
 
+function conversationSource(conversation: { source?: string | null }): string {
+  const source = conversation.source?.trim();
+  return source && source.length > 0 ? source : "chatgpt";
+}
+
+export function sourceCountsFromConversations(
+  conversations: Array<{ source?: string | null }>,
+): TopicSourceCount[] {
+  const tallies = new Map<string, number>();
+  for (const conversation of conversations) {
+    const source = conversationSource(conversation);
+    tallies.set(source, (tallies.get(source) ?? 0) + 1);
+  }
+  return [...tallies.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((left, right) => right.count - left.count || left.source.localeCompare(right.source));
+}
+
+export function formatTopicSourceBreakdown(
+  sourceCounts: TopicSourceCount[],
+  label: (source: string) => string,
+  separator: string,
+): string {
+  return sourceCounts.map((item) => `${label(item.source)} ${item.count}`).join(separator);
+}
+
+function recordTopicHit(
+  tallies: Map<TopicTallyKey, TopicTally>,
+  kind: TopicKind,
+  label: string,
+  source: string,
+) {
+  const key = `${kind}:${label}` as TopicTallyKey;
+  const tally = tallies.get(key) ?? { label, kind, sources: new Map<string, number>() };
+  tally.sources.set(source, (tally.sources.get(source) ?? 0) + 1);
+  tallies.set(key, tally);
+}
+
+function tallyToBubble(tally: TopicTally): TopicBubble {
+  const sourceCounts = [...tally.sources.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((left, right) => right.count - left.count || left.source.localeCompare(right.source));
+  const count = sourceCounts.reduce((sum, item) => sum + item.count, 0);
+  return {
+    label: tally.label,
+    kind: tally.kind,
+    count,
+    sourceCounts,
+  };
+}
+
 export function buildMonthTopics(
-  conversations: Array<{ title: string; tags: string[] }>,
+  conversations: Array<{ title: string; tags: string[]; source?: string | null }>,
   limit = 10,
 ): TopicBubble[] {
-  const tagCounts = new Map<string, number>();
-  const keywordCounts = new Map<string, number>();
+  const tallies = new Map<TopicTallyKey, TopicTally>();
+  const tagLabels = new Set<string>();
 
   for (const conversation of conversations) {
-    for (const tag of new Set(conversation.tags)) {
-      const label = tag.trim();
-      if (!label) continue;
-      tagCounts.set(label, (tagCounts.get(label) ?? 0) + 1);
+    const source = conversationSource(conversation);
+
+    for (const tag of new Set(conversation.tags.map((item) => item.trim()).filter(Boolean))) {
+      tagLabels.add(tag);
+      recordTopicHit(tallies, "tag", tag, source);
     }
 
     for (const keyword of extractTitleKeywords(conversation.title)) {
-      keywordCounts.set(keyword, (keywordCounts.get(keyword) ?? 0) + 1);
+      if (tagLabels.has(keyword)) continue;
+      recordTopicHit(tallies, "keyword", keyword, source);
     }
   }
 
-  const topics: TopicBubble[] = [];
-  for (const [label, count] of tagCounts) {
-    topics.push({ label, count, kind: "tag" });
-  }
-  for (const [label, count] of keywordCounts) {
-    if (tagCounts.has(label)) continue;
-    topics.push({ label, count, kind: "keyword" });
-  }
-
-  return topics
+  return [...tallies.values()]
+    .map(tallyToBubble)
     .filter((topic) => topic.count > 0)
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
     .slice(0, limit);

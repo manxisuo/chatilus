@@ -7,7 +7,9 @@ import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSou
 import {
   buildMonthTopics,
   filterConversationsByTopic,
+  formatTopicSourceBreakdown,
   isSameTopicFilter,
+  sourceCountsFromConversations,
   type TopicFilter,
 } from "../utils/timelineTopics";
 
@@ -180,6 +182,13 @@ function conversationsForMonthSection(monthKey: string, items: ConversationSumma
   return filterConversationsByTopic(items, activeTopicFilter.value);
 }
 
+function topicFilterSummaryText(conversations: ConversationSummary[]): string | null {
+  if (conversations.length === 0) return null;
+  const sources = sourceCountsFromConversations(conversations);
+  const fromPart = formatTopicSourceBreakdown(sources, sourceLabel, "、");
+  return `${conversations.length} 个对话，来自 ${fromPart}`;
+}
+
 const groupedSections = computed(() => {
   const groups = new Map<string, ConversationSummary[]>();
   for (const conversation of conversations.value) {
@@ -199,6 +208,8 @@ const groupedSections = computed(() => {
     .map((key) => {
       const monthConversations = groups.get(key) ?? [];
       const visibleConversations = conversationsForMonthSection(key, monthConversations);
+      const topicFiltered =
+        Boolean(activeTopicFilter.value) && topicFilterMonth.value === key;
       return {
         key,
         label: monthLabel(key),
@@ -208,11 +219,10 @@ const groupedSections = computed(() => {
         count:
           months.value.find((item) => item.month === key)?.conversation_count ??
           monthConversations.length,
-        imageCount:
-          months.value.find((item) => item.month === key)?.image_count ?? 0,
-        sourceCounts: sourceCountsForMonth(key, monthConversations),
-        topicFiltered:
-          Boolean(activeTopicFilter.value) && topicFilterMonth.value === key,
+        topicFiltered,
+        topicFilterSummary: topicFiltered
+          ? topicFilterSummaryText(visibleConversations)
+          : null,
       };
     })
     .filter((section) => section.totalConversations > 0);
@@ -220,6 +230,7 @@ const groupedSections = computed(() => {
   for (const [key, items] of groups) {
     if (orderedMonths.includes(key)) continue;
     const visibleConversations = conversationsForMonthSection(key, items);
+    const topicFiltered = Boolean(activeTopicFilter.value) && topicFilterMonth.value === key;
     sections.push({
       key,
       label: monthLabel(key),
@@ -227,9 +238,8 @@ const groupedSections = computed(() => {
       totalConversations: items.length,
       days: groupDays(visibleConversations),
       count: items.length,
-      imageCount: 0,
-      sourceCounts: sourceCountsForMonth(key, items),
-      topicFiltered: Boolean(activeTopicFilter.value) && topicFilterMonth.value === key,
+      topicFiltered,
+      topicFilterSummary: topicFiltered ? topicFilterSummaryText(visibleConversations) : null,
     });
   }
 
@@ -505,7 +515,6 @@ onUnmounted(() => {
   <div class="timeline-view">
     <header class="timeline-header">
       <div class="timeline-header-main">
-        <h2 class="title">时间线</h2>
         <p class="subtitle">按月份回顾你与 AI 的对话足迹，跨 ChatGPT、Cursor、Gemini 等来源混排。</p>
         <div class="source-nav">
           <button
@@ -539,9 +548,9 @@ onUnmounted(() => {
           >
             <span class="month-nav-label">{{ monthLabel(bucket.month) }}</span>
             <span class="month-nav-meta">
-              <span class="month-nav-count">{{ bucket.conversation_count }}</span>
+              <span class="month-nav-count">{{ bucket.conversation_count }} 对话</span>
               <span v-if="bucket.image_count" class="month-nav-images">
-                {{ bucket.image_count }} 图
+                {{ bucket.image_count }} 图片
               </span>
             </span>
           </button>
@@ -563,49 +572,19 @@ onUnmounted(() => {
             :data-timeline-month="section.key"
           >
             <div class="section-header">
-              <div class="section-header-main">
-                <h3 class="section-title">{{ section.label }}</h3>
-                <div v-if="section.sourceCounts.length" class="section-sources">
-                  <span
-                    v-for="item in section.sourceCounts"
-                    :key="item.source"
-                    class="section-source-pill"
-                  >
-                    {{ sourceLabel(item.source) }} {{ item.count }}
-                  </span>
-                </div>
-              </div>
-              <div class="section-header-actions">
-                <button
-                  v-if="section.topicFiltered"
-                  type="button"
-                  class="topic-filter-chip"
-                  @click="clearTopicFilter"
-                >
-                  话题：{{ activeTopicFilter?.label }} ✕
-                </button>
-                <span class="section-count">
-                  <template v-if="section.topicFiltered">
-                    {{ section.conversations.length }} / {{ section.totalConversations }}
-                  </template>
-                  <template v-else>
-                    {{ section.conversations.length
-                    }}<template v-if="section.count > section.conversations.length">
-                      / {{ section.count }}</template
-                    >
-                  </template>
-                  条对话
-                </span>
-                <button
-                  v-if="section.imageCount > 0"
-                  type="button"
-                  class="section-link"
-                  @click="emit('openGallery', { month: section.key })"
-                >
-                  {{ section.imageCount }} 张 · 本月图片
-                </button>
-              </div>
+              <h3 class="section-title">{{ section.label }}</h3>
+              <button
+                v-if="section.topicFiltered"
+                type="button"
+                class="topic-filter-chip"
+                @click="clearTopicFilter"
+              >
+                话题：{{ activeTopicFilter?.label }} ✕
+              </button>
             </div>
+            <p v-if="section.topicFilterSummary" class="topic-filter-summary">
+              {{ section.topicFilterSummary }}
+            </p>
             <p
               v-if="section.topicFiltered && section.conversations.length === 0"
               class="topic-filter-empty"
@@ -721,14 +700,8 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
 .subtitle {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 13px;
   color: var(--cl-text-muted);
 }
@@ -877,9 +850,9 @@ onUnmounted(() => {
 
 .section-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 12px;
   position: sticky;
   top: 0;
@@ -892,54 +865,15 @@ onUnmounted(() => {
   );
 }
 
-.section-header-main {
-  min-width: 0;
-}
-
-.section-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.section-source-pill {
-  font-size: 11px;
-  color: var(--cl-text-muted);
-  border: 1px solid var(--cl-border);
-  border-radius: 999px;
-  padding: 1px 8px;
-  background: var(--cl-bg);
-}
-
-.section-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.section-link {
-  border: none;
-  background: transparent;
-  padding: 0;
-  font-size: 12px;
-  color: var(--el-color-primary);
-  cursor: pointer;
-}
-
-.section-link:hover {
-  text-decoration: underline;
-}
-
 .section-title {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
 }
 
-.section-count {
-  font-size: 12px;
+.topic-filter-summary {
+  margin: -4px 0 12px;
+  font-size: 13px;
   color: var(--cl-text-muted);
 }
 

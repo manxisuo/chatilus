@@ -164,7 +164,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 **Timeline B+（钻取，先于 Workspace）**
 
 - [x] **B1** Topic 点击筛选当月对话（月 → Topic → 会话）
-- [ ] **B2** Topic 来源 breakdown（如 `Docker 3 · ChatGPT 2 / Cursor 1`）
+- [x] **B2** Topic 来源 breakdown（如 `Docker 3 · ChatGPT 2 / Cursor 1`）
 - [ ] **B3** 左侧月份栏来源摘要（`source_counts` 已有，补 UI）
 - [ ] **B4**（可选）中间 feed 与右侧洞察分工、减少重复
 - [ ] **B5**（延后）热度日历、Topic 环比、活跃时段分布

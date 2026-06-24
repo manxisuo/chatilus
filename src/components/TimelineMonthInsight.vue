@@ -99,7 +99,6 @@ const sourceRows = computed(() => {
             type="button"
             class="topic-bubble"
             :class="[topic.kind, { active: isSameTopicFilter(activeTopicFilter, topic) }]"
-            :title="topic.kind === 'tag' ? '点击筛选带此标签的对话' : '点击筛选标题含此关键词的对话'"
             @click="emit('selectTopic', { label: topic.label, kind: topic.kind })"
           >
             <span class="topic-label">{{ topic.label }}</span>
@@ -253,6 +252,7 @@ const sourceRows = computed(() => {
   cursor: pointer;
   font-family: inherit;
   color: inherit;
+  white-space: nowrap;
 }
 
 .topic-bubble:hover {
@@ -264,10 +264,6 @@ const sourceRows = computed(() => {
   background: rgba(64, 158, 255, 0.14);
   color: var(--el-color-primary);
   font-weight: 600;
-}
-
-.topic-bubble.active .topic-count {
-  color: var(--el-color-primary);
 }
 
 .topic-bubble.tag {
@@ -291,6 +287,10 @@ const sourceRows = computed(() => {
   color: var(--cl-text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+.topic-bubble.active .topic-count {
+  color: var(--el-color-primary);
 }
 
 @media (max-width: 1280px) {
