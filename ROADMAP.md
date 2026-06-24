@@ -55,7 +55,7 @@ v0.5 **Timeline**、收藏消息列表与图库 **assets 物化** **已完成**�
 
 > **Workspace / Project** —— 将多源会话归入同一工作项目，在项目视图内聚合对话、图片与搜索。
 
-v0.5 顺延项（未做）：Global Search++（`bm25()`）、来源列表查询索引优化。
+v0.5 顺延项（**已完成**）：Global Search++（`bm25()`）、来源列表查询索引优化（schema v7）。
 
 ### 多源 Importer（PR4a–c）
 
@@ -100,9 +100,9 @@ v0.5 顺延项（未做）：Global Search++（`bm25()`）、来源列表查询�
 
 已有、不重复建设：`messages(conversation_id, sort_order)`、`conversations(update_time)`、`conversations(is_starred, update_time)`、`messages_fts`（FTS5）。
 
-EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tags_tag` 已命中；图库 / Timeline 图片统计已走 `assets` 索引；来源列表因 `COALESCE(source)` + 先排 `is_starred` 暂未用到 `idx_conversations_source_update`（见「后续任务分层」可选优化项）。
+EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tags_tag` 已命中；图库 / Timeline 图片统计已走 `assets` 索引；来源列表过滤已改为 `source = ?` 并新增 `idx_conversations_source_starred_update`（schema v7）。
 
-**明确不在 PR5/v6 范围**：`imports` / `import_jobs` 低优先级索引、FTS `bm25()` 排序改造。
+**明确不在 PR5/v6 范围**：`imports` / `import_jobs` 低优先级索引。
 
 ### 明确不做进 v0.4
 
@@ -147,10 +147,10 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 - [x] 收藏消息列表（独立入口，与收藏对话拆分）
 - [x] 利用 `conversations(update_time)` 与 `messages(create_time)` 索引
 
-**v0.5 顺延 / 支撑（未完成）**
+**v0.5 顺延 / 支撑（已完成）**
 
-- [ ] Global Search++（第一阶段）：显式 `bm25()` 排序；时间、来源、收藏等权重可后续迭代
-- [ ] （可选）来源列表查询优化：`COALESCE(source)` → `source = ?`，或复合索引 `(source, is_starred, update_time)`
+- [x] Global Search++（第一阶段）：显式 `bm25()` 排序；时间、来源、收藏等权重可后续迭代
+- [x] （可选）来源列表查询优化：`COALESCE(source)` → `source = ?`，复合索引 `(source, is_starred, update_time)`（schema v7）
 
 **v0.5 可选增强（Timeline，非阻塞 v0.6）**
 
@@ -488,8 +488,8 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - [x] 布局：侧栏对齐对话页、内容区限宽；本月图片数与图库对齐
 - [x] 收藏消息列表与跨对话消息定位修复
 - [x] **assets 物化**（schema v6）：图库 / 统计 / `has_images` 改查物化表
-- [ ] Global Search++ 第一阶段：`bm25()` + 更好命中上下文（顺延至 v0.6 并行）
-- [ ] （可选）来源列表 `COALESCE(source)` 查询优化（顺延）
+- [x] Global Search++ 第一阶段：`bm25()` 显式排序
+- [x] （可选）来源列表 `source = ?` 查询 + `idx_conversations_source_starred_update`（schema v7）
 
 ### v0.6 — Workspace / Project
 

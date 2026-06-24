@@ -37,6 +37,8 @@ const HAS_ATTACHMENTS_EXISTS_SQL: &str =
           AND m.attachments != '[]'
     )";
 
+const SOURCE_EQUALS_SQL: &str = "c.source = ?";
+
 fn map_timeline_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<ConversationSummary> {
     let mut summary = map_conversation_summary(row)?;
     summary.activity_month = row.get(10)?;
@@ -61,7 +63,8 @@ fn timeline_month_source_counts(
     let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
-        sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+        sql.push_str(" AND ");
+        sql.push_str(SOURCE_EQUALS_SQL);
         bind.push(Box::new(source.to_string()));
     }
 
@@ -132,7 +135,8 @@ impl ConversationRepository for Database {
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            sql.push_str(" AND ");
+            sql.push_str(SOURCE_EQUALS_SQL);
             bind.push(Box::new(source.to_string()));
         }
         if query.has_images && query.has_attachments {
@@ -214,7 +218,8 @@ impl ConversationRepository for Database {
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            sql.push_str(" AND ");
+            sql.push_str(SOURCE_EQUALS_SQL);
             bind.push(Box::new(source.to_string()));
         }
         if let Some(month) = query
@@ -266,7 +271,8 @@ impl ConversationRepository for Database {
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
         if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
-            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            sql.push_str(" AND ");
+            sql.push_str(SOURCE_EQUALS_SQL);
             bind.push(Box::new(source.to_string()));
         }
 

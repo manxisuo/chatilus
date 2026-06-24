@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 6;
+pub const CURRENT_SCHEMA_VERSION: i32 = 7;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -35,6 +35,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
         4 => migrate_v4(&tx),
         5 => migrate_v5(&tx),
         6 => migrate_v6(&tx),
+        7 => migrate_v7(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -269,6 +270,29 @@ fn migrate_v6(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// v7：来源列表查询优化——回填 `source` 并增加 `(source, is_starred, update_time)` 复合索引。
+fn migrate_v7(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "UPDATE conversations
+         SET source = COALESCE(source, 'chatgpt'),
+             source_id = COALESCE(source_id, id)
+         WHERE source IS NULL OR source_id IS NULL",
+        [],
+    )
+    .map_err(|e| format!("迁移 v7: 回填 conversations.source/source_id 失败: {e}"))?;
+
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_conversations_source_starred_update
+            ON conversations(source, is_starred DESC, update_time DESC);
+        ",
+    )
+    .map_err(|e| format!("迁移 v7: 创建来源列表索引失败: {e}"))?;
+
+    upsert_meta(conn, "schema_version", "7")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod migrate_v6_tests {
     use super::*;
@@ -345,6 +369,77 @@ mod migrate_v6_tests {
             .query_row("SELECT local_path FROM assets", [], |row| row.get(0))
             .expect("path");
         assert_eq!(path, "/tmp/test.png");
+    }
+}
+
+#[cfg(test)]
+mod migrate_v7_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn migrate_v7_backfills_source_and_creates_list_index() {
+        let conn = Connection::open_in_memory().expect("open");
+        conn.execute_batch(
+            "
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO meta (key, value) VALUES ('schema_version', '6');
+
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                create_time REAL,
+                update_time REAL,
+                source_path TEXT NOT NULL,
+                model TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                is_starred INTEGER NOT NULL DEFAULT 0,
+                source TEXT,
+                source_id TEXT
+            );
+            ",
+        )
+        .expect("seed");
+
+        conn.execute(
+            "INSERT INTO conversations (
+                id, title, create_time, update_time, source_path, message_count, source, source_id
+             ) VALUES ('legacy', 'Legacy', 1, 2, '/export', 1, NULL, NULL)",
+            [],
+        )
+        .expect("legacy conversation");
+
+        migrate_v7(&conn).expect("migrate v7");
+
+        let source: String = conn
+            .query_row("SELECT source FROM conversations WHERE id = 'legacy'", [], |row| {
+                row.get(0)
+            })
+            .expect("source");
+        assert_eq!(source, "chatgpt");
+
+        let indexes: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'index' AND name LIKE 'idx_%'
+                 ORDER BY name",
+            )
+            .expect("prepare")
+            .query_map([], |row| row.get(0))
+            .expect("query")
+            .filter_map(Result::ok)
+            .collect();
+
+        assert!(indexes.contains(&"idx_conversations_source_starred_update".to_string()));
+
+        let version: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("schema version");
+        assert_eq!(version, "7");
     }
 }
 

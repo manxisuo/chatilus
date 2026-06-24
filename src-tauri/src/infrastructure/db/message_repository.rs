@@ -134,7 +134,7 @@ impl MessageRepository for Database {
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
         if let Some(source) = source.map(str::trim).filter(|value| !value.is_empty()) {
-            sql.push_str(" AND COALESCE(c.source, 'chatgpt') = ?");
+            sql.push_str(" AND c.source = ?");
             bind.push(Box::new(source.to_string()));
         }
 

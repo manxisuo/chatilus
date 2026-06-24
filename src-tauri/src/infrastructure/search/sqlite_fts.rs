@@ -23,7 +23,7 @@ pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>
              JOIN messages m ON m.id = f.message_id
              JOIN conversations c ON c.id = f.conversation_id
              WHERE messages_fts MATCH ?1
-             ORDER BY rank
+             ORDER BY bm25(messages_fts)
              LIMIT ?2",
         )
         .map_err(|e| format!("搜索失败: {e}"))?;
@@ -92,6 +92,7 @@ impl SearchEngine for Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
 
     #[test]
     fn builds_fts_query_with_multiple_tokens() {
@@ -101,5 +102,70 @@ mod tests {
     #[test]
     fn escapes_quotes_in_fts_query() {
         assert_eq!(build_fts_query("foo\"bar"), "\"foo\"\"bar\"");
+    }
+
+    #[test]
+    fn orders_results_by_bm25() {
+        let conn = Connection::open_in_memory().expect("open");
+        conn.execute_batch(
+            "
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                source TEXT
+            );
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                create_time REAL
+            );
+            CREATE VIRTUAL TABLE messages_fts USING fts5(
+                message_id UNINDEXED,
+                conversation_id UNINDEXED,
+                conversation_title,
+                content
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute(
+            "INSERT INTO conversations (id, title, source) VALUES ('c1', 'Rust', 'chatgpt')",
+            [],
+        )
+        .expect("conversation");
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, create_time)
+             VALUES ('m1', 'c1', 'user', 'hello world', 1)",
+            [],
+        )
+        .expect("message 1");
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, create_time)
+             VALUES ('m2', 'c1', 'assistant', 'rust programming language tutorial', 2)",
+            [],
+        )
+        .expect("message 2");
+        conn.execute(
+            "INSERT INTO messages_fts (message_id, conversation_id, conversation_title, content)
+             VALUES ('m1', 'c1', 'Rust', 'hello world'),
+                    ('m2', 'c1', 'Rust', 'rust programming language tutorial')",
+            [],
+        )
+        .expect("fts");
+
+        let results = search(
+            &conn,
+            SearchQuery {
+                text: "rust programming".to_string(),
+                limit: 10,
+            },
+        )
+        .expect("search");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].message_id, "m2");
     }
 }
