@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SourceCount } from "../types";
-import type { TopicBubble } from "../utils/timelineTopics";
+import type { TopicBubble, TopicFilter } from "../utils/timelineTopics";
+import { isSameTopicFilter } from "../utils/timelineTopics";
 import { sourceLabel, sourceTagType } from "../utils/dataSource";
 
 const props = defineProps<{
@@ -15,10 +16,12 @@ const props = defineProps<{
   sourceCounts: SourceCount[];
   topics: TopicBubble[];
   loading: boolean;
+  activeTopicFilter: TopicFilter | null;
 }>();
 
 const emit = defineEmits<{
   openGallery: [];
+  selectTopic: [topic: TopicFilter];
 }>();
 
 const isPartial = computed(() => props.loadedCount < props.totalCount);
@@ -90,16 +93,18 @@ const sourceRows = computed(() => {
         <el-skeleton v-if="loading && topics.length === 0" animated :rows="3" />
         <p v-else-if="topics.length === 0" class="empty-topics">暂无足够数据提取话题</p>
         <div v-else class="topic-bubbles">
-          <span
+          <button
             v-for="topic in topics"
             :key="`${topic.kind}:${topic.label}`"
+            type="button"
             class="topic-bubble"
-            :class="topic.kind"
-            :title="topic.kind === 'tag' ? '来自标签' : '来自标题关键词'"
+            :class="[topic.kind, { active: isSameTopicFilter(activeTopicFilter, topic) }]"
+            :title="topic.kind === 'tag' ? '点击筛选带此标签的对话' : '点击筛选标题含此关键词的对话'"
+            @click="emit('selectTopic', { label: topic.label, kind: topic.kind })"
           >
             <span class="topic-label">{{ topic.label }}</span>
             <span class="topic-count">{{ topic.count }}</span>
-          </span>
+          </button>
         </div>
       </section>
     </template>
@@ -245,6 +250,24 @@ const sourceRows = computed(() => {
   padding: 3px 10px;
   font-size: 12px;
   background: var(--cl-panel);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+.topic-bubble:hover {
+  border-color: var(--el-color-primary-light-5);
+}
+
+.topic-bubble.active {
+  border-color: var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.14);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.topic-bubble.active .topic-count {
+  color: var(--el-color-primary);
 }
 
 .topic-bubble.tag {

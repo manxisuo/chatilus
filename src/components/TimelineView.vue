@@ -4,7 +4,12 @@ import { listTimeline, listTimelineMonths } from "../api";
 import TimelineMonthInsight from "./TimelineMonthInsight.vue";
 import type { ConversationSummary, SourceCount, TimelineMonthBucket } from "../types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSource";
-import { buildMonthTopics } from "../utils/timelineTopics";
+import {
+  buildMonthTopics,
+  filterConversationsByTopic,
+  isSameTopicFilter,
+  type TopicFilter,
+} from "../utils/timelineTopics";
 
 const props = defineProps<{
   totalCount: number | null;
@@ -30,6 +35,8 @@ const feedRef = ref<HTMLElement | null>(null);
 const monthNavRef = ref<HTMLElement | null>(null);
 const jumpingToMonth = ref(false);
 const monthInsightLoading = ref(false);
+const activeTopicFilter = ref<TopicFilter | null>(null);
+const topicFilterMonth = ref<string | null>(null);
 let monthPreloadTimer: ReturnType<typeof setTimeout> | null = null;
 
 const FEED_PADDING_TOP = 16;
@@ -166,6 +173,13 @@ function mergeConversations(batch: ConversationSummary[]) {
   );
 }
 
+function conversationsForMonthSection(monthKey: string, items: ConversationSummary[]) {
+  if (!activeTopicFilter.value || topicFilterMonth.value !== monthKey) {
+    return items;
+  }
+  return filterConversationsByTopic(items, activeTopicFilter.value);
+}
+
 const groupedSections = computed(() => {
   const groups = new Map<string, ConversationSummary[]>();
   for (const conversation of conversations.value) {
@@ -184,31 +198,38 @@ const groupedSections = computed(() => {
   const sections = orderedMonths
     .map((key) => {
       const monthConversations = groups.get(key) ?? [];
+      const visibleConversations = conversationsForMonthSection(key, monthConversations);
       return {
         key,
         label: monthLabel(key),
-        conversations: monthConversations,
-        days: groupDays(monthConversations),
+        conversations: visibleConversations,
+        totalConversations: monthConversations.length,
+        days: groupDays(visibleConversations),
         count:
           months.value.find((item) => item.month === key)?.conversation_count ??
           monthConversations.length,
         imageCount:
           months.value.find((item) => item.month === key)?.image_count ?? 0,
         sourceCounts: sourceCountsForMonth(key, monthConversations),
+        topicFiltered:
+          Boolean(activeTopicFilter.value) && topicFilterMonth.value === key,
       };
     })
-    .filter((section) => section.conversations.length > 0);
+    .filter((section) => section.totalConversations > 0);
 
   for (const [key, items] of groups) {
     if (orderedMonths.includes(key)) continue;
+    const visibleConversations = conversationsForMonthSection(key, items);
     sections.push({
       key,
       label: monthLabel(key),
-      conversations: items,
-      days: groupDays(items),
+      conversations: visibleConversations,
+      totalConversations: items.length,
+      days: groupDays(visibleConversations),
       count: items.length,
       imageCount: 0,
       sourceCounts: sourceCountsForMonth(key, items),
+      topicFiltered: Boolean(activeTopicFilter.value) && topicFilterMonth.value === key,
     });
   }
 
@@ -318,12 +339,18 @@ function updateActiveMonthFromScroll(container: HTMLElement) {
   const containerTop = container.getBoundingClientRect().top;
   const anchor = 72;
   let current: string | null = null;
+  let closestTop = -Infinity;
+
   for (const section of sections) {
-    const sectionTop = section.getBoundingClientRect().top - containerTop;
-    if (sectionTop <= anchor) {
+    const header = section.querySelector<HTMLElement>(".section-header");
+    if (!header) continue;
+    const headerTop = header.getBoundingClientRect().top - containerTop;
+    if (headerTop <= anchor && headerTop > closestTop) {
+      closestTop = headerTop;
       current = section.dataset.timelineMonth ?? null;
     }
   }
+
   if (current && current !== activeMonth.value) {
     activeMonth.value = current;
     scrollMonthNavIntoView(current);
@@ -360,6 +387,7 @@ function scrollFeedToMonth(container: HTMLElement, month: string) {
 }
 
 async function jumpToMonth(month: string) {
+  clearTopicFilter();
   jumpingToMonth.value = true;
   activeMonth.value = month;
   try {
@@ -387,15 +415,64 @@ function setFilterSource(source: string | null) {
   emit("update:filterSource", source);
 }
 
+function toggleTopicFilter(topic: TopicFilter) {
+  if (isSameTopicFilter(activeTopicFilter.value, topic)) {
+    clearTopicFilter();
+    return;
+  }
+
+  const month = activeMonth.value;
+  if (!month) return;
+
+  activeTopicFilter.value = topic;
+  topicFilterMonth.value = month;
+  void repositionFeedForTopicFilter(month);
+}
+
+async function repositionFeedForTopicFilter(month: string) {
+  jumpingToMonth.value = true;
+  try {
+    await ensureMonthLoaded(month);
+    await nextTick();
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const container = feedRef.value;
+    if (!container) return;
+    scrollFeedToMonth(container, month);
+    activeMonth.value = month;
+    scrollMonthNavIntoView(month);
+    requestAnimationFrame(() => {
+      scrollFeedToMonth(container, month);
+    });
+  } finally {
+    requestAnimationFrame(() => {
+      jumpingToMonth.value = false;
+    });
+  }
+}
+
+function clearTopicFilter() {
+  activeTopicFilter.value = null;
+  topicFilterMonth.value = null;
+}
+
 watch(
   () => props.filterSource,
   () => {
     activeMonth.value = null;
+    activeTopicFilter.value = null;
+    topicFilterMonth.value = null;
     void reload();
   },
 );
 
-watch(activeMonth, (month) => {
+watch(activeMonth, (month, previousMonth) => {
+  if (month !== previousMonth && !jumpingToMonth.value) {
+    activeTopicFilter.value = null;
+    topicFilterMonth.value = null;
+  }
   if (!month || jumpingToMonth.value) return;
   if (monthPreloadTimer) clearTimeout(monthPreloadTimer);
   monthPreloadTimer = setTimeout(() => {
@@ -499,11 +576,24 @@ onUnmounted(() => {
                 </div>
               </div>
               <div class="section-header-actions">
+                <button
+                  v-if="section.topicFiltered"
+                  type="button"
+                  class="topic-filter-chip"
+                  @click="clearTopicFilter"
+                >
+                  话题：{{ activeTopicFilter?.label }} ✕
+                </button>
                 <span class="section-count">
-                  {{ section.conversations.length
-                  }}<template v-if="section.count > section.conversations.length">
-                    / {{ section.count }}</template
-                  >
+                  <template v-if="section.topicFiltered">
+                    {{ section.conversations.length }} / {{ section.totalConversations }}
+                  </template>
+                  <template v-else>
+                    {{ section.conversations.length
+                    }}<template v-if="section.count > section.conversations.length">
+                      / {{ section.count }}</template
+                    >
+                  </template>
                   条对话
                 </span>
                 <button
@@ -516,6 +606,12 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
+            <p
+              v-if="section.topicFiltered && section.conversations.length === 0"
+              class="topic-filter-empty"
+            >
+              本月没有匹配「{{ activeTopicFilter?.label }}」的对话
+            </p>
             <div
               v-for="day in section.days"
               :key="day.key"
@@ -600,7 +696,9 @@ onUnmounted(() => {
         :source-counts="activeMonthInsight.sourceCounts"
         :topics="activeMonthInsight.topics"
         :loading="monthInsightLoading"
+        :active-topic-filter="activeTopicFilter"
         @open-gallery="openActiveMonthGallery"
+        @select-topic="toggleTopicFilter"
       />
     </div>
   </div>
@@ -842,6 +940,26 @@ onUnmounted(() => {
 
 .section-count {
   font-size: 12px;
+  color: var(--cl-text-muted);
+}
+
+.topic-filter-chip {
+  border: 1px solid var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.1);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+.topic-filter-chip:hover {
+  background: rgba(64, 158, 255, 0.16);
+}
+
+.topic-filter-empty {
+  margin: 0 0 12px;
+  font-size: 13px;
   color: var(--cl-text-muted);
 }
 

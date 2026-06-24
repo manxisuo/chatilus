@@ -49,13 +49,17 @@ AI 能力放在 `application/ai/`，不进入 domain 核心。
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## 当前重点（v0.6）
+## 当前重点（Timeline B+ → v0.6 Workspace）
 
-v0.5 **Timeline**、收藏消息列表与图库 **assets 物化** **已完成**。下一里程碑：
+v0.5 **Timeline**、收藏消息列表、图库 **assets 物化**、Search++ **bm25** 与来源索引 **v7** **已完成**。
+
+**进行中 — Timeline B+（钻取与信息密度，先于 Workspace）**
+
+> 在 Timeline 上把「月报」做透：Topic 可点击筛选、来源维度、左侧月份摘要等；**完成后再开 v0.6 Workspace**。
+
+下一里程碑（B+ 之后）：
 
 > **Workspace / Project** —— 将多源会话归入同一工作项目，在项目视图内聚合对话、图片与搜索。
-
-v0.5 顺延项（**已完成**）：Global Search++（`bm25()`）、来源列表查询索引优化（schema v7）。
 
 ### 多源 Importer（PR4a–c）
 
@@ -128,7 +132,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 > 排序原则：**Archive 做扎实 → Organize（Timeline / Workspace / Topic）→ Insight（可溯源 AI）**。不做十个浏览小功能替代 Timeline。
 
-### 接下来要做（v0.6：Workspace）
+### 接下来要做（v0.6：Workspace，待 Timeline B+ 完成）
 
 **主里程碑 — Workspace / Project**
 
@@ -156,6 +160,14 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 - [x] 右侧月度洞察面板（统计摘要 + 来源分布 + Topic 区域）
 - [x] Topic Bubble：标题关键词 / 标签聚合（无 AI）
+
+**Timeline B+（钻取，先于 Workspace）**
+
+- [x] **B1** Topic 点击筛选当月对话（月 → Topic → 会话）
+- [ ] **B2** Topic 来源 breakdown（如 `Docker 3 · ChatGPT 2 / Cursor 1`）
+- [ ] **B3** 左侧月份栏来源摘要（`source_counts` 已有，补 UI）
+- [ ] **B4**（可选）中间 feed 与右侧洞察分工、减少重复
+- [ ] **B5**（延后）热度日历、Topic 环比、活跃时段分布
 
 ### 再往后（v0.6–v0.7：Organize）
 

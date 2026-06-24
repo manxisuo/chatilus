@@ -4,6 +4,11 @@ export interface TopicBubble {
   kind: "tag" | "keyword";
 }
 
+export interface TopicFilter {
+  label: string;
+  kind: TopicBubble["kind"];
+}
+
 const STOPWORDS = new Set([
   "the",
   "and",
@@ -83,6 +88,18 @@ const STOPWORDS = new Set([
 
 const TITLE_TOKEN_PATTERN = /[\u4e00-\u9fff]{2,}|[a-zA-Z][a-zA-Z0-9_-]{1,}/g;
 
+export function topicFilterKey(filter: TopicFilter): string {
+  return `${filter.kind}:${filter.label}`;
+}
+
+export function isSameTopicFilter(
+  left: TopicFilter | null | undefined,
+  right: TopicFilter | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.label === right.label;
+}
+
 export function extractTitleKeywords(title: string): string[] {
   const matches = title.match(TITLE_TOKEN_PATTERN) ?? [];
   const unique = new Set<string>();
@@ -96,6 +113,28 @@ export function extractTitleKeywords(title: string): string[] {
   }
 
   return [...unique];
+}
+
+export function conversationMatchesTopic(
+  conversation: { title: string; tags: string[] },
+  filter: TopicFilter,
+): boolean {
+  if (filter.kind === "tag") {
+    return conversation.tags.some((tag) => tag.trim() === filter.label);
+  }
+
+  const target = filter.label.toLowerCase();
+  return extractTitleKeywords(conversation.title).some(
+    (keyword) => keyword.toLowerCase() === target,
+  );
+}
+
+export function filterConversationsByTopic<T extends { title: string; tags: string[] }>(
+  conversations: T[],
+  filter: TopicFilter | null,
+): T[] {
+  if (!filter) return conversations;
+  return conversations.filter((conversation) => conversationMatchesTopic(conversation, filter));
 }
 
 export function buildMonthTopics(
