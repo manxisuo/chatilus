@@ -48,6 +48,7 @@ import {
   getStoredAppearance,
   setAppearance,
 } from "./utils/appearance";
+import { installDesktopBehaviors } from "./composables/useKeyboardShortcuts";
 import { setAppLocale } from "./i18n";
 import {
   type AppLocale,
@@ -401,8 +402,11 @@ function cleanupImportListeners() {
   importUnlisten = [];
 }
 
+let removeKeyboardShortcuts: (() => void) | undefined;
+
 onUnmounted(() => {
   cleanupImportListeners();
+  removeKeyboardShortcuts?.();
 });
 
 function formatImportResultMessage(result: ImportResult): string {
@@ -801,6 +805,7 @@ watch(
 });
 
 onMounted(async () => {
+  removeKeyboardShortcuts = installDesktopBehaviors();
   await refreshStats();
   await refreshTags();
   await loadConversations();

@@ -324,6 +324,7 @@ function shouldEagerLoadImages(messageId: string) {
           :key="message.id"
           :id="`message-${message.id}`"
           class="message"
+          tabindex="0"
           :class="[
             message.role,
             {
@@ -351,7 +352,7 @@ function shouldEagerLoadImages(messageId: string) {
           </div>
           <div
             v-if="message.html.trim()"
-            class="content markdown-body"
+            class="content markdown-body selectable-text"
             v-html="message.html"
           />
           <div v-if="message.attachments.length" class="attachments">
@@ -453,6 +454,12 @@ function shouldEagerLoadImages(messageId: string) {
   border: none;
   border-bottom: 1px solid var(--cl-border-subtle);
   background: transparent;
+  outline: none;
+}
+
+.message:focus-visible {
+  outline: 1px solid var(--cl-accent);
+  outline-offset: 2px;
 }
 
 .message.starred {

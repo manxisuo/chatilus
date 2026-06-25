@@ -17,6 +17,7 @@ html[data-theme="light"] {
   --cl-hover: rgba(31, 41, 55, 0.04);
   --cl-accent: #5b6b82;
   --cl-accent-soft: rgba(91, 107, 130, 0.12);
+  --cl-text-selection: rgba(91, 107, 130, 0.28);
   --cl-sidebar-width: 260px;
   --cl-content-max-width: 860px;
   --cl-insight-width: 260px;
@@ -52,6 +53,7 @@ html[data-theme="dark"] {
   --cl-hover: rgba(255, 255, 255, 0.04);
   --cl-accent: #9aa3b2;
   --cl-accent-soft: rgba(154, 163, 178, 0.14);
+  --cl-text-selection: rgba(154, 163, 178, 0.35);
 
   --el-color-primary: #9aa3b2;
   --el-color-primary-light-3: #9aa0a8;
@@ -71,6 +73,18 @@ body,
   background: var(--cl-bg);
   color: var(--cl-text);
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.selectable-text::selection,
+.selectable-text *::selection {
+  background: var(--cl-text-selection);
 }
 
 * {
