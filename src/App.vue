@@ -67,6 +67,8 @@ const importProgress = ref({
   processed: 0,
   total: 0,
 });
+const importElapsedMs = ref(0);
+let importTimer: ReturnType<typeof setInterval> | null = null;
 let importUnlisten: UnlistenFn[] = [];
 const exporting = ref(false);
 const stats = ref<DatabaseStats | null>(null);
@@ -367,7 +369,34 @@ const importPhaseLabel = computed(() => {
   }
 });
 
+function formatImportElapsed(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes} 分 ${String(seconds).padStart(2, "0")} 秒`;
+  }
+  return `${totalSeconds} 秒`;
+}
+
+function startImportTimer() {
+  stopImportTimer();
+  importElapsedMs.value = 0;
+  const startedAt = Date.now();
+  importTimer = setInterval(() => {
+    importElapsedMs.value = Date.now() - startedAt;
+  }, 200);
+}
+
+function stopImportTimer() {
+  if (importTimer !== null) {
+    clearInterval(importTimer);
+    importTimer = null;
+  }
+}
+
 function cleanupImportListeners() {
+  stopImportTimer();
   for (const unlisten of importUnlisten) {
     void unlisten();
   }
@@ -423,6 +452,7 @@ async function startImportFlow(path: string, importerId?: string) {
   cleanupImportListeners();
   importing.value = true;
   importDialogVisible.value = true;
+  startImportTimer();
   importProgress.value = {
     phase: "pending",
     progress: 0,
@@ -944,6 +974,9 @@ onMounted(async () => {
       :show-close="false"
     >
       <p>{{ importPhaseLabel }}</p>
+      <p class="import-progress-elapsed">
+        已用时 {{ formatImportElapsed(importElapsedMs) }}
+      </p>
       <el-progress
         :percentage="importProgress.progress"
         :stroke-width="16"
@@ -1623,10 +1656,16 @@ onMounted(async () => {
   bottom: 20px;
 }
 
+.import-progress-elapsed,
 .import-progress-detail {
   margin-top: 8px;
   font-size: 12px;
   color: var(--cl-text-muted);
+}
+
+.import-progress-elapsed {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .import-source-grid {
