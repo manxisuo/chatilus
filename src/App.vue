@@ -464,7 +464,7 @@ async function handleImportFile() {
     filters: [
       {
         name: "支持的导入文件",
-        extensions: ["zip", "vscdb"],
+        extensions: ["zip", "vscdb", "sqlite"],
       },
     ],
   });
@@ -480,7 +480,7 @@ async function handleImportDir() {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: "选择导入目录（ChatGPT 导出 / Cursor User 或 globalStorage）",
+    title: "选择导入目录（ChatGPT 导出 / Cursor User / Codex ~/.codex）",
   });
 
   if (!selected || Array.isArray(selected)) {
@@ -599,7 +599,9 @@ function searchHitRoleLabel(hit: SearchHit) {
   if (hit.role === "user") return "你";
   if (hit.role === "assistant") return sourceLabel(hit.source ?? "chatgpt");
   if (hit.role === "system") {
-    return hit.source?.toLowerCase() === "cursor" ? "Cursor" : "系统";
+    const src = hit.source?.toLowerCase();
+    if (src === "cursor" || src === "codex") return sourceLabel(src);
+    return "系统";
   }
   return hit.role;
 }
@@ -793,7 +795,7 @@ onMounted(async () => {
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb / Gemini Takeout）</el-dropdown-item>
+              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb / Codex state.sqlite / Gemini Takeout）</el-dropdown-item>
               <el-dropdown-item command="dir">导入目录</el-dropdown-item>
             </el-dropdown-menu>
           </template>

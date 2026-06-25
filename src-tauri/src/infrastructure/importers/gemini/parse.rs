@@ -1,7 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext};
 
 #[derive(Debug, Clone, PartialEq)]
 struct ActivityEntry {
@@ -12,6 +12,7 @@ struct ActivityEntry {
     generated_images: usize,
     response_image_sources: Vec<String>,
     user_image_sources: Vec<String>,
+    notebook: Option<String>,
 }
 
 pub fn parse_activity_html(html: &str) -> Vec<ImportedConversation> {
@@ -87,7 +88,20 @@ fn parse_outer_cell(chunk: &str) -> Option<ActivityEntry> {
         generated_images: generated_images.max(response_image_sources.len()),
         response_image_sources,
         user_image_sources,
+        notebook: parse_outer_cell_notebook(chunk),
     })
+}
+
+fn parse_outer_cell_notebook(chunk: &str) -> Option<String> {
+    let marker = "mdl-typography--title\">";
+    let start = chunk.find(marker)? + marker.len();
+    let rest = &chunk[start..];
+    let end = rest.find('<')?;
+    let title = html_fragment_to_text(&rest[..end]).trim().to_string();
+    if title.is_empty() || title.eq_ignore_ascii_case("gemini apps") {
+        return None;
+    }
+    Some(title)
 }
 
 fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation> {
@@ -139,10 +153,24 @@ fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation
         raw_json: serde_json::json!({
             "response_html": entry.response_html,
             "generated_images": entry.generated_images,
+            "notebook": entry.notebook,
         })
         .to_string(),
         attachments: assistant_attachments,
     };
+
+    let source_contexts = entry
+        .notebook
+        .as_ref()
+        .map(|name| ImportedSourceContext {
+            context_type: "notebook".to_string(),
+            external_id: None,
+            name: name.clone(),
+            path: None,
+            raw_json: None,
+        })
+        .into_iter()
+        .collect();
 
     Some(ImportedConversation {
         id,
@@ -151,6 +179,7 @@ fn activity_to_conversation(entry: ActivityEntry) -> Option<ImportedConversation
         update_time: entry.create_time,
         model: Some("gemini".to_string()),
         messages: vec![user_message, assistant_message],
+        source_contexts,
     })
 }
 

@@ -1,5 +1,5 @@
 use super::attachments::resolve_imported_attachments;
-use super::{find_conversation_files, parse_conversation_file};
+use super::{find_conversation_files, load_project_name_index, parse_conversation_file};
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
@@ -66,6 +66,7 @@ impl Importer for ChatGptImporter {
         }
 
         let media_index = MediaIndex::build(&input.path);
+        let project_names = load_project_name_index(&input.path);
         let shard_files = find_conversation_files(&input.path)?;
         let files_processed = shard_files.len();
         let source_path = input.path.display().to_string();
@@ -73,7 +74,7 @@ impl Importer for ChatGptImporter {
 
         let mut conversations = Vec::new();
         for (index, file) in shard_files.iter().enumerate() {
-            conversations.extend(parse_conversation_file(file)?);
+            conversations.extend(parse_conversation_file(file, &project_names)?);
             if let Some(callback) = &options.on_progress {
                 let progress = 0.2 + ((index + 1) as f64 / total as f64) * 0.6;
                 callback(ImportProgress {

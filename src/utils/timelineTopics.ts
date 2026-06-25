@@ -40,6 +40,7 @@ const STOPWORDS = new Set([
   "via",
   "chatgpt",
   "cursor",
+  "codex",
   "gemini",
   "claude",
   "的",

@@ -19,6 +19,7 @@ use super::helpers::{
     format_timestamp, map_conversation_summary, role_heading,
 };
 use super::asset_index::reindex_conversation_assets;
+use super::source_context_index::{attach_source_contexts, link_conversation_source_contexts};
 use super::tag_repository::get_conversation_tag_names;
 use super::Database;
 
@@ -180,8 +181,11 @@ impl ConversationRepository for Database {
             .query_map(param_refs.as_slice(), map_conversation_summary)
             .map_err(|e| format!("查询会话失败: {e}"))?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取会话失败: {e}"))
+        let mut summaries = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取会话失败: {e}"))?;
+        attach_source_contexts(&self.conn, &mut summaries)?;
+        Ok(summaries)
     }
 
     fn list_timeline(
@@ -252,8 +256,11 @@ impl ConversationRepository for Database {
             .query_map(param_refs.as_slice(), map_timeline_conversation)
             .map_err(|e| format!("查询时间线失败: {e}"))?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取时间线失败: {e}"))
+        let mut summaries = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("读取时间线失败: {e}"))?;
+        attach_source_contexts(&self.conn, &mut summaries)?;
+        Ok(summaries)
     }
 
     fn list_timeline_months(
@@ -327,9 +334,15 @@ impl ConversationRepository for Database {
             )
             .map_err(|e| format!("查询会话失败: {e}"))?;
 
-        stmt.query_row(params![conversation_id], map_conversation_summary)
+        let mut summary = stmt
+            .query_row(params![conversation_id], map_conversation_summary)
             .optional()
-            .map_err(|e| format!("读取会话失败: {e}"))
+            .map_err(|e| format!("读取会话失败: {e}"))?;
+
+        if let Some(item) = summary.as_mut() {
+            attach_source_contexts(&self.conn, std::slice::from_mut(item))?;
+        }
+        Ok(summary)
     }
 
     fn set_starred(&self, conversation_id: &str, starred: bool) -> Result<(), String> {
@@ -658,6 +671,12 @@ fn merge_messages(
         conversation_source,
         source_path,
     )?;
+    link_conversation_source_contexts(
+        tx,
+        storage_id,
+        conversation_source,
+        &conversation.source_contexts,
+    )?;
 
     Ok(touched)
 }
@@ -786,6 +805,7 @@ mod merge_tests {
                     attachments: Vec::<ImportedAttachment>::new(),
                 })
                 .collect(),
+            source_contexts: Vec::new(),
         }
     }
 
@@ -876,6 +896,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/chatgpt",
             DataSource::ChatGpt,
@@ -899,6 +920,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/cursor",
             DataSource::Cursor,
@@ -949,6 +971,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/cursor",
             DataSource::Cursor,
@@ -1006,6 +1029,7 @@ mod merge_tests {
                     attachments: Vec::new(),
                 },
             ],
+            source_contexts: Vec::new(),
         };
 
         ConversationRepository::save_many(
@@ -1061,6 +1085,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/a",
             DataSource::ChatGpt,
@@ -1084,6 +1109,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/b",
             DataSource::Cursor,
@@ -1141,6 +1167,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/chatgpt",
             DataSource::ChatGpt,
@@ -1164,6 +1191,7 @@ mod merge_tests {
                     raw_json: "{}".to_string(),
                     attachments: Vec::new(),
                 }],
+                source_contexts: Vec::new(),
             }],
             "/cursor",
             DataSource::Cursor,
@@ -1203,5 +1231,57 @@ mod merge_tests {
         .expect("june timeline");
         assert_eq!(june_only.len(), 1);
         assert_eq!(june_only[0].title, "June ChatGPT");
+    }
+
+    #[test]
+    fn import_persists_and_loads_source_contexts() {
+        use crate::domain::ports::ImportedSourceContext;
+
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-source-context-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "conv-project".to_string(),
+                title: "In Project".to_string(),
+                create_time: Some(1.0),
+                update_time: Some(2.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "hello".to_string(),
+                    create_time: Some(1.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+                source_contexts: vec![ImportedSourceContext {
+                    context_type: "project".to_string(),
+                    external_id: Some("proj-1".to_string()),
+                    name: "ChatLens".to_string(),
+                    path: None,
+                    raw_json: None,
+                }],
+            }],
+            "/chatgpt",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("save");
+
+        let summary = ConversationRepository::get_summary(&db, "chatgpt::conv-project")
+            .expect("get")
+            .expect("summary");
+        assert_eq!(summary.source_contexts.len(), 1);
+        assert_eq!(summary.source_contexts[0].name, "ChatLens");
+        assert_eq!(summary.source_contexts[0].context_type, "project");
     }
 }

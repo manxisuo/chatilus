@@ -19,6 +19,20 @@ pub struct ConversationSummary {
     pub latest_message_id: Option<String>,
     #[serde(default)]
     pub has_images: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_contexts: Vec<SourceContextView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceContextView {
+    pub id: String,
+    pub source: String,
+    pub context_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_id: Option<String>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 fn default_conversation_source() -> String {

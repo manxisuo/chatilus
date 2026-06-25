@@ -12,6 +12,16 @@ export interface ConversationSummary {
   activity_month?: string | null;
   latest_message_id?: string | null;
   has_images?: boolean;
+  source_contexts?: SourceContextView[];
+}
+
+export interface SourceContextView {
+  id: string;
+  source: string;
+  context_type: string;
+  external_id?: string | null;
+  name: string;
+  path?: string | null;
 }
 
 export interface AttachmentView {

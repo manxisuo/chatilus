@@ -4,7 +4,8 @@ pub mod repository;
 pub mod search_engine;
 
 pub use import_package::{
-    ImportedAttachment, ImportedConversation, ImportedMessage, ImportPackage,
+    ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext,
+    ImportPackage,
 };
 pub use importer::{
     ImportDetectResult, ImportInput, ImportOptions, ImportPreview, Importer,

@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 /// 当前数据库 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 7;
+pub const CURRENT_SCHEMA_VERSION: i32 = 8;
 
 impl super::Database {
     pub fn schema_version(&self) -> Result<i32, String> {
@@ -36,6 +36,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
         5 => migrate_v5(&tx),
         6 => migrate_v6(&tx),
         7 => migrate_v7(&tx),
+        8 => migrate_v8(&tx),
         _ => Err(format!("未知 schema 版本: {version}")),
     };
 
@@ -291,6 +292,40 @@ fn migrate_v7(conn: &Connection) -> Result<(), String> {
 
     upsert_meta(conn, "schema_version", "7")?;
     Ok(())
+}
+
+/// v8：来源侧项目/仓库/笔记本上下文，并为 Workspace 映射预留表结构。
+fn migrate_v8(conn: &Connection) -> Result<(), String> {
+    use super::source_context_index::create_source_context_schema;
+
+    create_source_context_schema(conn)?;
+    upsert_meta(conn, "schema_version", "8")?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod migrate_v8_tests {
+    #[test]
+    fn migrate_v8_creates_source_context_tables() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-migration-v8-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = crate::db::Database::open(&path).expect("open db");
+        assert_eq!(db.schema_version().expect("version"), 8);
+
+        db.conn
+            .execute(
+                "INSERT INTO source_contexts (id, source, context_type, name)
+                 VALUES ('chatgpt::project::p1', 'chatgpt', 'project', 'ChatLens')",
+                [],
+            )
+            .expect("insert context");
+    }
 }
 
 #[cfg(test)]

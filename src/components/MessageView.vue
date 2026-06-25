@@ -189,6 +189,8 @@ function assistantLabel(source?: string | null) {
   switch (source?.toLowerCase()) {
     case "cursor":
       return "Cursor";
+    case "codex":
+      return "Codex";
     case "claude":
       return "Claude";
     case "gemini":

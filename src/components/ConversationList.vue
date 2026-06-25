@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import type { ConversationSummary } from "../types";
 import { sourceLabel, sourceTagType } from "../utils/dataSource";
+import { formatSourceContextSummary } from "../utils/sourceContext";
 
 const props = defineProps<{
   conversations: ConversationSummary[];
@@ -96,6 +97,9 @@ const footerText = computed(() => {
           >
             {{ item.is_starred ? "★" : "☆" }}
           </span>
+        </div>
+        <div v-if="formatSourceContextSummary(item.source_contexts)" class="context-line">
+          {{ formatSourceContextSummary(item.source_contexts) }}
         </div>
         <div v-if="item.tags.length" class="tags">
           <span v-for="tag in item.tags" :key="tag" class="tag">{{ tag }}</span>
@@ -202,6 +206,13 @@ const footerText = computed(() => {
   border-radius: 999px;
   background: rgba(64, 158, 255, 0.12);
   color: var(--el-color-primary);
+}
+
+.context-line {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cl-text-muted);
 }
 
 .meta {

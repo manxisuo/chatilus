@@ -54,6 +54,7 @@ pub fn conversation_to_summary(conversation: Conversation) -> ConversationSummar
         activity_month: None,
         latest_message_id: None,
         has_images: false,
+        source_contexts: Vec::new(),
     }
 }
 
@@ -100,6 +101,7 @@ mod tests {
             activity_month: None,
             latest_message_id: None,
             has_images: false,
+            source_contexts: Vec::new(),
         };
 
         let domain: Conversation = summary.clone().into();

@@ -16,6 +16,7 @@ mod import_job_repository;
 mod message_repository;
 mod migration;
 mod schema;
+mod source_context_index;
 mod stats;
 mod tag_repository;
 

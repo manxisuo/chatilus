@@ -1,4 +1,10 @@
-export const KNOWN_DATA_SOURCES = ["chatgpt", "cursor", "claude", "gemini"] as const;
+export const KNOWN_DATA_SOURCES = [
+  "chatgpt",
+  "cursor",
+  "codex",
+  "claude",
+  "gemini",
+] as const;
 
 export type DataSourceKey = (typeof KNOWN_DATA_SOURCES)[number];
 
@@ -6,6 +12,8 @@ export function sourceLabel(source?: string | null): string {
   switch (source?.toLowerCase()) {
     case "cursor":
       return "Cursor";
+    case "codex":
+      return "Codex";
     case "claude":
       return "Claude";
     case "gemini":
@@ -23,6 +31,8 @@ export function sourceTagType(
   switch (source?.toLowerCase()) {
     case "cursor":
       return "primary";
+    case "codex":
+      return "warning";
     case "claude":
       return "warning";
     case "gemini":

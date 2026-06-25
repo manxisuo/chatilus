@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext};
 
 #[derive(Debug, Clone)]
 pub struct CursorComposerMeta {
@@ -88,6 +88,16 @@ pub fn parse_composer_conversation(
         .updated_at
         .or_else(|| messages.last().and_then(|message| message.create_time));
 
+    let mut source_contexts = extract_cursor_source_contexts_from_composer(composer_json);
+    if !source_contexts
+        .iter()
+        .any(|item| item.context_type == "repository")
+    {
+        if let Some(repo) = primary_repository_from_attachments(&messages) {
+            source_contexts.push(repo);
+        }
+    }
+
     Some(ImportedConversation {
         id: composer_id.to_string(),
         title: meta.name.clone(),
@@ -95,7 +105,244 @@ pub fn parse_composer_conversation(
         update_time,
         model: meta.model.clone(),
         messages,
+        source_contexts,
     })
+}
+
+pub fn extract_cursor_source_contexts_from_composer(composer_json: &Value) -> Vec<ImportedSourceContext> {
+    let mut contexts = Vec::new();
+
+    for key in [
+        "workspaceFolder",
+        "workspace_folder",
+        "workspacePath",
+        "workspace_path",
+        "repoPath",
+        "repo_path",
+        "repositoryPath",
+        "repository_path",
+        "projectPath",
+        "project_path",
+    ] {
+        if let Some(path) = composer_json
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .filter(|text| is_plausible_workspace_path(text))
+        {
+            push_cursor_folder_context(&mut contexts, path);
+        }
+    }
+
+    if let Some(name) = composer_json
+        .get("repositoryName")
+        .or_else(|| composer_json.get("repository_name"))
+        .or_else(|| composer_json.get("repoName"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .filter(|text| is_plausible_repository_name(text))
+    {
+        push_cursor_repository_context(&mut contexts, None, name.to_string(), None);
+    }
+
+    contexts
+}
+
+fn primary_repository_from_attachments(
+    messages: &[ImportedMessage],
+) -> Option<ImportedSourceContext> {
+    let mut slug_counts: HashMap<String, usize> = HashMap::new();
+    for message in messages {
+        for attachment in &message.attachments {
+            if let Some(slug) = cursor_project_slug_from_path(&attachment.pointer) {
+                *slug_counts.entry(slug).or_default() += 1;
+            }
+        }
+    }
+    let slug = slug_counts
+        .into_iter()
+        .max_by(|(left_slug, left_count), (right_slug, right_count)| {
+            left_count
+                .cmp(right_count)
+                .then_with(|| {
+                    decode_cursor_project_slug(left_slug)
+                        .is_some()
+                        .cmp(&decode_cursor_project_slug(right_slug).is_some())
+                })
+                .then_with(|| right_slug.len().cmp(&left_slug.len()))
+        })
+        .map(|(slug, _)| slug)?;
+    let mut contexts = Vec::new();
+    push_cursor_repository_from_slug(&mut contexts, &slug);
+    contexts.into_iter().next()
+}
+
+fn push_cursor_repository_from_slug(contexts: &mut Vec<ImportedSourceContext>, slug: &str) {
+    if !is_plausible_cursor_project_slug(slug) {
+        return;
+    }
+    let path = decode_cursor_project_slug(slug);
+    let name = path
+        .as_deref()
+        .and_then(workspace_folder_name)
+        .unwrap_or_else(|| humanize_cursor_slug(slug));
+    push_cursor_repository_context(contexts, Some(slug.to_string()), name, path);
+}
+
+fn push_cursor_repository_context(
+    contexts: &mut Vec<ImportedSourceContext>,
+    external_id: Option<String>,
+    name: String,
+    path: Option<String>,
+) {
+    if !is_plausible_repository_name(&name) {
+        return;
+    }
+    if contexts.iter().any(|item| {
+        item.context_type == "repository"
+            && item.external_id == external_id
+            && item.name == name
+    }) {
+        return;
+    }
+    contexts.push(ImportedSourceContext {
+        context_type: "repository".to_string(),
+        external_id,
+        name,
+        path,
+        raw_json: None,
+    });
+}
+
+fn push_cursor_folder_context(contexts: &mut Vec<ImportedSourceContext>, path: &str) {
+    if !is_plausible_workspace_path(path) {
+        return;
+    }
+    let name = workspace_folder_name(path).unwrap_or_else(|| path.to_string());
+    if contexts.iter().any(|item| item.context_type == "folder" && item.path.as_deref() == Some(path))
+    {
+        return;
+    }
+    contexts.push(ImportedSourceContext {
+        context_type: "folder".to_string(),
+        external_id: None,
+        name,
+        path: Some(path.to_string()),
+        raw_json: None,
+    });
+}
+
+fn cursor_project_slug_from_path(path: &str) -> Option<String> {
+    let lower = path.to_ascii_lowercase();
+    for marker in [".cursor/projects/", ".cursor\\projects\\"] {
+        let Some(index) = lower.find(marker) else {
+            continue;
+        };
+        let tail = &path[index + marker.len()..];
+        let end = tail
+            .find(['/', '\\'])
+            .unwrap_or(tail.len());
+        let slug = tail[..end].trim();
+        if is_plausible_cursor_project_slug(slug) {
+            return Some(slug.to_string());
+        }
+    }
+    None
+}
+
+fn is_plausible_cursor_project_slug(slug: &str) -> bool {
+    let slug = slug.trim();
+    if slug.is_empty() || slug.len() < 5 || slug.len() > 80 {
+        return false;
+    }
+    if slug.contains(['{', '}', '*', '/', '\\', ' ', ':']) {
+        return false;
+    }
+    if slug.chars().all(|c| c == '.' || c.is_ascii_digit()) {
+        return false;
+    }
+    let lower = slug.to_ascii_lowercase();
+    if matches!(lower.as_str(), "slug" | "xxx" | "...") {
+        return false;
+    }
+    if !slug
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return false;
+    }
+    if decode_cursor_project_slug(slug).is_some() {
+        return true;
+    }
+    let Some((drive, rest)) = slug.split_once('-') else {
+        return false;
+    };
+    drive.len() == 1
+        && drive.chars().all(|c| c.is_ascii_alphabetic())
+        && rest.len() >= 3
+        && rest.chars().any(|c| c.is_ascii_alphabetic())
+}
+
+fn is_plausible_workspace_path(path: &str) -> bool {
+    let path = path.trim();
+    if path.len() < 4 || path.contains(['{', '}', '*']) {
+        return false;
+    }
+    path.starts_with('/')
+        || path
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
+            && path.chars().nth(1) == Some(':')
+}
+
+fn is_plausible_repository_name(name: &str) -> bool {
+    let name = name.trim();
+    if name.len() < 2 || name.len() > 64 {
+        return false;
+    }
+    if name.contains(['{', '}', '*', '\n', '|', ':']) {
+        return false;
+    }
+    if name.split_whitespace().count() > 6 {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    !matches!(
+        lower.as_str(),
+        "slug" | "xxx" | "..." | "*" | "项目" | "项目名"
+    ) && !lower.contains("例如")
+}
+
+fn decode_cursor_project_slug(slug: &str) -> Option<String> {
+    let (drive, rest) = slug.split_once('-')?;
+    if drive.len() != 1 || !drive.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    Some(format!(
+        "{}:\\{}",
+        drive.to_uppercase(),
+        rest.replace('-', "\\")
+    ))
+}
+
+fn humanize_cursor_slug(slug: &str) -> String {
+    slug.rsplit(['-', '/', '\\'])
+        .next()
+        .unwrap_or(slug)
+        .to_string()
+}
+
+fn workspace_folder_name(path: &str) -> Option<String> {
+    let trimmed = path.trim_end_matches(['\\', '/']);
+    let name = trimmed
+        .rsplit(['\\', '/'])
+        .next()
+        .filter(|value| !value.is_empty())?;
+    Some(name.to_string())
 }
 
 fn bubble_to_message(bubble_id: &str, bubble: &Value) -> Option<ImportedMessage> {
@@ -562,5 +809,67 @@ mod tests {
             parse_composer_conversation(composer_id, &composer_json, &meta, &bubbles).expect("conversation");
         assert_eq!(conversation.title, "Demo");
         assert_eq!(conversation.messages.len(), 2);
+        assert!(conversation.source_contexts.is_empty());
+    }
+
+    #[test]
+    fn extracts_cursor_repository_from_attachment_pointer() {
+        let messages = vec![ImportedMessage {
+            id: "txt-1".to_string(),
+            role: "assistant".to_string(),
+            content: String::new(),
+            create_time: None,
+            raw_json: "{}".to_string(),
+            attachments: vec![ImportedAttachment {
+                pointer: "C:\\Users\\demo\\.cursor\\projects\\d-Code-ChatLens\\assets\\foo.png"
+                    .to_string(),
+                source: "cursor".to_string(),
+                prompt: None,
+                path: None,
+            }],
+        }];
+        let repo = primary_repository_from_attachments(&messages).expect("repo");
+        assert_eq!(repo.context_type, "repository");
+        assert_eq!(repo.external_id.as_deref(), Some("d-Code-ChatLens"));
+        assert_eq!(repo.name, "ChatLens");
+    }
+
+    #[test]
+    fn ignores_placeholder_slugs_in_message_text() {
+        let messages = vec![ImportedMessage {
+            id: "txt-1".to_string(),
+            role: "assistant".to_string(),
+            content: "设计说明：`.cursor/projects/{slug}/` 与 `workspaceStorage/*/images/` 示例"
+                .to_string(),
+            create_time: None,
+            raw_json: "{}".to_string(),
+            attachments: Vec::new(),
+        }];
+        assert!(primary_repository_from_attachments(&messages).is_none());
+    }
+
+    #[test]
+    fn picks_most_common_attachment_slug() {
+        let attachment = |pointer: &str| ImportedAttachment {
+            pointer: pointer.to_string(),
+            source: "cursor".to_string(),
+            prompt: None,
+            path: None,
+        };
+        let messages = vec![ImportedMessage {
+            id: "txt-1".to_string(),
+            role: "assistant".to_string(),
+            content: String::new(),
+            create_time: None,
+            raw_json: "{}".to_string(),
+            attachments: vec![
+                attachment("C:\\Users\\demo\\.cursor\\projects\\d-Code-ChatLens\\assets\\a.png"),
+                attachment("C:\\Users\\demo\\.cursor\\projects\\d-Code-ChatLens\\assets\\b.png"),
+                attachment("C:\\Users\\demo\\.cursor\\projects\\d-Code-SmartControl\\assets\\c.png"),
+            ],
+        }];
+        let repo = primary_repository_from_attachments(&messages).expect("repo");
+        assert_eq!(repo.external_id.as_deref(), Some("d-Code-ChatLens"));
+        assert_eq!(repo.name, "ChatLens");
     }
 }

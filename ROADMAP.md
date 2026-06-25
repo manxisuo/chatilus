@@ -65,6 +65,7 @@ v0.5 **Timeline**、收藏消息列表、图库 **assets 物化**、Search++ **b
 
 - [x] `ImporterRegistry`：自动 `detect` / 选择 Importer（PR4a）
 - [x] Cursor 本地 `state.vscdb` 导入（PR4b）
+- [x] Codex 本地 `~/.codex`（`state_*.sqlite` + `sessions/**/*.jsonl`）
 - [ ] Claude 导出格式（按需新增 Importer，PR4c+，有样本再做）
 - [x] Gemini Google Takeout（`My Activity / Gemini Apps` HTML 活动记录）
 
@@ -169,9 +170,16 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 - [ ] **B4**（可选）中间 feed 与右侧洞察分工、减少重复
 - [ ] **B5**（延后）热度日历、Topic 环比、活跃时段分布
 
+**Source Context（先于 Workspace，schema v8）**
+
+- [x] `source_contexts` + `conversation_source_contexts` 数据模型
+- [x] 导入时保存 ChatGPT Project / Cursor Repository·Folder / Codex Folder·Repository / Gemini Notebook
+- [x] 会话列表、时间线、详情轻量展示来源上下文
+- [x] 预留 `workspaces` / `workspace_items` / `workspace_source_context_mappings` 表结构（无 UI）
+
 ### 再往后（v0.6–v0.7：Organize）
 
-- [ ] **Workspace / Project**：将多源会话归到同一工作项目（如 ChatLens、Plum、USV）
+- [ ] **Workspace / Project**：将多源会话归到同一工作项目（如 ChatLens、Plum、USV）；基于 Source Context 映射，而非导入时自动创建
 - [ ] 项目视图：项目内聚合对话、图片、标签、搜索结果
 - [ ] **Topic（主题）**：从标题/内容统计或提取高频主题（与用户 **Tag** 区分：Tag 手动，Topic 系统发现）
 - [ ] Asset 模型增强：`thumbnail_path`，大量图片场景的缩略图缓存

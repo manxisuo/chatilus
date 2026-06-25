@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::domain::ports::{ImportedConversation, ImportedMessage};
+use crate::domain::ports::{ImportedConversation, ImportedMessage, ImportedSourceContext};
 
 /// 合并同一导入包内重复出现的对话（按 `id` 去重）。
 pub fn dedup_import_package(
@@ -62,7 +62,26 @@ pub fn merge_imported_conversations(
         update_time: pick_later_time(base.update_time, other.update_time),
         model: base.model.or(other.model),
         messages: merged_messages,
+        source_contexts: merge_source_contexts(base.source_contexts, other.source_contexts),
     }
+}
+
+fn merge_source_contexts(
+    left: Vec<ImportedSourceContext>,
+    right: Vec<ImportedSourceContext>,
+) -> Vec<ImportedSourceContext> {
+    let mut merged: HashMap<(String, Option<String>, String, Option<String>), ImportedSourceContext> =
+        HashMap::new();
+    for context in left.into_iter().chain(right) {
+        let key = (
+            context.context_type.clone(),
+            context.external_id.clone(),
+            context.name.clone(),
+            context.path.clone(),
+        );
+        merged.insert(key, context);
+    }
+    merged.into_values().collect()
 }
 
 fn prefer_conversation(left: &ImportedConversation, right: &ImportedConversation) -> bool {
@@ -145,6 +164,7 @@ mod tests {
                     attachments: Vec::<ImportedAttachment>::new(),
                 })
                 .collect(),
+            source_contexts: Vec::new(),
         }
     }
 

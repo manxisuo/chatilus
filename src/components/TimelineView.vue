@@ -4,6 +4,7 @@ import { listTimeline, listTimelineMonths } from "../api";
 import TimelineMonthInsight from "./TimelineMonthInsight.vue";
 import type { ConversationSummary, SourceCount, TimelineMonthBucket } from "../types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSource";
+import { formatSourceContextSummary } from "../utils/sourceContext";
 import {
   buildMonthTopics,
   filterConversationsByTopic,
@@ -617,6 +618,12 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <div class="item-title">{{ conversation.title }}</div>
+                <div
+                  v-if="formatSourceContextSummary(conversation.source_contexts)"
+                  class="item-context"
+                >
+                  {{ formatSourceContextSummary(conversation.source_contexts) }}
+                </div>
                 <div class="item-meta">
                   <span>{{ conversation.message_count }} 条消息</span>
                   <span v-if="conversation.model">{{ conversation.model }}</span>
@@ -942,6 +949,13 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 600;
   line-height: 1.45;
+}
+
+.item-context {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cl-text-muted);
 }
 
 .item-meta {

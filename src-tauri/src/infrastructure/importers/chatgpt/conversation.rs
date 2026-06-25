@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext};
+
+use super::projects::{is_chatgpt_project_id, resolve_project_name, ProjectNameIndex};
 
 pub use crate::domain::ports::{
     ImportedAttachment as ParsedAttachment, ImportedConversation as ParsedConversation,
@@ -80,7 +82,10 @@ fn extract_dalle_prompt(metadata: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
-pub fn parse_conversation(value: &Value) -> Option<ImportedConversation> {
+pub fn parse_conversation(
+    value: &Value,
+    project_names: &ProjectNameIndex,
+) -> Option<ImportedConversation> {
     let id = value
         .get("id")
         .or_else(|| value.get("conversation_id"))
@@ -111,6 +116,7 @@ pub fn parse_conversation(value: &Value) -> Option<ImportedConversation> {
     let current_node = value.get("current_node").and_then(|v| v.as_str())?;
 
     let messages = linearize_messages(mapping, current_node);
+    let source_contexts = extract_chatgpt_source_contexts(value, project_names);
 
     Some(ImportedConversation {
         id,
@@ -119,7 +125,133 @@ pub fn parse_conversation(value: &Value) -> Option<ImportedConversation> {
         update_time,
         model,
         messages,
+        source_contexts,
     })
+}
+
+fn extract_chatgpt_source_contexts(
+    value: &Value,
+    project_names: &ProjectNameIndex,
+) -> Vec<ImportedSourceContext> {
+    let mut contexts = Vec::new();
+
+    if let Some(context) = project_context_from_value(value, project_names) {
+        contexts.push(context);
+    }
+
+    if let Some(template_id) = value
+        .get("conversation_template_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        if is_chatgpt_project_id(template_id)
+            && contexts
+                .iter()
+                .all(|item| item.external_id.as_deref() != Some(template_id))
+        {
+            contexts.push(project_context_from_id(
+                template_id,
+                project_names,
+                Some(value),
+            ));
+        }
+    }
+
+    if let Some(gizmo_id) = value
+        .get("gizmo_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        if is_chatgpt_project_id(gizmo_id)
+            && contexts
+                .iter()
+                .all(|item| item.external_id.as_deref() != Some(gizmo_id))
+        {
+            contexts.push(project_context_from_id(gizmo_id, project_names, Some(value)));
+        }
+    }
+
+    if let Some(metadata) = value.get("metadata") {
+        if let Some(context) = project_context_from_value(metadata, project_names) {
+            if contexts
+                .iter()
+                .all(|item| item.external_id != context.external_id)
+            {
+                contexts.push(context);
+            }
+        }
+    }
+
+    contexts
+}
+
+fn project_context_from_value(
+    value: &Value,
+    project_names: &ProjectNameIndex,
+) -> Option<ImportedSourceContext> {
+    let project_id = value
+        .get("project_id")
+        .or_else(|| value.get("projectId"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string);
+
+    let nested = value.get("project").and_then(|project| {
+        let id = project
+            .get("id")
+            .or_else(|| project.get("project_id"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let name = project
+            .get("name")
+            .or_else(|| project.get("title"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string);
+        Some((id, name))
+    });
+
+    let external_id = project_id
+        .or_else(|| nested.as_ref().and_then(|(id, _)| id.clone()))?;
+
+    let name = value
+        .get("project_name")
+        .or_else(|| value.get("projectName"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+        .or_else(|| nested.and_then(|(_, name)| name))
+        .or_else(|| project_names.get(&external_id).cloned())
+        .unwrap_or_else(|| resolve_project_name(&external_id, project_names));
+
+    let raw_json = serde_json::to_string(value).ok();
+
+    Some(ImportedSourceContext {
+        context_type: "project".to_string(),
+        external_id: Some(external_id),
+        name,
+        path: None,
+        raw_json,
+    })
+}
+
+fn project_context_from_id(
+    project_id: &str,
+    project_names: &ProjectNameIndex,
+    raw: Option<&Value>,
+) -> ImportedSourceContext {
+    ImportedSourceContext {
+        context_type: "project".to_string(),
+        external_id: Some(project_id.to_string()),
+        name: resolve_project_name(project_id, project_names),
+        path: None,
+        raw_json: raw.and_then(|value| serde_json::to_string(value).ok()),
+    }
 }
 
 fn linearize_messages(
@@ -354,6 +486,37 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn extracts_project_from_conversation_template_id() {
+        let value = json!({
+            "id": "conv-1",
+            "title": "In project",
+            "conversation_template_id": "g-p-67ecb74315e081918a6c820ee7492ae7",
+            "current_node": "n1",
+            "mapping": {
+                "n1": {
+                    "id": "n1",
+                    "message": {
+                        "id": "m1",
+                        "author": { "role": "user" },
+                        "content": { "content_type": "text", "parts": ["hello"] },
+                        "create_time": 1.0
+                    },
+                    "parent": null
+                }
+            }
+        });
+        let mut names = ProjectNameIndex::new();
+        names.insert(
+            "g-p-67ecb74315e081918a6c820ee7492ae7".to_string(),
+            "ChatLens".to_string(),
+        );
+        let parsed = parse_conversation(&value, &names).expect("parse");
+        assert_eq!(parsed.source_contexts.len(), 1);
+        assert_eq!(parsed.source_contexts[0].name, "ChatLens");
+        assert_eq!(parsed.source_contexts[0].context_type, "project");
+    }
+
+    #[test]
     fn classifies_user_upload_without_dalle_metadata() {
         let metadata = json!({
             "dalle": null,
@@ -415,7 +578,7 @@ mod tests {
             }
         }"#;
         let value: Value = serde_json::from_str(raw).unwrap();
-        let parsed = parse_conversation(&value).expect("parse");
+        let parsed = parse_conversation(&value, &ProjectNameIndex::new()).expect("parse");
         assert_eq!(parsed.messages.len(), 1);
         assert_eq!(parsed.messages[0].content, "hello");
     }

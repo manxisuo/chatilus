@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import type { ConversationSummary, MessageView } from "../types";
 import { sourceLabel, sourceTagType } from "../utils/dataSource";
+import { formatSourceContextLine, sourceContextIdHint } from "../utils/sourceContext";
 
 const props = defineProps<{
   conversation: ConversationSummary;
@@ -84,6 +85,21 @@ const timeSpan = computed(() => {
         <dt>最近</dt>
         <dd>{{ formatTime(timeSpan.end) }}</dd>
       </div>
+      <div v-if="conversation.source_contexts?.length" class="info-row">
+        <dt>来源上下文</dt>
+        <dd class="context-list">
+          <span
+            v-for="context in conversation.source_contexts"
+            :key="context.id"
+            class="context-line"
+          >
+            <span>{{ formatSourceContextLine(context) }}</span>
+            <span v-if="sourceContextIdHint(context)" class="context-id">
+              {{ sourceContextIdHint(context) }}
+            </span>
+          </span>
+        </dd>
+      </div>
       <div v-if="conversation.tags.length > 0" class="info-row">
         <dt>标签</dt>
         <dd class="tag-list">
@@ -150,6 +166,28 @@ const timeSpan = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.context-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.context-line {
+  color: var(--cl-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-id {
+  font-family: var(--el-font-family-monospace, ui-monospace, monospace);
+  font-size: 10px;
+  word-break: break-all;
+  opacity: 0.85;
 }
 
 @media (max-width: 1100px) {

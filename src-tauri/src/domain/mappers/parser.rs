@@ -90,6 +90,7 @@ mod tests {
                     path: None,
                 }],
             }],
+            source_contexts: Vec::new(),
         };
 
         let domain = parsed_conversation_to_domain(&parsed, "/export");

@@ -87,7 +87,7 @@ pub fn resolve_import_path_with_registry(
     }
 
     Err(format!(
-        "路径不存在或不是支持的导入格式（目录 / zip / Cursor state.vscdb）: {}",
+        "路径不存在或不是支持的导入格式（目录 / zip / Cursor state.vscdb / Codex state.sqlite）: {}",
         input_path.display()
     ))
 }

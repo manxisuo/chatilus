@@ -5,6 +5,15 @@ pub struct ImportPackage {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ImportedSourceContext {
+    pub context_type: String,
+    pub external_id: Option<String>,
+    pub name: String,
+    pub path: Option<String>,
+    pub raw_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImportedConversation {
     pub id: String,
     pub title: String,
@@ -12,6 +21,7 @@ pub struct ImportedConversation {
     pub update_time: Option<f64>,
     pub model: Option<String>,
     pub messages: Vec<ImportedMessage>,
+    pub source_contexts: Vec<ImportedSourceContext>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

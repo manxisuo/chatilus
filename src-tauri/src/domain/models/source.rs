@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum DataSource {
     ChatGpt,
     Cursor,
+    Codex,
     Claude,
     Gemini,
 }
@@ -14,6 +15,7 @@ impl DataSource {
         match self {
             Self::ChatGpt => "chatgpt",
             Self::Cursor => "cursor",
+            Self::Codex => "codex",
             Self::Claude => "claude",
             Self::Gemini => "gemini",
         }
@@ -22,6 +24,7 @@ impl DataSource {
     pub fn parse(value: &str) -> Self {
         match value.to_lowercase().as_str() {
             "cursor" => Self::Cursor,
+            "codex" => Self::Codex,
             "claude" => Self::Claude,
             "gemini" => Self::Gemini,
             _ => Self::ChatGpt,
