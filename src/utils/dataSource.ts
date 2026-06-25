@@ -34,6 +34,30 @@ export function sourceLabel(source?: string | null): string {
   }
 }
 
+/** Muted accent for source dots and inline labels (not Element Plus tag colors). */
+export function sourceAccentColor(source?: string | null): string {
+  switch (source?.toLowerCase()) {
+    case "chatgpt":
+      return "#10a37f";
+    case "cursor":
+      return "#6b8afd";
+    case "codex":
+      return "#c9a227";
+    case "claude":
+      return "#d97757";
+    case "gemini":
+      return "#4285f4";
+    case "deepseek":
+      return "#4f6bed";
+    case "copilot":
+      return "#7c8cff";
+    case "grok":
+      return "#a3a3a3";
+    default:
+      return "#9ca3af";
+  }
+}
+
 export function sourceTagType(
   source?: string | null,
 ): "primary" | "success" | "warning" | "info" | "danger" {

@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ConversationSummary } from "../types";
-import { sourceLabel, sourceTagType } from "../utils/dataSource";
+import { sourceLabel, sourceAccentColor } from "../utils/dataSource";
 import { formatSourceContextSummary } from "../utils/sourceContext";
 import { type AppLocale, formatDateTime } from "../utils/locale";
 
@@ -81,15 +81,14 @@ const footerText = computed(() => {
       >
         <div class="row-top">
           <div class="title-wrap">
-            <el-tag
-              size="small"
-              :type="sourceTagType(item.source)"
-              effect="plain"
-              class="source-badge"
-            >
-              {{ sourceLabel(item.source) }}
-            </el-tag>
-            <div class="title">{{ item.title }}</div>
+            <div class="title-line">
+              <span
+                class="source-dot"
+                :style="{ background: sourceAccentColor(item.source) }"
+                :title="sourceLabel(item.source)"
+              />
+              <div class="title">{{ item.title }}</div>
+            </div>
           </div>
           <span
             class="star"
@@ -140,17 +139,17 @@ const footerText = computed(() => {
 }
 
 .conversation-item:hover {
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--cl-hover);
 }
 
 .conversation-item.active {
-  background: rgba(64, 158, 255, 0.15);
-  border-left: 3px solid var(--el-color-primary);
-  padding-left: 13px;
+  background: var(--cl-selected-strong);
+  border-left: 2px solid var(--cl-accent);
+  padding-left: 14px;
 }
 
 .conversation-item.starred {
-  background: rgba(230, 162, 60, 0.06);
+  background: rgba(230, 162, 60, 0.04);
 }
 
 .row-top {
@@ -162,18 +161,25 @@ const footerText = computed(() => {
 .title-wrap {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
-.source-badge {
-  align-self: flex-start;
+.title-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
 }
 
 .title {
   flex: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--cl-text);
   line-height: 1.4;
@@ -204,9 +210,9 @@ const footerText = computed(() => {
 .tag {
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(64, 158, 255, 0.12);
-  color: var(--el-color-primary);
+  border-radius: 4px;
+  background: var(--cl-selected);
+  color: var(--cl-text-muted);
 }
 
 .context-line {

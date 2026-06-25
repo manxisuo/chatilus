@@ -3,8 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { listTimeline, listTimelineMonths } from "../api";
 import TimelineMonthInsight from "./TimelineMonthInsight.vue";
+import SourceNav from "./SourceNav.vue";
 import type { ConversationSummary, SourceCount, TimelineMonthBucket } from "../types";
-import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSource";
+import { KNOWN_DATA_SOURCES, sourceLabel, sourceAccentColor } from "../utils/dataSource";
 import { formatSourceContextSummary } from "../utils/sourceContext";
 import {
   type AppLocale,
@@ -525,27 +526,16 @@ onUnmounted(() => {
 
 <template>
   <div class="timeline-view">
-    <header class="timeline-header">
-      <div class="timeline-header-main">
-        <p class="subtitle">{{ t("timeline.subtitle") }}</p>
-        <div class="source-nav">
-          <button
-            v-for="item in sourceNavItems"
-            :key="item.id ?? 'all'"
-            type="button"
-            class="source-nav-item"
-            :class="{ active: filterSource === item.id }"
-            @click="setFilterSource(item.id)"
-          >
-            <span>{{ item.label }}</span>
-            <span class="source-nav-count">{{ item.count.toLocaleString() }}</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
     <div class="timeline-body">
-      <aside class="month-nav">
+      <aside class="timeline-sidebar">
+        <SourceNav
+          :items="sourceNavItems"
+          :active-id="filterSource"
+          :title="t('filter.sources')"
+          show-dots
+          @select="setFilterSource"
+        />
+        <div class="sidebar-divider" />
         <div class="month-nav-title">{{ t("timeline.monthNav") }}</div>
         <div ref="monthNavRef" class="month-nav-scroll">
           <el-skeleton v-if="loading && months.length === 0" animated :rows="8" />
@@ -616,29 +606,30 @@ onUnmounted(() => {
                 class="timeline-item"
                 @click="emit('openConversation', conversation.id)"
               >
-                <div class="item-top">
-                  <el-tag
-                    size="small"
-                    :type="sourceTagType(conversation.source)"
-                    effect="plain"
-                  >
-                    {{ sourceLabel(conversation.source) }}
-                  </el-tag>
-                  <span v-if="activityTime(conversation)" class="item-time">
-                    {{ formatClock(activityTime(conversation)) }}
-                  </span>
-                </div>
-                <div class="item-title">{{ conversation.title }}</div>
-                <div
-                  v-if="formatSourceContextSummary(conversation.source_contexts)"
-                  class="item-context"
-                >
-                  {{ formatSourceContextSummary(conversation.source_contexts) }}
-                </div>
-                <div class="item-meta">
-                  <span>{{ t("common.messages", { count: conversation.message_count }) }}</span>
-                  <span v-if="conversation.model">{{ conversation.model }}</span>
-                  <span v-if="conversation.is_starred" class="item-star">{{ t("conversation.starredBadge") }}</span>
+                <span
+                  class="item-source-dot"
+                  :style="{ background: sourceAccentColor(conversation.source) }"
+                  :title="sourceLabel(conversation.source)"
+                />
+                <div class="item-main">
+                  <div class="item-row">
+                    <span class="item-source">{{ sourceLabel(conversation.source) }}</span>
+                    <span class="item-title">{{ conversation.title }}</span>
+                    <span v-if="activityTime(conversation)" class="item-time">
+                      {{ formatClock(activityTime(conversation)) }}
+                    </span>
+                  </div>
+                  <div class="item-sub">
+                    <span>{{ t("common.messages", { count: conversation.message_count }) }}</span>
+                    <span v-if="conversation.model">{{ conversation.model }}</span>
+                    <span
+                      v-if="formatSourceContextSummary(conversation.source_contexts)"
+                      class="item-context"
+                    >
+                      {{ formatSourceContextSummary(conversation.source_contexts) }}
+                    </span>
+                    <span v-if="conversation.is_starred" class="item-star">{{ t("conversation.starredBadge") }}</span>
+                  </div>
                 </div>
                 <div
                   v-if="conversation.latest_message_id || conversation.has_images"
@@ -662,17 +653,6 @@ onUnmounted(() => {
                   >
                     {{ t("nav.images") }}
                   </button>
-                </div>
-                <div v-if="conversation.tags.length" class="item-tags">
-                  <el-tag
-                    v-for="tag in conversation.tags"
-                    :key="tag"
-                    size="small"
-                    type="info"
-                    effect="plain"
-                  >
-                    {{ tag }}
-                  </el-tag>
                 </div>
               </button>
             </div>
@@ -709,88 +689,41 @@ onUnmounted(() => {
   background: var(--cl-panel);
 }
 
-.timeline-header {
-  padding: 20px 24px 12px;
-  border-bottom: 1px solid var(--cl-border);
-}
-
-.timeline-header-main {
-  min-width: 0;
-}
-
-.subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: var(--cl-text-muted);
-}
-
-.source-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.source-nav-item {
-  border: 1px solid var(--cl-border);
-  background: var(--cl-bg);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--cl-text);
-  cursor: pointer;
-}
-
-.source-nav-item:hover {
-  border-color: var(--el-color-primary-light-5);
-}
-
-.source-nav-item.active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.1);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.source-nav-count {
-  font-size: 11px;
-  color: var(--cl-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.source-nav-item.active .source-nav-count {
-  color: var(--el-color-primary);
-}
-
 .timeline-body {
   flex: 1;
   min-height: 0;
   display: flex;
 }
 
-.month-nav {
+.timeline-sidebar {
   width: var(--cl-sidebar-width);
   flex-shrink: 0;
-  border-right: 1px solid var(--cl-border);
+  border-right: 1px solid var(--cl-border-subtle);
   display: flex;
   flex-direction: column;
   background: var(--cl-panel);
+  min-height: 0;
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 4px 12px 0;
+  background: var(--cl-border-subtle);
 }
 
 .month-nav-title {
-  padding: 14px 16px 8px;
-  font-size: 12px;
+  padding: 10px 12px 6px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--cl-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cl-text-faint);
 }
 
 .month-nav-scroll {
   flex: 1;
   overflow: auto;
-  padding: 0 12px 12px;
+  padding: 0 8px 12px;
 }
 
 .month-nav-item {
@@ -801,8 +734,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
   font-size: 13px;
   color: var(--cl-text);
   cursor: pointer;
@@ -810,13 +743,12 @@ onUnmounted(() => {
 }
 
 .month-nav-item:hover {
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--cl-hover);
 }
 
 .month-nav-item.active {
-  background: rgba(64, 158, 255, 0.14);
-  color: var(--el-color-primary);
-  font-weight: 600;
+  background: var(--cl-selected-strong);
+  font-weight: 500;
 }
 
 .month-nav-label {
@@ -834,27 +766,23 @@ onUnmounted(() => {
 
 .month-nav-count {
   font-size: 11px;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .month-nav-images {
   font-size: 10px;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
   font-variant-numeric: tabular-nums;
-}
-
-.month-nav-item.active .month-nav-count,
-.month-nav-item.active .month-nav-images {
-  color: var(--el-color-primary);
 }
 
 .timeline-feed {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 16px 24px 24px;
+  padding: 12px 20px 20px;
   position: relative;
+  background: var(--cl-panel-elevated);
 }
 
 .timeline-feed-inner {
@@ -864,6 +792,10 @@ onUnmounted(() => {
 
 .timeline-section + .timeline-section {
   margin-top: 28px;
+}
+
+.timeline-sidebar :deep(.source-nav-list) {
+  padding: 8px 8px 0;
 }
 
 .section-header {
@@ -878,7 +810,7 @@ onUnmounted(() => {
   padding: 8px 0;
   background: linear-gradient(
     to bottom,
-    var(--cl-panel) 70%,
+    var(--cl-panel-elevated) 70%,
     rgba(255, 255, 255, 0)
   );
 }
@@ -920,101 +852,119 @@ onUnmounted(() => {
 }
 
 .day-header {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 4px;
+  padding: 8px 0 4px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
+  border-bottom: 1px solid var(--cl-border-subtle);
 }
 
 .timeline-item {
   width: 100%;
-  border: 1px solid var(--cl-border);
-  background: var(--cl-bg);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
+  border: none;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  background: transparent;
+  padding: 8px 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.12s ease;
 }
 
 .timeline-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  background: var(--cl-hover);
 }
 
-.item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.timeline-item:hover .item-actions {
+  opacity: 1;
+}
+
+.item-source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 7px;
+}
+
+.item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.item-source {
+  font-size: 11px;
+  color: var(--cl-text-faint);
+  white-space: nowrap;
+}
+
+.item-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--cl-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-time {
   font-size: 12px;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.item-title {
-  margin-top: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.item-context {
-  margin-top: 4px;
+.item-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--cl-text-muted);
 }
 
-.item-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--cl-text-muted);
-}
-
-.item-meta > span {
-  line-height: 1.4;
+.item-context {
+  color: var(--cl-text-faint);
 }
 
 .item-star {
-  color: #e6a23c;
+  color: #c9a227;
 }
 
 .item-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
 .item-action {
-  border: 1px solid var(--cl-border);
-  background: var(--cl-panel);
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  font-size: 11px;
   color: var(--cl-text-muted);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .item-action:hover {
-  border-color: var(--el-color-primary-light-5);
-  color: var(--el-color-primary);
-}
-
-.item-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  color: var(--cl-text);
 }
 
 .timeline-footer {

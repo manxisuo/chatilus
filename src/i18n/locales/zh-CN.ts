@@ -20,6 +20,8 @@ export default {
     close: "关闭",
     previous: "上一张",
     next: "下一张",
+    more: "更多",
+    import: "导入",
   },
   appearance: {
     title: "外观",
@@ -48,6 +50,10 @@ export default {
     tags: "标签",
     lastImport: "最近导入",
   },
+  library: {
+    overview: "库概览",
+    summary: "{conversations} 对话 · {images} 图片 · {sources} 来源",
+  },
   search: {
     placeholder: "全文搜索消息…",
     results: "搜索结果",
@@ -58,6 +64,7 @@ export default {
     allConversations: "全部对话",
     allSources: "全部来源",
     allImages: "全部图片",
+    sources: "来源",
     filterTitle: "筛选标题…",
     starredConversations: "收藏对话",
     starredMessages: "收藏消息",
@@ -185,6 +192,15 @@ export default {
     loadFailed: "无法加载",
     openConversation: "打开所属对话",
     openConversationTitle: "打开所属对话",
+    viewFullSize: "查看大图",
+    inspector: {
+      title: "图片详情",
+      empty: "选择一张图片查看详情",
+      source: "来源",
+      type: "类型",
+      time: "时间",
+      conversation: "所属对话",
+    },
     stats: {
       breakdown: "生成 {generated} · 上传 {upload} · 其他 {other}",
       pair: "生成 {generated} · 上传 {upload}",

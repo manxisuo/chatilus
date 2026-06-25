@@ -4,12 +4,13 @@ import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages, countImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
+import SourceNav from "./SourceNav.vue";
 import type { ImageGalleryItem, SourceCount } from "../types";
 import {
   KNOWN_DATA_SOURCES,
   conversationSourceFromId,
   sourceLabel as conversationSourceLabel,
-  sourceTagType as conversationSourceTagType,
+  sourceAccentColor,
 } from "../utils/dataSource";
 import { galleryItemCacheKey } from "../utils/attachment";
 import { type AppLocale, formatDateTime, formatMonthKey } from "../utils/locale";
@@ -40,7 +41,12 @@ const hasMore = ref(true);
 const showUploads = ref(true);
 const lightboxVisible = ref(false);
 const lightboxIndex = ref(0);
+const selectedIndex = ref<number | null>(null);
 const imageSrcCache = reactive<Record<string, string>>({});
+
+const selectedImage = computed(() =>
+  selectedIndex.value != null ? images.value[selectedIndex.value] ?? null : null,
+);
 
 const visibleTotal = computed(() => {
   if (props.filterMonth || props.filterConversationId) {
@@ -157,10 +163,8 @@ function imageTypeLabel(source: ImageGalleryItem["source"]) {
   return t("gallery.source.other");
 }
 
-function imageTypeTagType(source: ImageGalleryItem["source"]) {
-  if (source === "generated") return "success";
-  if (source === "upload") return "info";
-  return "warning";
+function selectImage(index: number) {
+  selectedIndex.value = index;
 }
 
 function formatTime(timestamp: number | null) {
@@ -337,6 +341,7 @@ function onScroll(event: Event) {
 }
 
 function openLightbox(index: number) {
+  selectedIndex.value = index;
   lightboxIndex.value = index;
   lightboxVisible.value = true;
 }
@@ -352,6 +357,7 @@ watch(showUploads, () => {
 watch(
   () => [props.filterSource, props.filterMonth, props.filterConversationId] as const,
   () => {
+    selectedIndex.value = null;
     loadImages(true);
   },
 );
@@ -363,103 +369,137 @@ onMounted(() => {
 
 <template>
   <div class="image-gallery">
-    <header class="gallery-header">
-      <div class="gallery-header-main">
-        <p class="subtitle">
-          <template v-if="filterConversationId">{{ t("gallery.conversationImages") }}</template>
-          <template v-else-if="filterMonth">{{ t("gallery.monthImages", { month: filterMonth }) }}</template>
-          <template v-else>{{ t("gallery.browseAll") }}</template>
-        </p>
-        <p v-if="statsText && !filterSource" class="stats">{{ statsText }}</p>
-        <div class="source-nav">
-          <button
-            v-for="item in sourceNavItems"
-            :key="item.id ?? 'all'"
-            type="button"
-            class="source-nav-item"
-            :class="{ active: filterSource === item.id }"
-            @click="emit('update:filterSource', item.id)"
-          >
-            <span>{{ item.label }}</span>
-            <span class="source-nav-count">{{ item.count }}</span>
-          </button>
-        </div>
-      </div>
-      <el-checkbox v-model="showUploads" :label="t('gallery.showUploads')" />
-    </header>
+    <aside v-if="!filterConversationId" class="gallery-sidebar">
+      <SourceNav
+        :items="sourceNavItems"
+        :active-id="filterSource"
+        :title="t('filter.sources')"
+        show-dots
+        @select="emit('update:filterSource', $event)"
+      />
+      <label class="upload-toggle">
+        <el-checkbox v-model="showUploads" />
+        <span>{{ t("gallery.showUploads") }}</span>
+      </label>
+      <p v-if="statsText && !filterSource" class="sidebar-stats">{{ statsText }}</p>
+    </aside>
 
-    <el-skeleton v-if="loading" animated :rows="8" class="loading" />
-
-    <el-empty
-      v-else-if="images.length === 0"
-      :description="
-        filterSource
-          ? t('gallery.emptyFromSource', { source: conversationSourceLabel(filterSource) })
-          : showUploads
-            ? t('gallery.emptyNoData')
-            : t('gallery.emptyGeneratedOnly')
-      "
-    />
-
-    <div v-else class="grid-scroll" @scroll.passive="onScroll">
-      <section
-        v-for="group in imageGroups"
-        :key="group.key"
-        class="time-group"
+    <div class="gallery-main">
+      <header
+        v-if="filterConversationId || filterMonth"
+        class="gallery-context-bar"
       >
-        <h3 class="group-title">{{ group.label }}</h3>
-        <div class="grid">
-          <article
-            v-for="{ item, index } in group.items"
-            :key="galleryItemCacheKey(item)"
-            class="card"
-            :class="{ 'card-upload': item.source === 'upload' }"
-          >
-            <button
-              class="thumb-btn"
-              type="button"
-              @click="openLightbox(index)"
+        <template v-if="filterConversationId">{{ t("gallery.conversationImages") }}</template>
+        <template v-else-if="filterMonth">{{ t("gallery.monthImages", { month: filterMonth }) }}</template>
+      </header>
+
+      <el-skeleton v-if="loading" animated :rows="8" class="loading" />
+
+      <el-empty
+        v-else-if="images.length === 0"
+        class="gallery-empty"
+        :description="
+          filterSource
+            ? t('gallery.emptyFromSource', { source: conversationSourceLabel(filterSource) })
+            : showUploads
+              ? t('gallery.emptyNoData')
+              : t('gallery.emptyGeneratedOnly')
+        "
+      />
+
+      <div v-else class="grid-scroll" @scroll.passive="onScroll">
+        <section
+          v-for="group in imageGroups"
+          :key="group.key"
+          class="time-group"
+        >
+          <h3 class="group-title">{{ group.label }}</h3>
+          <div class="grid">
+            <article
+              v-for="{ item, index } in group.items"
+              :key="galleryItemCacheKey(item)"
+              class="card"
+              :class="{ selected: selectedIndex === index, 'card-upload': item.source === 'upload' }"
+              @click="selectImage(index)"
             >
-              <img
-                v-if="imageSrcCache[item.path] !== ''"
-                :src="imageSrc(item.path)"
-                :alt="item.file_key"
-                loading="lazy"
-                @error="onImageError(item.path)"
-              />
-              <div v-else class="thumb-missing">{{ t("gallery.loadFailed") }}</div>
-            </button>
-            <div class="card-meta">
               <button
-                class="conv-link"
+                class="thumb-btn"
                 type="button"
-                :title="t('gallery.openConversationTitle')"
-                @click="openConversation(item.conversation_id)"
+                @click.stop="openLightbox(index)"
               >
-                {{ item.conversation_title }}
+                <img
+                  v-if="imageSrcCache[item.path] !== ''"
+                  :src="imageSrc(item.path)"
+                  :alt="item.file_key"
+                  loading="lazy"
+                  @error="onImageError(item.path)"
+                />
+                <div v-else class="thumb-missing">{{ t("gallery.loadFailed") }}</div>
               </button>
-              <div class="meta-row">
-                <div class="meta-tags">
-                  <el-tag
-                    v-if="!filterSource"
-                    size="small"
-                    :type="conversationSourceTagType(conversationSourceFromId(item.conversation_id))"
-                    effect="plain"
-                  >
-                    {{ conversationSourceLabel(conversationSourceFromId(item.conversation_id)) }}
-                  </el-tag>
-                  <el-tag size="small" :type="imageTypeTagType(item.source)" effect="plain">
-                    {{ imageTypeLabel(item.source) }}
-                  </el-tag>
+              <div class="card-meta">
+                <div class="card-title">{{ item.conversation_title }}</div>
+                <div class="card-sub">
+                  <span
+                    class="source-dot"
+                    :style="{ background: sourceAccentColor(conversationSourceFromId(item.conversation_id)) }"
+                  />
+                  {{ conversationSourceLabel(conversationSourceFromId(item.conversation_id)) }}
+                  · {{ formatTime(item.create_time) }}
                 </div>
-                <span class="time">{{ formatTime(item.create_time) }}</span>
               </div>
-            </div>
-          </article>
-        </div>
-      </section>
-      <div class="footer">{{ footerText }}</div>
+            </article>
+          </div>
+        </section>
+        <div class="footer">{{ footerText }}</div>
+      </div>
     </div>
+
+    <aside class="gallery-inspector">
+      <template v-if="selectedImage">
+        <h3 class="inspector-title">{{ t("gallery.inspector.title") }}</h3>
+        <div class="inspector-preview">
+          <img
+            v-if="imageSrcCache[selectedImage.path] !== ''"
+            :src="imageSrc(selectedImage.path)"
+            :alt="selectedImage.file_key"
+            @error="onImageError(selectedImage.path)"
+          />
+        </div>
+        <dl class="inspector-list">
+          <div class="inspector-row">
+            <dt>{{ t("gallery.inspector.conversation") }}</dt>
+            <dd>{{ selectedImage.conversation_title }}</dd>
+          </div>
+          <div class="inspector-row">
+            <dt>{{ t("gallery.inspector.source") }}</dt>
+            <dd>
+              <span
+                class="source-dot"
+                :style="{ background: sourceAccentColor(conversationSourceFromId(selectedImage.conversation_id)) }"
+              />
+              {{ conversationSourceLabel(conversationSourceFromId(selectedImage.conversation_id)) }}
+            </dd>
+          </div>
+          <div class="inspector-row">
+            <dt>{{ t("gallery.inspector.type") }}</dt>
+            <dd>{{ imageTypeLabel(selectedImage.source) }}</dd>
+          </div>
+          <div class="inspector-row">
+            <dt>{{ t("gallery.inspector.time") }}</dt>
+            <dd>{{ formatTime(selectedImage.create_time) }}</dd>
+          </div>
+        </dl>
+        <div class="inspector-actions">
+          <el-button size="small" @click="openLightbox(selectedIndex!)">
+            {{ t("gallery.viewFullSize") }}
+          </el-button>
+          <el-button size="small" @click="openConversation(selectedImage.conversation_id)">
+            {{ t("gallery.openConversation") }}
+          </el-button>
+        </div>
+      </template>
+      <p v-else class="inspector-empty">{{ t("gallery.inspector.empty") }}</p>
+    </aside>
 
     <ImageLightbox
       v-model:visible="lightboxVisible"
@@ -478,79 +518,135 @@ onMounted(() => {
 .image-gallery {
   height: 100%;
   display: flex;
-  flex-direction: column;
+  min-height: 0;
   background: var(--cl-panel);
 }
 
-.gallery-header {
+.gallery-sidebar {
+  width: var(--cl-sidebar-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--cl-border-subtle);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 24px 12px;
-  border-bottom: 1px solid var(--cl-border);
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 8px 12px;
+  background: var(--cl-panel);
+  min-height: 0;
 }
 
-.gallery-header-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.source-nav {
+.upload-toggle {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.source-nav-item {
-  border: 1px solid var(--cl-border);
-  background: var(--cl-bg);
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  gap: 8px;
+  padding: 4px 12px;
   font-size: 12px;
-  color: var(--cl-text);
+  color: var(--cl-text-muted);
   cursor: pointer;
 }
 
-.source-nav-item:hover {
-  border-color: var(--el-color-primary-light-5);
-}
-
-.source-nav-item.active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.1);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.source-nav-count {
-  font-size: 11px;
-  color: var(--cl-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.source-nav-item.active .source-nav-count {
-  color: var(--el-color-primary);
-}
-
-.subtitle {
+.sidebar-stats {
   margin: 0;
-  font-size: 13px;
-  color: var(--cl-text-muted);
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--cl-text-faint);
+  line-height: 1.4;
 }
 
-.stats {
-  margin: 4px 0 0;
+.gallery-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--cl-panel-elevated);
+}
+
+.gallery-context-bar {
+  padding: 10px 20px;
   font-size: 12px;
   color: var(--cl-text-muted);
+  border-bottom: 1px solid var(--cl-border-subtle);
 }
 
-.loading {
+.gallery-inspector {
+  width: var(--cl-insight-width);
+  flex-shrink: 0;
+  border-left: 1px solid var(--cl-border-subtle);
+  padding: 16px;
+  overflow: auto;
+  background: var(--cl-panel);
+}
+
+.inspector-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cl-text-faint);
+}
+
+.inspector-preview {
+  margin-bottom: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--cl-border-subtle);
+  background: var(--cl-bg);
+}
+
+.inspector-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.inspector-list {
+  margin: 0;
+}
+
+.inspector-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  font-size: 12px;
+}
+
+.inspector-row dt {
+  margin: 0;
+  color: var(--cl-text-faint);
+}
+
+.inspector-row dd {
+  margin: 0;
+  color: var(--cl-text);
+  word-break: break-word;
+}
+
+.inspector-row dd .source-dot {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.inspector-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cl-text-faint);
+  line-height: 1.5;
+}
+
+.loading,
+.gallery-empty {
   padding: 24px;
+  flex: 1;
 }
 
 .grid-scroll {
@@ -563,29 +659,37 @@ onMounted(() => {
   padding-top: 8px;
 }
 
-.time-group:first-child {
-  padding-top: 0;
-}
-
 .group-title {
   margin: 0;
-  padding: 12px 24px 4px;
-  font-size: 13px;
+  padding: 12px 20px 4px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
-  padding: 8px 24px 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  padding: 8px 20px 16px;
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px;
+  transition: background 0.12s ease;
+}
+
+.card:hover {
+  background: var(--cl-hover);
+}
+
+.card.selected {
+  background: var(--cl-selected-strong);
 }
 
 .thumb-btn {
@@ -594,21 +698,18 @@ onMounted(() => {
   padding: 0;
   background: transparent;
   cursor: zoom-in;
-  border-radius: 10px;
+  border-radius: 6px;
   overflow: hidden;
   aspect-ratio: 1;
-  border: 1px solid var(--cl-border);
-}
-
-.card-upload .thumb-btn {
-  border-color: rgba(64, 158, 255, 0.45);
+  border: 1px solid var(--cl-border-subtle);
 }
 
 .thumb-btn img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  background: var(--cl-bg);
 }
 
 .thumb-missing {
@@ -619,59 +720,49 @@ onMounted(() => {
   justify-content: center;
   font-size: 12px;
   color: var(--cl-text-muted);
-  background: rgba(127, 127, 127, 0.08);
+  background: var(--cl-selected);
 }
 
 .card-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.meta-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
-.conv-link {
-  border: none;
-  background: transparent;
-  padding: 0;
-  text-align: left;
+.card-title {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--el-color-primary);
-  cursor: pointer;
-  line-height: 1.4;
+  font-weight: 500;
+  color: var(--cl-text);
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.conv-link:hover {
-  text-decoration: underline;
+.card-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--cl-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.time {
-  font-size: 11px;
-  color: var(--cl-text-muted);
-  white-space: nowrap;
+.source-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .footer {
-  padding: 8px 24px 24px;
+  padding: 12px 20px 20px;
   text-align: center;
   font-size: 12px;
-  color: var(--cl-text-muted);
+  color: var(--cl-text-faint);
 }
 </style>

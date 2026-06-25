@@ -9,6 +9,7 @@ import zhCn from "element-plus/es/locale/lang/zh-cn";
 import ConversationList from "./components/ConversationList.vue";
 import ConversationInfo from "./components/ConversationInfo.vue";
 import ImageGallery from "./components/ImageGallery.vue";
+import SourceNav from "./components/SourceNav.vue";
 import MessageView from "./components/MessageView.vue";
 import TimelineView from "./components/TimelineView.vue";
 import TagDialog from "./components/TagDialog.vue";
@@ -112,11 +113,24 @@ const languageOptions: Array<{ value: AppLocale; label: string }> = [
   { value: "en", label: "English" },
 ];
 
-const appearanceButtonLabel = computed(() => t(`appearance.${appearanceMode.value}`));
+const librarySummaryLine = computed(() => {
+  if (!stats.value) return "";
+  return t("library.summary", {
+    conversations: stats.value.conversation_count.toLocaleString(),
+    images: stats.value.image_count.toLocaleString(),
+    sources: sourceCount.value,
+  });
+});
 
-const languageButtonLabel = computed(
-  () => languageOptions.find((item) => item.value === locale.value)?.label ?? "Language",
-);
+function handleMoreCommand(command: string) {
+  if (command.startsWith("lang:")) {
+    handleLanguageCommand(command.slice(5) as AppLocale);
+    return;
+  }
+  if (command.startsWith("appearance:")) {
+    handleAppearanceCommand(command.slice(11) as AppearanceMode);
+  }
+}
 
 function handleAppearanceCommand(mode: AppearanceMode) {
   appearanceMode.value = mode;
@@ -130,29 +144,6 @@ function handleLanguageCommand(next: AppLocale) {
 const sourceCount = computed(() => {
   const entries = stats.value?.conversation_counts_by_source ?? [];
   return entries.filter((item) => item.count > 0).length;
-});
-
-function formatStatsTime(timestamp: number | null | undefined) {
-  return formatDateTime(timestamp, locale.value as AppLocale);
-}
-
-const dashboardStats = computed(() => {
-  if (!stats.value) return [];
-  const s = stats.value;
-  return [
-    { label: t("stats.conversations"), value: s.conversation_count, icon: "💬" },
-    { label: t("stats.images"), value: s.image_count, icon: "🖼" },
-    { label: t("stats.sources"), value: sourceCount.value, icon: "📦" },
-    { label: t("stats.starredConversations"), value: s.starred_conversation_count, icon: "★" },
-    { label: t("stats.starredMessages"), value: s.starred_message_count, icon: "☆" },
-    { label: t("stats.tags"), value: s.tag_count, icon: "🏷" },
-    {
-      label: t("stats.lastImport"),
-      value: formatStatsTime(s.last_imported_at),
-      icon: "📥",
-      isText: true,
-    },
-  ];
 });
 
 const navItems = computed(() => [
@@ -819,11 +810,10 @@ onMounted(async () => {
 <template>
   <el-config-provider :locale="elementLocale">
   <el-container class="app-shell">
-    <el-header class="topbar" height="56px">
+    <el-header class="topbar" :height="`${48}px`">
       <div class="brand">
         <div class="brand-text">
           <strong class="brand-name">ChatLens</strong>
-          <span class="brand-tagline">Browse your AI memory</span>
         </div>
         <nav class="nav-tabs" :aria-label="t('nav.mainViews')">
           <button
@@ -834,9 +824,7 @@ onMounted(async () => {
             type="button"
             @click="handleNavClick(item.id)"
           >
-            <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
-            <span v-if="item.count" class="nav-count">{{ item.count.toLocaleString() }}</span>
           </button>
         </nav>
       </div>
@@ -848,42 +836,49 @@ onMounted(async () => {
           class="search-input"
           @keyup.enter="handleSearch"
           @clear="clearSearch"
-        />
-        <el-button @click="handleSearch">{{ t("common.search") }}</el-button>
-        <el-dropdown trigger="click" @command="handleLanguageCommand">
-          <el-button :title="t('language.title')">
-            {{ languageButtonLabel }}
+        >
+          <template #prefix>
+            <span class="search-prefix" aria-hidden="true">⌕</span>
+          </template>
+        </el-input>
+        <el-button class="toolbar-btn" :loading="importing" @click="openImportWizard">
+          {{ t("common.import") }}
+        </el-button>
+        <el-dropdown trigger="click" @command="handleMoreCommand">
+          <el-button class="toolbar-btn toolbar-more" :title="t('common.more')">
+            ⋯
           </el-button>
           <template #dropdown>
-            <el-dropdown-menu>
+            <el-dropdown-menu class="more-menu">
+              <el-dropdown-item disabled class="menu-stats">
+                <span class="menu-stats-label">{{ t("library.overview") }}</span>
+                <span class="menu-stats-value">{{ librarySummaryLine }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item disabled divided class="menu-section">
+                {{ t("language.title") }}
+              </el-dropdown-item>
               <el-dropdown-item
                 v-for="option in languageOptions"
                 :key="option.value"
-                :command="option.value"
+                :command="`lang:${option.value}`"
               >
                 <span
-                  class="appearance-item"
+                  class="menu-check-item"
                   :class="{ selected: locale === option.value }"
                 >
                   {{ option.label }}
                 </span>
               </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-dropdown trigger="click" @command="handleAppearanceCommand">
-          <el-button :title="t('appearance.title')">
-            {{ appearanceButtonLabel }}
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
+              <el-dropdown-item disabled divided class="menu-section">
+                {{ t("appearance.title") }}
+              </el-dropdown-item>
               <el-dropdown-item
                 v-for="option in appearanceOptions"
                 :key="option.value"
-                :command="option.value"
+                :command="`appearance:${option.value}`"
               >
                 <span
-                  class="appearance-item"
+                  class="menu-check-item"
                   :class="{ selected: appearanceMode === option.value }"
                 >
                   {{ option.label }}
@@ -892,25 +887,8 @@ onMounted(async () => {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button type="primary" :loading="importing" @click="openImportWizard">
-          {{ t("import.data") }}
-        </el-button>
       </div>
     </el-header>
-
-    <div v-if="stats" class="stats-bar" :aria-label="t('nav.libraryStats')">
-      <div
-        v-for="item in dashboardStats"
-        :key="item.label"
-        class="stat-item"
-      >
-        <span class="stat-icon" aria-hidden="true">{{ item.icon }}</span>
-        <span class="stat-label">{{ item.label }}</span>
-        <span class="stat-value">
-          {{ item.isText ? item.value : Number(item.value).toLocaleString() }}
-        </span>
-      </div>
-    </div>
 
     <el-dialog
       v-model="importWizardVisible"
@@ -1022,19 +1000,13 @@ onMounted(async () => {
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside class="sidebar" :style="{ width: 'var(--cl-sidebar-width)' }">
         <div v-if="!searchMode && !starredMessagesMode" class="sidebar-controls">
-          <div class="source-pills">
-            <button
-              v-for="item in visibleSourceNavItems"
-              :key="item.id ?? 'all'"
-              type="button"
-              class="source-pill"
-              :class="{ active: filterSource === item.id }"
-              @click="filterSource = item.id"
-            >
-              <span>{{ item.id === null ? t("common.all") : item.label }}</span>
-              <span class="source-pill-count">{{ item.count }}</span>
-            </button>
-          </div>
+          <SourceNav
+            :items="visibleSourceNavItems"
+            :active-id="filterSource"
+            :title="t('filter.sources')"
+            show-dots
+            @select="filterSource = $event"
+          />
 
           <el-input
             v-model="listQuery"
@@ -1105,19 +1077,13 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="!searchMode && starredMessagesMode" class="sidebar-controls sidebar-controls-compact">
-          <div class="source-pills">
-            <button
-              v-for="item in visibleSourceNavItems"
-              :key="item.id ?? 'all'"
-              type="button"
-              class="source-pill"
-              :class="{ active: filterSource === item.id }"
-              @click="filterSource = item.id"
-            >
-              <span>{{ item.id === null ? t("common.all") : item.label }}</span>
-              <span class="source-pill-count">{{ item.count }}</span>
-            </button>
-          </div>
+          <SourceNav
+            :items="visibleSourceNavItems"
+            :active-id="filterSource"
+            :title="t('filter.sources')"
+            show-dots
+            @select="filterSource = $event"
+          />
           <button
             type="button"
             class="filter-chip filter-chip-wide active"
@@ -1295,46 +1261,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--cl-border);
-  background: var(--cl-panel);
-}
-
-.stats-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--cl-border);
-  background: var(--cl-bg);
-}
-
-.stat-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--cl-text-muted);
-}
-
-.stat-icon {
-  font-size: 13px;
-  line-height: 1;
-}
-
-.stat-label {
-  font-weight: 500;
-}
-
-.stat-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--cl-text);
-  font-weight: 600;
+  padding: 0 16px;
+  min-height: var(--cl-toolbar-height);
+  border-bottom: 1px solid var(--cl-border-subtle);
+  background: var(--cl-panel-elevated);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -1345,15 +1281,9 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.brand-tagline {
-  font-size: 11px;
-  color: var(--cl-text-muted);
-  letter-spacing: 0.01em;
-}
-
 .brand-name {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--cl-text);
   letter-spacing: -0.02em;
   flex-shrink: 0;
@@ -1362,86 +1292,124 @@ onMounted(async () => {
 .nav-tabs {
   display: flex;
   gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
+  padding: 2px;
+  border-radius: 8px;
   background: var(--cl-bg);
-  border: 1px solid var(--cl-border);
+  border: 1px solid var(--cl-border-subtle);
 }
 
 .nav-tab {
   border: none;
   background: transparent;
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 5px 12px;
+  border-radius: 6px;
   font-size: 13px;
   color: var(--cl-text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .nav-tab:hover {
   color: var(--cl-text);
+  background: var(--cl-hover);
 }
 
 .nav-tab.active {
-  background: var(--cl-panel);
+  background: var(--cl-panel-elevated);
   color: var(--cl-text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-.nav-icon {
-  font-size: 14px;
-  line-height: 1;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .nav-label {
   line-height: 1.2;
 }
 
-.nav-count {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--cl-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.nav-tab.active .nav-count {
-  color: var(--el-color-primary);
-}
-
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .search-input {
-  width: 280px;
+  width: 260px;
 }
 
-.appearance-item {
+.search-prefix {
+  color: var(--cl-text-faint);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.toolbar-btn {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: var(--cl-border);
+  --el-button-text-color: var(--cl-text-muted);
+  --el-button-hover-bg-color: var(--cl-hover);
+  --el-button-hover-border-color: var(--cl-border);
+  --el-button-hover-text-color: var(--cl-text);
+}
+
+.toolbar-more {
+  min-width: 36px;
+  padding-inline: 10px;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+
+:deep(.more-menu .menu-stats) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+  cursor: default;
+  opacity: 1;
+}
+
+.menu-stats-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cl-text-faint);
+}
+
+.menu-stats-value {
+  font-size: 12px;
+  color: var(--cl-text-muted);
+}
+
+:deep(.more-menu .menu-section) {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cl-text-faint);
+  cursor: default;
+  opacity: 1;
+}
+
+.menu-check-item {
   display: inline-flex;
   align-items: center;
-  min-width: 88px;
+  min-width: 120px;
 }
 
-.appearance-item::before {
+.menu-check-item::before {
   content: "";
   display: inline-block;
   width: 1em;
   margin-right: 6px;
 }
 
-.appearance-item.selected {
-  color: var(--el-color-primary);
-  font-weight: 600;
+.menu-check-item.selected {
+  color: var(--cl-text);
+  font-weight: 500;
 }
 
-.appearance-item.selected::before {
+.menu-check-item.selected::before {
   content: "✓";
 }
 
@@ -1455,60 +1423,19 @@ onMounted(async () => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--cl-border);
+  border-right: 1px solid var(--cl-border-subtle);
   background: var(--cl-panel);
   min-height: 0;
   overflow: hidden;
 }
 
 .sidebar-controls {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--cl-border);
+  padding: 8px 8px 10px;
+  border-bottom: 1px solid var(--cl-border-subtle);
   display: flex;
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
-}
-
-.source-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.source-pill {
-  border: 1px solid var(--cl-border);
-  background: var(--cl-bg);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--cl-text);
-  cursor: pointer;
-  line-height: 1.5;
-}
-
-.source-pill:hover {
-  border-color: var(--el-color-primary-light-5);
-}
-
-.source-pill.active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.1);
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.source-pill-count {
-  font-size: 10px;
-  color: var(--cl-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.source-pill.active .source-pill-count {
-  color: var(--el-color-primary);
 }
 
 .filter-row {
@@ -1535,10 +1462,10 @@ onMounted(async () => {
 }
 
 .filter-chip {
-  border: 1px solid var(--cl-border);
-  background: var(--cl-bg);
+  border: 1px solid var(--cl-border-subtle);
+  background: transparent;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 11px;
   color: var(--cl-text-muted);
   cursor: pointer;
@@ -1546,15 +1473,15 @@ onMounted(async () => {
 }
 
 .filter-chip:hover {
-  border-color: var(--el-color-primary-light-5);
+  background: var(--cl-hover);
   color: var(--cl-text);
 }
 
 .filter-chip.active {
-  border-color: var(--el-color-primary);
-  background: rgba(64, 158, 255, 0.1);
-  color: var(--el-color-primary);
-  font-weight: 600;
+  border-color: var(--cl-border);
+  background: var(--cl-selected-strong);
+  color: var(--cl-text);
+  font-weight: 500;
 }
 
 .tag-filter-inline {

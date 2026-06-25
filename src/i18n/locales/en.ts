@@ -20,6 +20,8 @@ export default {
     close: "Close",
     previous: "Previous",
     next: "Next",
+    more: "More",
+    import: "Import",
   },
   appearance: {
     title: "Appearance",
@@ -48,6 +50,10 @@ export default {
     tags: "Tags",
     lastImport: "Last import",
   },
+  library: {
+    overview: "Library overview",
+    summary: "{conversations} chats · {images} images · {sources} sources",
+  },
   search: {
     placeholder: "Search messages…",
     results: "Search results",
@@ -58,6 +64,7 @@ export default {
     allConversations: "All chats",
     allSources: "All sources",
     allImages: "All images",
+    sources: "Sources",
     filterTitle: "Filter by title…",
     starredConversations: "Starred chats",
     starredMessages: "Starred messages",
@@ -185,6 +192,15 @@ export default {
     loadFailed: "Failed to load",
     openConversation: "Open chat",
     openConversationTitle: "Open chat",
+    viewFullSize: "View full size",
+    inspector: {
+      title: "Image details",
+      empty: "Select an image to view details",
+      source: "Source",
+      type: "Type",
+      time: "Time",
+      conversation: "Chat",
+    },
     stats: {
       breakdown: "Generated {generated} · Upload {upload} · Other {other}",
       pair: "Generated {generated} · Upload {upload}",

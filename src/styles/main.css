@@ -1,27 +1,62 @@
 :root,
 html[data-theme="light"] {
-  --cl-bg: #f3f4f6;
-  --cl-panel: #ffffff;
-  --cl-border: #e5e7eb;
-  --cl-text: #111827;
+  --cl-bg: #eceef1;
+  --cl-panel: #f7f8fa;
+  --cl-panel-elevated: #ffffff;
+  --cl-border: #d8dce3;
+  --cl-border-subtle: #e8ebf0;
+  --cl-text: #1a1d23;
   --cl-text-muted: #6b7280;
+  --cl-text-faint: #9ca3af;
   --cl-message-bg: #ffffff;
   --cl-code-bg: #f6f8fa;
   --cl-code-text: #24292f;
-  --cl-sidebar-width: 320px;
+  --cl-selected: rgba(26, 29, 35, 0.06);
+  --cl-selected-strong: rgba(26, 29, 35, 0.1);
+  --cl-hover: rgba(26, 29, 35, 0.04);
+  --cl-accent: #4b5563;
+  --cl-accent-soft: rgba(75, 85, 99, 0.12);
+  --cl-sidebar-width: 260px;
   --cl-content-max-width: 860px;
-  --cl-insight-width: 240px;
+  --cl-insight-width: 260px;
+  --cl-toolbar-height: 48px;
+
+  --el-color-primary: #4b5563;
+  --el-color-primary-light-3: #6b7280;
+  --el-color-primary-light-5: #9ca3af;
+  --el-color-primary-light-7: #d1d5db;
+  --el-color-primary-light-8: #e5e7eb;
+  --el-color-primary-light-9: #f3f4f6;
+  --el-color-primary-dark-2: #374151;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
 }
 
 html[data-theme="dark"] {
-  --cl-bg: #111827;
-  --cl-panel: #1f2937;
-  --cl-border: #374151;
-  --cl-text: #f9fafb;
-  --cl-text-muted: #9ca3af;
-  --cl-message-bg: #111827;
+  --cl-bg: #14161a;
+  --cl-panel: #1a1d23;
+  --cl-panel-elevated: #22262e;
+  --cl-border: #2e333b;
+  --cl-border-subtle: #262a32;
+  --cl-text: #e8eaed;
+  --cl-text-muted: #9aa0a8;
+  --cl-text-faint: #6b7280;
+  --cl-message-bg: #14161a;
   --cl-code-bg: #1e1e1e;
   --cl-code-text: #dcdcdc;
+  --cl-selected: rgba(255, 255, 255, 0.06);
+  --cl-selected-strong: rgba(255, 255, 255, 0.1);
+  --cl-hover: rgba(255, 255, 255, 0.04);
+  --cl-accent: #b8bcc4;
+  --cl-accent-soft: rgba(184, 188, 196, 0.12);
+
+  --el-color-primary: #b8bcc4;
+  --el-color-primary-light-3: #9aa0a8;
+  --el-color-primary-light-5: #6b7280;
+  --el-color-primary-light-7: #4b5563;
+  --el-color-primary-light-8: #374151;
+  --el-color-primary-light-9: #2e333b;
+  --el-color-primary-dark-2: #d1d5db;
 }
 
 html,
