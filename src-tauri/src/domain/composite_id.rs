@@ -19,7 +19,10 @@ pub fn parse_composite_conversation_id(id: &str) -> Option<(DataSource, String)>
 }
 
 fn is_known_source_prefix(prefix: &str) -> bool {
-    matches!(prefix, "chatgpt" | "cursor" | "claude" | "gemini")
+    matches!(
+        prefix,
+        "chatgpt" | "cursor" | "codex" | "claude" | "gemini" | "deepseek" | "copilot"
+    )
 }
 
 pub fn message_storage_id(conversation_storage_id: &str, message_source_id: &str) -> String {

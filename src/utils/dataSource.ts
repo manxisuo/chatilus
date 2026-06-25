@@ -5,6 +5,7 @@ export const KNOWN_DATA_SOURCES = [
   "claude",
   "gemini",
   "deepseek",
+  "copilot",
 ] as const;
 
 export type DataSourceKey = (typeof KNOWN_DATA_SOURCES)[number];
@@ -21,6 +22,8 @@ export function sourceLabel(source?: string | null): string {
       return "Gemini";
     case "deepseek":
       return "DeepSeek";
+    case "copilot":
+      return "Copilot";
     case "chatgpt":
       return "ChatGPT";
     default:
@@ -42,6 +45,8 @@ export function sourceTagType(
       return "success";
     case "deepseek":
       return "primary";
+    case "copilot":
+      return "info";
     case "chatgpt":
       return "info";
     default:

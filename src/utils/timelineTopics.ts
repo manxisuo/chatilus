@@ -120,6 +120,7 @@ const STOPWORDS = new Set([
   "版本",
   "模式",
   "deepseek",
+  "copilot",
 ]);
 
 /** 纯中文标题片段超过此长度时视为整句碎片，不作为话题。 */

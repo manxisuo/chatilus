@@ -197,6 +197,8 @@ function assistantLabel(source?: string | null) {
       return "Gemini";
     case "deepseek":
       return "DeepSeek";
+    case "copilot":
+      return "Copilot";
     case "chatgpt":
       return "ChatGPT";
     default:

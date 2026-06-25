@@ -27,4 +27,5 @@ rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 base64 = "0.22"
 zip = "2.2"
 uuid = { version = "1", features = ["v4"] }
+csv = "1.3"
 
