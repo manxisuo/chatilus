@@ -1,16 +1,7 @@
-use std::path::Path;
-
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 
 use crate::domain::mappers::{message_from_db_fields, message_to_view};
 use crate::domain::ports::MessageRepository;
-use crate::infrastructure::importers::chatgpt::{
-    attachments::{
-        enrich_attachment_view, imported_attachments_to_views, resolve_imported_attachments,
-    },
-    extract_attachment_infos_from_message_json,
-};
-use crate::infrastructure::media::MediaIndex;
 use crate::models::MessageView;
 
 use super::helpers::{clean_content_placeholders, message_snippet, parse_attachments_json};
@@ -18,35 +9,6 @@ use super::Database;
 
 impl MessageRepository for Database {
     fn list_by_conversation(&self, conversation_id: &str) -> Result<Vec<MessageView>, String> {
-        let (conversation_source, source_path): (String, Option<String>) = self
-            .conn
-            .query_row(
-                "SELECT COALESCE(source, 'chatgpt'), source_path FROM conversations WHERE id = ?1",
-                params![conversation_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()
-            .map_err(|e| format!("查询对话来源失败: {e}"))?
-            .unwrap_or_else(|| ("chatgpt".to_string(), None));
-
-        let media_index = source_path.as_deref().and_then(|path| {
-            let path = Path::new(path);
-            match conversation_source.as_str() {
-                "codex" if path.is_dir() => Some(MediaIndex::build_codex(path)),
-                "cursor" if path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name == "state.vscdb") =>
-                {
-                    path.parent()
-                        .and_then(|global_storage| global_storage.parent())
-                        .map(|user_dir| MediaIndex::build_cursor(user_dir))
-                }
-                _ if path.is_dir() => Some(MediaIndex::build(path)),
-                _ => None,
-            }
-        });
-
         let mut stmt = self
             .conn
             .prepare(
@@ -69,34 +31,13 @@ impl MessageRepository for Database {
                 let is_starred = row.get::<_, i64>(6)? != 0;
                 let attachments_raw: Option<String> = row.get(7)?;
                 let raw_json: Option<String> = row.get(8)?;
-                let mut attachments = attachments_raw
+                let attachments = attachments_raw
                     .as_deref()
                     .map(parse_attachments_json)
-                    .unwrap_or_default();
-
-                if attachments.is_empty() {
-                    if let (Some(ref index), Some(ref raw)) = (&media_index, &raw_json) {
-                        attachments = imported_attachments_to_views(&resolve_imported_attachments(
-                            &extract_attachment_infos_from_message_json(raw),
-                            &role,
-                            index,
-                        ));
-                    }
-                } else {
-                    attachments = attachments
-                        .into_iter()
-                        .map(|mut attachment| {
-                            if !Path::new(&attachment.path).is_file() {
-                                if let Some(ref index) = media_index {
-                                    if let Some(path) = index.resolve(&attachment.file_key) {
-                                        attachment.path = path.display().to_string();
-                                    }
-                                }
-                            }
-                            enrich_attachment_view(attachment, &role)
-                        })
-                        .collect();
-                }
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|item| !item.path.trim().is_empty())
+                    .collect::<Vec<_>>();
 
                 let message = message_from_db_fields(
                     id,

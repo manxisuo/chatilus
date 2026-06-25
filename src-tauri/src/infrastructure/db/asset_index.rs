@@ -1,12 +1,5 @@
-use std::path::Path;
-
 use rusqlite::{params, Connection};
 
-use crate::infrastructure::importers::chatgpt::{
-    attachments::{imported_attachments_to_views, resolve_imported_attachments},
-    extract_attachment_infos_from_message_json,
-};
-use crate::infrastructure::media::MediaIndex;
 use crate::models::AttachmentView;
 
 use super::helpers::parse_attachments_json;
@@ -48,7 +41,6 @@ pub(crate) fn reindex_conversation_assets(
     conversation_id: &str,
     conversation_title: &str,
     conversation_source: &str,
-    source_path: &str,
 ) -> Result<(), String> {
     conn.execute(
         "DELETE FROM assets WHERE conversation_id = ?1",
@@ -58,7 +50,7 @@ pub(crate) fn reindex_conversation_assets(
 
     let mut stmt = conn
         .prepare(
-            "SELECT m.id, m.role, m.create_time, m.attachments, m.raw_json
+            "SELECT m.id, m.role, m.create_time, m.attachments
              FROM messages m
              WHERE m.conversation_id = ?1",
         )
@@ -71,30 +63,17 @@ pub(crate) fn reindex_conversation_assets(
                 row.get::<_, String>(1)?,
                 row.get::<_, Option<f64>>(2)?,
                 row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
             ))
         })
         .map_err(|e| format!("读取消息附件失败: {e}"))?;
 
-    let mut media_index: Option<MediaIndex> = None;
-
     for row in rows {
-        let (message_id, role, create_time, attachments, raw_json) =
+        let (message_id, role, create_time, attachments) =
             row.map_err(|e| format!("读取消息附件失败: {e}"))?;
 
-        let attachment_views = resolve_message_attachments(
-            &role,
-            attachments.as_deref(),
-            raw_json.as_deref(),
-            source_path,
-            conversation_source,
-            &mut media_index,
-        );
+        let attachment_views = parse_stored_attachments(attachments.as_deref());
 
         for attachment in attachment_views {
-            if attachment.path.trim().is_empty() {
-                continue;
-            }
             insert_asset_row(
                 conn,
                 &message_id,
@@ -114,7 +93,7 @@ pub(crate) fn reindex_conversation_assets(
 pub(crate) fn backfill_all_assets(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.title, COALESCE(c.source, 'chatgpt'), c.source_path
+            "SELECT c.id, c.title, COALESCE(c.source, 'chatgpt')
              FROM conversations c",
         )
         .map_err(|e| format!("读取会话失败: {e}"))?;
@@ -125,63 +104,27 @@ pub(crate) fn backfill_all_assets(conn: &Connection) -> Result<(), String> {
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
             ))
         })
         .map_err(|e| format!("读取会话失败: {e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("读取会话失败: {e}"))?;
 
-    for (conversation_id, title, source, source_path) in conversations {
-        reindex_conversation_assets(&conn, &conversation_id, &title, &source, &source_path)?;
+    for (conversation_id, title, source) in conversations {
+        reindex_conversation_assets(&conn, &conversation_id, &title, &source)?;
     }
 
     Ok(())
 }
 
-fn resolve_message_attachments(
-    role: &str,
-    attachments: Option<&str>,
-    raw_json: Option<&str>,
-    source_path: &str,
-    conversation_source: &str,
-    media_index: &mut Option<MediaIndex>,
-) -> Vec<AttachmentView> {
-    if let Some(attachments) = attachments.filter(|value| !value.is_empty() && *value != "[]") {
-        return parse_attachments_json(attachments)
-            .into_iter()
-            .filter(|item| !item.path.trim().is_empty())
-            .collect();
-    }
-
-    let Some(raw_json) = raw_json.filter(|value| value.contains("image_asset_pointer")) else {
-        return Vec::new();
-    };
-
-    let index = media_index.get_or_insert_with(|| build_media_index(conversation_source, source_path));
-    let pointers = extract_attachment_infos_from_message_json(raw_json);
-    imported_attachments_to_views(&resolve_imported_attachments(&pointers, role, index))
+fn parse_stored_attachments(attachments: Option<&str>) -> Vec<AttachmentView> {
+    attachments
+        .filter(|value| !value.is_empty() && *value != "[]")
+        .map(parse_attachments_json)
+        .unwrap_or_default()
         .into_iter()
         .filter(|item| !item.path.trim().is_empty())
         .collect()
-}
-
-fn build_media_index(conversation_source: &str, source_path: &str) -> MediaIndex {
-    let path = Path::new(source_path);
-    match conversation_source {
-        "codex" if path.is_dir() => MediaIndex::build_codex(path),
-        "cursor" if path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name == "state.vscdb") =>
-        {
-            path.parent()
-                .and_then(|global_storage| global_storage.parent())
-                .map(|user_dir| MediaIndex::build_cursor(user_dir))
-                .unwrap_or_else(|| MediaIndex::build(path))
-        }
-        _ => MediaIndex::build(path),
-    }
 }
 
 fn insert_asset_row(

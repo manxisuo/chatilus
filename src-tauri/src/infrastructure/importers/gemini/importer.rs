@@ -5,7 +5,7 @@ use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
     ImportPreview, Importer, NormalizedImportResult,
 };
-use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
+use crate::infrastructure::attachments::resolve_imported_attachments;
 use crate::infrastructure::media::MediaIndex;
 
 use super::parse::parse_activity_html;

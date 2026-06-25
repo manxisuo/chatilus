@@ -3,7 +3,7 @@ use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
     ImportPreview, Importer, NormalizedImportResult, platform_display_path,
 };
-use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
+use crate::infrastructure::attachments::resolve_imported_attachments;
 use crate::infrastructure::media::MediaIndex;
 
 use super::db::{list_threads, open_codex_db};

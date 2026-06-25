@@ -1,4 +1,4 @@
-use super::attachments::resolve_imported_attachments;
+use crate::infrastructure::attachments::resolve_imported_attachments;
 use super::{find_conversation_files, load_project_name_index, parse_conversation_file};
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{

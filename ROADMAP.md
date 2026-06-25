@@ -353,6 +353,15 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - 新检索方式 → 新 `SearchEngine` 实现
 - 新 AI 能力 → `application/ai/` 编排，不污染 domain 模型
 
+### 导入后去源化（维护中）
+
+读路径只依赖 DB 已物化字段；各源解析与附件路径解析留在 **Importer + 导入写入** 阶段。
+
+- [x] `message_repository` / `asset_index` 不再按源重建 `MediaIndex` 或解析 `raw_json`
+- [x] 移除 `refresh_codex_media` 启动回填
+- [x] 共享附件解析迁至 `infrastructure/attachments/`（`resolve_imported_attachments` 等）
+- [ ] 前端展示统一：`MessageView` 角色标签改用 `sourceLabel`；`sourceContext` 中 ChatGPT `g-p` 项目名等特殊文案收拢到 `dataSource` / `sourceContext` 工具（去掉 Cursor system 等散落分支）
+
 ### 架构收敛（已完成，PR 1–5）
 
 轻量收敛，每步可独立合并、UI 行为不变。双轨运行：domain 模型与 View DTO 并存，经 mapper 转换。
@@ -450,7 +459,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | prompt | TEXT | 生成提示（可选） |
 | created_at | REAL | 消息时间（用于月份统计与排序） |
 
-导入与迁移时从 `messages.attachments` / `raw_json` 水合写入；图库与 Timeline 图片统计只读此表。
+导入时从已物化的 `messages.attachments` 写入；图库与 Timeline 图片统计只读 `assets` 表。
 
 ---
 

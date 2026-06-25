@@ -301,7 +301,6 @@ mod tests {
             conversation_id,
             &format!("{source} image"),
             source,
-            "/export",
         )
         .expect("reindex assets");
     }

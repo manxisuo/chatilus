@@ -1,5 +1,4 @@
 mod conversation;
-pub mod attachments;
 mod importer;
 mod projects;
 

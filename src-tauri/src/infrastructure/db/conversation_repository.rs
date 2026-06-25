@@ -11,7 +11,7 @@ use crate::domain::ports::{
     MessageRepository, TimelineListQuery,
 };
 use crate::domain::ports::SearchIndexEntry;
-use crate::infrastructure::importers::chatgpt::attachments::imported_attachments_to_views;
+use crate::infrastructure::attachments::imported_attachments_to_views;
 use crate::infrastructure::search::{index_message, remove_conversation_index};
 use crate::models::{ConversationSummary, ExportResult, SourceCount, TimelineMonthBucket};
 
@@ -628,7 +628,7 @@ fn merge_messages(
     conversation: &ImportedConversation,
     storage_id: &str,
     conversation_source: &str,
-    source_path: &str,
+    _source_path: &str,
 ) -> Result<usize, String> {
     let mut touched = 0usize;
 
@@ -669,7 +669,6 @@ fn merge_messages(
         storage_id,
         &conversation.title,
         conversation_source,
-        source_path,
     )?;
     link_conversation_source_contexts(
         tx,
@@ -679,85 +678,6 @@ fn merge_messages(
     )?;
 
     Ok(touched)
-}
-
-/// Re-parses local Codex rollouts and updates message attachments for existing conversations.
-pub(crate) fn refresh_codex_media(conn: &rusqlite::Connection) -> Result<(), String> {
-    use std::collections::HashSet;
-
-    use crate::domain::ports::{ImportInput, ImportOptions, Importer};
-    use crate::infrastructure::importers::codex::{
-        resolve_codex_home, resolve_codex_state_db, CodexImporter,
-    };
-
-    let pending: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-             WHERE c.source = 'codex'
-               AND (m.attachments IS NULL OR m.attachments = '' OR m.attachments = '[]')",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("检查 Codex 附件状态失败: {e}"))?;
-    if pending == 0 {
-        return Ok(());
-    }
-
-    let mut stmt = conn
-        .prepare("SELECT DISTINCT source_path FROM conversations WHERE source = 'codex'")
-        .map_err(|e| format!("读取 Codex 来源路径失败: {e}"))?;
-    let paths = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("读取 Codex 来源路径失败: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取 Codex 来源路径失败: {e}"))?;
-
-    let mut refreshed = HashSet::<String>::new();
-    let importer = CodexImporter::new();
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| format!("开启 Codex 附件回填事务失败: {e}"))?;
-
-    for path_str in paths {
-        let path = Path::new(&path_str);
-        let import_path = resolve_codex_home(path)
-            .or_else(|| resolve_codex_state_db(path))
-            .unwrap_or_else(|| path.to_path_buf());
-        let key = import_path.display().to_string();
-        if !refreshed.insert(key) {
-            continue;
-        }
-
-        let Ok(normalized) = importer.import(
-            &ImportInput {
-                path: import_path.clone(),
-            },
-            &ImportOptions::default(),
-        ) else {
-            continue;
-        };
-        let source_path = import_path.display().to_string();
-
-        for conversation in normalized.package.conversations {
-            let storage_id = composite_conversation_id(DataSource::Codex, &conversation.id);
-            let exists: bool = tx
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = ?1)",
-                    params![storage_id],
-                    |row| row.get(0),
-                )
-                .map_err(|e| format!("检查 Codex 会话失败: {e}"))?;
-            if !exists {
-                continue;
-            }
-            merge_messages(&tx, &conversation, &storage_id, "codex", &source_path)?;
-        }
-    }
-
-    tx.commit()
-        .map_err(|e| format!("提交 Codex 附件回填失败: {e}"))?;
-    Ok(())
 }
 
 fn reorder_conversation_messages(

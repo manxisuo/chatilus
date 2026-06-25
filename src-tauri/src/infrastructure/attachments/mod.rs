@@ -5,6 +5,7 @@ use crate::infrastructure::importers::chatgpt::classify_image_source;
 use crate::infrastructure::media::MediaIndex;
 use crate::models::AttachmentView;
 
+/// Resolves import-time attachment pointers to local file paths via `MediaIndex`.
 pub fn resolve_imported_attachments(
     attachments: &[ImportedAttachment],
     role: &str,
@@ -36,16 +37,6 @@ pub fn resolve_imported_attachments(
         .collect()
 }
 
-fn attachment_source(role: &str, path: &str, stored: &str) -> String {
-    if stored == "unknown" {
-        classify_image_source(None, role, Some(path))
-    } else if path.contains("dalle-generations") {
-        "generated".to_string()
-    } else {
-        stored.to_string()
-    }
-}
-
 pub fn imported_attachments_to_views(attachments: &[ImportedAttachment]) -> Vec<AttachmentView> {
     attachments
         .iter()
@@ -60,13 +51,14 @@ pub fn imported_attachments_to_views(attachments: &[ImportedAttachment]) -> Vec<
         .collect()
 }
 
-pub fn enrich_attachment_view(mut attachment: AttachmentView, role: &str) -> AttachmentView {
-    if attachment.source.is_empty() || attachment.source == "unknown" {
-        attachment.source = classify_image_source(None, role, Some(&attachment.path));
-    } else if attachment.path.contains("dalle-generations") {
-        attachment.source = "generated".to_string();
+fn attachment_source(role: &str, path: &str, stored: &str) -> String {
+    if stored == "unknown" {
+        classify_image_source(None, role, Some(path))
+    } else if path.contains("dalle-generations") {
+        "generated".to_string()
+    } else {
+        stored.to_string()
     }
-    attachment
 }
 
 #[cfg(test)]

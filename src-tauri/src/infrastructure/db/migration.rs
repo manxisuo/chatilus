@@ -19,7 +19,6 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<(), String> {
         version += 1;
         apply_migration(conn, version)?;
     }
-    super::conversation_repository::refresh_codex_media(conn)?;
     upsert_meta(conn, "app_version", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
@@ -43,15 +42,9 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<(), String> {
     };
 
     match result {
-        Ok(()) => {
-            tx.commit()
-                .map_err(|e| format!("提交迁移事务失败 (v{version}): {e}"))?;
-            if version == 9 {
-                use super::conversation_repository::refresh_codex_media;
-                refresh_codex_media(conn)?;
-            }
-            Ok(())
-        }
+        Ok(()) => tx
+            .commit()
+            .map_err(|e| format!("提交迁移事务失败 (v{version}): {e}")),
         Err(error) => {
             let _ = tx.rollback();
             Err(error)
@@ -311,80 +304,10 @@ fn migrate_v8(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-/// v9：标记 schema 版本；Codex 附件回填在迁移事务提交后执行。
+/// v9：标记 schema 版本。
 fn migrate_v9(conn: &Connection) -> Result<(), String> {
     upsert_meta(conn, "schema_version", "9")?;
     Ok(())
-}
-
-#[cfg(test)]
-mod migrate_v9_tests {
-    use std::path::PathBuf;
-
-    use rusqlite::Connection;
-
-    use super::migrate_v9;
-    use super::super::conversation_repository::refresh_codex_media;
-    use crate::db::Database;
-
-    #[test]
-    fn migrate_v9_backfills_codex_attachments_on_local_copy() {
-        let source = std::env::var("APPDATA")
-            .map(|appdata| PathBuf::from(appdata).join("com.manxi.chatlens").join("chatlens.db"))
-            .unwrap_or_default();
-        if !source.is_file() {
-            return;
-        }
-
-        let dest = std::env::temp_dir().join(format!(
-            "chatlens-v9-probe-{}.db",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-        ));
-        std::fs::copy(&source, &dest).expect("copy db");
-
-        let conn = Connection::open(&dest).expect("open copied db");
-        conn.execute(
-            "UPDATE meta SET value = '8' WHERE key = 'schema_version'",
-            [],
-        )
-        .expect("set schema v8");
-        drop(conn);
-
-        let conn = Connection::open(&dest).expect("reopen");
-        migrate_v9(&conn).expect("migrate v9");
-        refresh_codex_media(&conn).expect("refresh codex media");
-
-        let db = Database::open(&dest).expect("open migrated db");
-        assert_eq!(db.schema_version().expect("version"), 9);
-
-        let with_attachments: i64 = db
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM messages m
-                 JOIN conversations c ON c.id = m.conversation_id
-                 WHERE c.source = 'codex'
-                   AND m.attachments IS NOT NULL
-                   AND m.attachments != ''
-                   AND m.attachments != '[]'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("count attachments");
-        let codex_assets: i64 = db
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM assets WHERE conversation_source = 'codex'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("count assets");
-
-        assert!(with_attachments > 0, "expected codex message attachments");
-        assert!(codex_assets > 0, "expected codex assets index");
-    }
 }
 
 #[cfg(test)]
