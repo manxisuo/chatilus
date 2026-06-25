@@ -4,13 +4,20 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::domain::ports::{ImportedConversation, ImportedMessage, ImportedSourceContext};
+use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext};
 
+use super::attachments::{
+    extract_event_msg_attachments, extract_image_paths_from_text, extract_message_content,
+    generated_image_attachment, merge_attachments,
+};
 use super::db::CodexThreadRecord;
 use super::resolve::normalize_windows_path;
 
-pub fn thread_to_conversation(thread: &CodexThreadRecord) -> Option<ImportedConversation> {
-    let mut conversation = parse_rollout_file(&thread.rollout_path, thread)?;
+pub fn thread_to_conversation(
+    thread: &CodexThreadRecord,
+    codex_home: &Path,
+) -> Option<ImportedConversation> {
+    let mut conversation = parse_rollout_file(&thread.rollout_path, thread, codex_home)?;
     if conversation.title.trim().is_empty() {
         conversation.title = fallback_title(thread);
     }
@@ -29,12 +36,17 @@ pub fn thread_to_conversation(thread: &CodexThreadRecord) -> Option<ImportedConv
     Some(conversation)
 }
 
-fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<ImportedConversation> {
+fn parse_rollout_file(
+    path: &Path,
+    thread: &CodexThreadRecord,
+    codex_home: &Path,
+) -> Option<ImportedConversation> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
     let mut messages = Vec::new();
     let mut message_index = 0usize;
     let mut model = thread.model.clone();
+    let mut pending_generated = Vec::<ImportedAttachment>::new();
 
     for line in reader.lines() {
         let line = line.ok()?;
@@ -68,7 +80,11 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                 let Some(payload) = item.get("payload") else {
                     continue;
                 };
-                if payload.get("type").and_then(|value| value.as_str()) != Some("message") {
+                let payload_type = payload.get("type").and_then(|value| value.as_str());
+                if payload_type == Some("image_generation_call") {
+                    continue;
+                }
+                if payload_type != Some("message") {
                     continue;
                 }
                 let Some(role) = payload.get("role").and_then(|value| value.as_str()) else {
@@ -77,10 +93,29 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                 if role == "developer" {
                     continue;
                 }
-                let Some(text) = message_text(payload) else {
+                let mut inline_image_index = 0usize;
+                let Some((text, mut attachments)) = extract_message_content(
+                    payload,
+                    Some(codex_home),
+                    Some(&thread.id),
+                    payload.get("id").and_then(|value| value.as_str()),
+                    &mut inline_image_index,
+                ) else {
                     continue;
                 };
-                if should_skip_message_text(role, &text) {
+                if should_skip_message_text(role, &text) && attachments.is_empty() {
+                    continue;
+                }
+                if role == "assistant" {
+                    attachments.extend(std::mem::take(&mut pending_generated));
+                }
+                let normalized_role = normalize_role(role);
+                if try_merge_duplicate_message(
+                    &mut messages,
+                    normalized_role,
+                    &text,
+                    &mut attachments,
+                ) {
                     continue;
                 }
                 let timestamp = item
@@ -95,11 +130,11 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                 message_index += 1;
                 messages.push(ImportedMessage {
                     id: message_id,
-                    role: normalize_role(role).to_string(),
+                    role: normalized_role.to_string(),
                     content: text,
                     create_time: timestamp,
                     raw_json: serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string()),
-                    attachments: Vec::new(),
+                    attachments,
                 });
             }
             "event_msg" => {
@@ -107,6 +142,20 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                     continue;
                 };
                 let payload_type = payload.get("type").and_then(|value| value.as_str());
+                if payload_type == Some("image_generation_end") {
+                    let call_id = payload.get("call_id").and_then(|value| value.as_str())?;
+                    let prompt = payload
+                        .get("revised_prompt")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string);
+                    if let Some(attachment) =
+                        generated_image_attachment(codex_home, &thread.id, call_id, prompt)
+                    {
+                        pending_generated.push(attachment);
+                    }
+                    continue;
+                }
+
                 let (role, text) = match payload_type {
                     Some("user_message") => (
                         "user",
@@ -119,13 +168,29 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                     _ => continue,
                 };
                 let text = text.trim();
-                if text.is_empty() || should_skip_message_text(role, text) {
+                let cache_key = payload
+                    .get("client_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or(text);
+                let mut attachments = extract_event_msg_attachments(
+                    payload,
+                    role,
+                    codex_home,
+                    &thread.id,
+                    cache_key,
+                );
+                attachments.extend(extract_image_paths_from_text(text));
+                if text.is_empty() && attachments.is_empty() {
                     continue;
                 }
-                if messages
-                    .last()
-                    .is_some_and(|last| last.role == role && last.content.trim() == text)
+                if !text.is_empty() && should_skip_message_text(role, text) && attachments.is_empty()
                 {
+                    continue;
+                }
+                if role == "assistant" {
+                    attachments.extend(std::mem::take(&mut pending_generated));
+                }
+                if try_merge_duplicate_message(&mut messages, role, text, &mut attachments) {
                     continue;
                 }
                 let timestamp = item
@@ -140,7 +205,7 @@ fn parse_rollout_file(path: &Path, thread: &CodexThreadRecord) -> Option<Importe
                     content: text.to_string(),
                     create_time: timestamp,
                     raw_json: serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string()),
-                    attachments: Vec::new(),
+                    attachments,
                 });
             }
             _ => {}
@@ -255,25 +320,47 @@ fn truncate_title(text: &str, max_chars: usize) -> String {
     trimmed.chars().take(max_chars).collect::<String>() + "…"
 }
 
-fn message_text(payload: &Value) -> Option<String> {
-    let content = payload.get("content")?.as_array()?;
-    let mut parts = Vec::new();
-    for item in content {
-        let item_type = item.get("type").and_then(|value| value.as_str())?;
-        if !matches!(item_type, "input_text" | "output_text") {
-            continue;
-        }
-        if let Some(text) = item.get("text").and_then(|value| value.as_str()) {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                parts.push(trimmed.to_string());
-            }
+fn try_merge_duplicate_message(
+    messages: &mut Vec<ImportedMessage>,
+    role: &str,
+    text: &str,
+    attachments: &mut Vec<ImportedAttachment>,
+) -> bool {
+    let Some(last) = messages.last_mut() else {
+        return false;
+    };
+    if last.role != role || !messages_share_content(&last.content, text) {
+        return false;
+    }
+    merge_attachments(&mut last.attachments, std::mem::take(attachments));
+    true
+}
+
+fn messages_share_content(left: &str, right: &str) -> bool {
+    normalize_message_text_for_merge(left) == normalize_message_text_for_merge(right)
+}
+
+fn normalize_message_text_for_merge(text: &str) -> String {
+    let stripped = strip_image_markup(text);
+    stripped.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn strip_image_markup(text: &str) -> String {
+    let mut result = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("<image") {
+        result.push_str(&rest[..start]);
+        if let Some(close) = rest[start..].find("</image>") {
+            rest = &rest[start + close + "</image>".len()..];
+        } else if let Some(close) = rest[start..].find('>') {
+            rest = &rest[start + close + 1..];
+        } else {
+            result.push_str(rest);
+            return result;
         }
     }
-    if parts.is_empty() {
-        return None;
-    }
-    Some(parts.join("\n\n"))
+    result.push_str(rest);
+    result
 }
 
 fn should_skip_message_text(role: &str, text: &str) -> bool {
@@ -433,7 +520,8 @@ mod tests {
         .expect("write assistant");
 
         let thread = sample_thread(&path);
-        let conversation = thread_to_conversation(&thread).expect("conversation");
+        let codex_home = std::env::temp_dir();
+        let conversation = thread_to_conversation(&thread, &codex_home).expect("conversation");
         assert_eq!(conversation.messages.len(), 2);
         assert_eq!(conversation.messages[0].role, "user");
         assert_eq!(conversation.messages[0].content, "hello");
@@ -477,7 +565,7 @@ mod tests {
         if threads.is_empty() {
             return;
         }
-        let conversation = thread_to_conversation(&threads[0]).expect("conversation");
+        let conversation = thread_to_conversation(&threads[0], &home).expect("conversation");
         assert!(!conversation.messages.is_empty());
     }
 }

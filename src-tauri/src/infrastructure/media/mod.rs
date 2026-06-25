@@ -27,6 +27,19 @@ impl MediaIndex {
         Self { by_key }
     }
 
+    /// Indexes images under `~/.codex/generated_images`, `attachments`, and extracted cache.
+    pub fn build_codex(codex_home: &Path) -> Self {
+        let mut by_key = HashMap::new();
+        for subdir in ["generated_images", "attachments", ".chatlens-extracted"] {
+            let root = codex_home.join(subdir);
+            if root.is_dir() {
+                index_codex_directory(&root, &root, &mut by_key, 0);
+            }
+        }
+        index_codex_generated_images(codex_home, &mut by_key);
+        Self { by_key }
+    }
+
     pub fn resolve(&self, pointer: &str) -> Option<PathBuf> {
         if let Some(path) = resolve_existing_file_pointer(pointer) {
             return Some(path);
@@ -82,6 +95,85 @@ fn index_directory(
         if path.is_dir() && depth < 3 {
             index_directory(export_dir, &path, index, depth + 1);
         }
+    }
+}
+
+fn index_codex_directory(
+    export_dir: &Path,
+    current: &Path,
+    index: &mut HashMap<String, PathBuf>,
+    depth: u8,
+) {
+    let entries = match fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                register_file_keys(name, &path, index);
+                register_codex_image_path(&path, index);
+            }
+            continue;
+        }
+
+        if path.is_dir() && depth < 6 {
+            index_codex_directory(export_dir, &path, index, depth + 1);
+        }
+    }
+}
+
+fn index_codex_generated_images(codex_home: &Path, index: &mut HashMap<String, PathBuf>) {
+    let root = codex_home.join("generated_images");
+    if !root.is_dir() {
+        return;
+    }
+
+    let entries = match fs::read_dir(&root) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let thread_dir = entry.path();
+        if !thread_dir.is_dir() {
+            continue;
+        }
+        let images = match fs::read_dir(&thread_dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for image_entry in images.flatten() {
+            let path = image_entry.path();
+            if path.is_file() {
+                register_codex_image_path(&path, index);
+            }
+        }
+    }
+}
+
+fn register_codex_image_path(path: &Path, index: &mut HashMap<String, PathBuf>) {
+    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        return;
+    };
+    if !is_image_filename(name) {
+        return;
+    }
+
+    let path_buf = path.to_path_buf();
+    let path_str = path.display().to_string();
+    insert_prefer_newer(index, path_str.clone(), path_buf.clone());
+    insert_prefer_newer(
+        index,
+        normalize_windows_path_key(&path_str),
+        path_buf.clone(),
+    );
+    insert_prefer_newer(index, name.to_string(), path_buf.clone());
+
+    if let Some(stem) = name.strip_suffix(".png").or_else(|| name.strip_suffix(".webp")) {
+        insert_prefer_newer(index, stem.to_string(), path_buf);
     }
 }
 

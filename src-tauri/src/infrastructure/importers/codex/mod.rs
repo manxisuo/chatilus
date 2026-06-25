@@ -1,3 +1,4 @@
+mod attachments;
 mod db;
 mod importer;
 mod parse;

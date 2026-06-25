@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::domain::ports::ImportedAttachment;
 use crate::infrastructure::importers::chatgpt::classify_image_source;
 use crate::infrastructure::media::MediaIndex;
@@ -11,24 +13,37 @@ pub fn resolve_imported_attachments(
     attachments
         .iter()
         .filter_map(|item| {
-            media_index.resolve(&item.pointer).map(|path| {
-                let path_str = path.display().to_string();
-                let source = if item.source == "unknown" {
-                    classify_image_source(None, role, Some(&path_str))
-                } else if path_str.contains("dalle-generations") {
-                    "generated".to_string()
-                } else {
-                    item.source.clone()
-                };
-                ImportedAttachment {
+            if let Some(path) = item.path.as_ref().filter(|path| Path::new(path).is_file()) {
+                let source = attachment_source(role, path, &item.source);
+                return Some(ImportedAttachment {
                     pointer: item.pointer.clone(),
                     source,
+                    prompt: item.prompt.clone(),
+                    path: Some(path.clone()),
+                });
+            }
+
+            media_index.resolve(&item.pointer).map(|path| {
+                let path_str = path.display().to_string();
+                ImportedAttachment {
+                    pointer: item.pointer.clone(),
+                    source: attachment_source(role, &path_str, &item.source),
                     prompt: item.prompt.clone(),
                     path: Some(path_str),
                 }
             })
         })
         .collect()
+}
+
+fn attachment_source(role: &str, path: &str, stored: &str) -> String {
+    if stored == "unknown" {
+        classify_image_source(None, role, Some(path))
+    } else if path.contains("dalle-generations") {
+        "generated".to_string()
+    } else {
+        stored.to_string()
+    }
 }
 
 pub fn imported_attachments_to_views(attachments: &[ImportedAttachment]) -> Vec<AttachmentView> {

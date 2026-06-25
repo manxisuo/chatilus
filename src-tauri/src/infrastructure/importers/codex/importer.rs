@@ -3,6 +3,8 @@ use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
     ImportPreview, Importer, NormalizedImportResult, platform_display_path,
 };
+use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
+use crate::infrastructure::media::MediaIndex;
 
 use super::db::{list_threads, open_codex_db};
 use super::parse::thread_to_conversation;
@@ -43,7 +45,8 @@ impl Importer for CodexImporter {
             support_status: "experimental".to_string(),
             support_summary: "本地 ~/.codex".to_string(),
             recognition_hint: "ChatLens 会读取 state_*.sqlite 中的线程索引，\
-                               并解析 sessions 目录下的 rollout JSONL 会话记录。"
+                               并解析 sessions 目录下的 rollout JSONL 会话记录；\
+                               同时索引 generated_images、附件与内嵌截图。"
                 .to_string(),
             methods: vec![
                 ImportMethodGuide {
@@ -106,12 +109,23 @@ impl Importer for CodexImporter {
         options: &ImportOptions,
     ) -> Result<NormalizedImportResult, String> {
         let (conn, db_path) = open_codex_db(&input.path)?;
+        let codex_home = resolve_codex_home(&input.path)
+            .or_else(|| db_path.parent().map(std::path::Path::to_path_buf))
+            .unwrap_or_else(|| db_path.clone());
+        let media_index = MediaIndex::build_codex(&codex_home);
         let threads = list_threads(&conn)?;
         let total = threads.len().max(1);
         let mut conversations = Vec::new();
 
         for (index, thread) in threads.iter().enumerate() {
-            if let Some(conversation) = thread_to_conversation(thread) {
+            if let Some(mut conversation) = thread_to_conversation(thread, &codex_home) {
+                for message in &mut conversation.messages {
+                    message.attachments = resolve_imported_attachments(
+                        &message.attachments,
+                        &message.role,
+                        &media_index,
+                    );
+                }
                 conversations.push(conversation);
             }
             if let Some(callback) = &options.on_progress {
@@ -135,12 +149,9 @@ impl Importer for CodexImporter {
 
         Ok(NormalizedImportResult {
             source: self.source(),
-            source_path: resolve_codex_home(&input.path)
-                .unwrap_or_else(|| db_path.parent().unwrap_or(&db_path).to_path_buf())
-                .display()
-                .to_string(),
+            source_path: codex_home.display().to_string(),
             files_processed: threads.len(),
-            media_files_indexed: 0,
+            media_files_indexed: media_index.len(),
             package: ImportPackage { conversations },
         })
     }
@@ -209,5 +220,44 @@ mod tests {
             .conversations
             .iter()
             .any(|conversation| conversation.messages.len() >= 1));
+
+        let with_images = result
+            .package
+            .conversations
+            .iter()
+            .flat_map(|conversation| &conversation.messages)
+            .flat_map(|message| &message.attachments)
+            .filter(|attachment| attachment.path.is_some())
+            .count();
+        if with_images > 0 {
+            assert!(result.media_files_indexed > 0);
+        }
+    }
+
+    #[test]
+    fn import_resolves_codex_image_attachments() {
+        let home = sample_codex_home();
+        if !home.is_dir() {
+            return;
+        }
+
+        let importer = CodexImporter::new();
+        let result = importer
+            .import(&ImportInput { path: home }, &ImportOptions::default())
+            .expect("import");
+
+        let with_path = result
+            .package
+            .conversations
+            .iter()
+            .flat_map(|conversation| &conversation.messages)
+            .flat_map(|message| &message.attachments)
+            .filter(|attachment| attachment.path.is_some())
+            .count();
+
+        assert!(
+            with_path > 0,
+            "expected codex import to resolve image attachments, got {with_path}"
+        );
     }
 }

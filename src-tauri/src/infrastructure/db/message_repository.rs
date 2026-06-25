@@ -18,34 +18,33 @@ use super::Database;
 
 impl MessageRepository for Database {
     fn list_by_conversation(&self, conversation_id: &str) -> Result<Vec<MessageView>, String> {
-        let source_path: Option<String> = self
+        let (conversation_source, source_path): (String, Option<String>) = self
             .conn
             .query_row(
-                "SELECT source_path FROM conversations WHERE id = ?1",
+                "SELECT COALESCE(source, 'chatgpt'), source_path FROM conversations WHERE id = ?1",
                 params![conversation_id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| format!("查询对话来源失败: {e}"))?;
+            .map_err(|e| format!("查询对话来源失败: {e}"))?
+            .unwrap_or_else(|| ("chatgpt".to_string(), None));
 
         let media_index = source_path.as_deref().and_then(|path| {
             let path = Path::new(path);
-            if path.is_dir() {
-                return Some(MediaIndex::build(path));
+            match conversation_source.as_str() {
+                "codex" if path.is_dir() => Some(MediaIndex::build_codex(path)),
+                "cursor" if path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name == "state.vscdb") =>
+                {
+                    path.parent()
+                        .and_then(|global_storage| global_storage.parent())
+                        .map(|user_dir| MediaIndex::build_cursor(user_dir))
+                }
+                _ if path.is_dir() => Some(MediaIndex::build(path)),
+                _ => None,
             }
-
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name == "state.vscdb")
-            {
-                return path
-                    .parent()
-                    .and_then(|global_storage| global_storage.parent())
-                    .map(|user_dir| MediaIndex::build_cursor(user_dir));
-            }
-
-            None
         });
 
         let mut stmt = self

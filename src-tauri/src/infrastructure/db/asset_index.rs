@@ -87,6 +87,7 @@ pub(crate) fn reindex_conversation_assets(
             attachments.as_deref(),
             raw_json.as_deref(),
             source_path,
+            conversation_source,
             &mut media_index,
         );
 
@@ -143,6 +144,7 @@ fn resolve_message_attachments(
     attachments: Option<&str>,
     raw_json: Option<&str>,
     source_path: &str,
+    conversation_source: &str,
     media_index: &mut Option<MediaIndex>,
 ) -> Vec<AttachmentView> {
     if let Some(attachments) = attachments.filter(|value| !value.is_empty() && *value != "[]") {
@@ -156,12 +158,30 @@ fn resolve_message_attachments(
         return Vec::new();
     };
 
-    let index = media_index.get_or_insert_with(|| MediaIndex::build(Path::new(source_path)));
+    let index = media_index.get_or_insert_with(|| build_media_index(conversation_source, source_path));
     let pointers = extract_attachment_infos_from_message_json(raw_json);
     imported_attachments_to_views(&resolve_imported_attachments(&pointers, role, index))
         .into_iter()
         .filter(|item| !item.path.trim().is_empty())
         .collect()
+}
+
+fn build_media_index(conversation_source: &str, source_path: &str) -> MediaIndex {
+    let path = Path::new(source_path);
+    match conversation_source {
+        "codex" if path.is_dir() => MediaIndex::build_codex(path),
+        "cursor" if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "state.vscdb") =>
+        {
+            path.parent()
+                .and_then(|global_storage| global_storage.parent())
+                .map(|user_dir| MediaIndex::build_cursor(user_dir))
+                .unwrap_or_else(|| MediaIndex::build(path))
+        }
+        _ => MediaIndex::build(path),
+    }
 }
 
 fn insert_asset_row(
