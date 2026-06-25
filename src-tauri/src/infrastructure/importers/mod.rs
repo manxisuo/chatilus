@@ -4,6 +4,7 @@ pub mod copilot;
 pub mod cursor;
 pub mod deepseek;
 pub mod gemini;
+pub mod grok;
 mod import_guide_enrich;
 mod registry;
 
@@ -13,4 +14,5 @@ pub use copilot::CopilotImporter;
 pub use cursor::CursorImporter;
 pub use deepseek::DeepSeekImporter;
 pub use gemini::GeminiImporter;
+pub use grok::GrokImporter;
 pub use registry::{default_importer_registry, ImporterRegistry};

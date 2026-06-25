@@ -1,4 +1,4 @@
-﻿use chatlens_lib::infrastructure::importers::{CodexImporter, default_importer_registry};
+use chatlens_lib::infrastructure::importers::{CodexImporter, default_importer_registry};
 use chatlens_lib::domain::ports::{Importer, ImportInput, ImportOptions};
 use chatlens_lib::infrastructure::importers::codex::resolve::default_codex_home;
 

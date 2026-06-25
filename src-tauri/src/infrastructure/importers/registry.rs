@@ -125,7 +125,7 @@ impl ImporterRegistry {
     pub fn list_import_guides(&self) -> Vec<ImportGuide> {
         use super::import_guide_enrich::enrich_import_guide;
 
-        const ORDER: &[&str] = &["chatgpt", "deepseek", "copilot", "cursor", "codex", "gemini"];
+        const ORDER: &[&str] = &["chatgpt", "deepseek", "copilot", "grok", "cursor", "codex", "gemini"];
         ORDER
             .iter()
             .filter_map(|id| {
@@ -148,12 +148,16 @@ impl ImporterRegistry {
 }
 
 pub fn default_importer_registry() -> ImporterRegistry {
-    use super::{ChatGptImporter, CodexImporter, CopilotImporter, CursorImporter, DeepSeekImporter, GeminiImporter};
+    use super::{
+        ChatGptImporter, CodexImporter, CopilotImporter, CursorImporter, DeepSeekImporter,
+        GeminiImporter, GrokImporter,
+    };
 
     ImporterRegistry::new(vec![
         Box::new(CopilotImporter::new()),
         Box::new(CodexImporter::new()),
         Box::new(GeminiImporter::new()),
+        Box::new(GrokImporter::new()),
         Box::new(DeepSeekImporter::new()),
         Box::new(ChatGptImporter::new()),
         Box::new(CursorImporter::new()),
@@ -175,7 +179,7 @@ mod tests {
         let guides = registry.list_import_guides();
         assert_eq!(
             guides.iter().map(|guide| guide.importer_id.as_str()).collect::<Vec<_>>(),
-            vec!["chatgpt", "deepseek", "copilot", "cursor", "codex", "gemini"]
+            vec!["chatgpt", "deepseek", "copilot", "grok", "cursor", "codex", "gemini"]
         );
         assert!(guides.iter().all(|guide| !guide.methods.is_empty()));
         assert!(guides.iter().all(|guide| !guide.support_summary.is_empty()));

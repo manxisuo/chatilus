@@ -10,6 +10,7 @@ import {
   sourceLabel as conversationSourceLabel,
   sourceTagType as conversationSourceTagType,
 } from "../utils/dataSource";
+import { galleryItemCacheKey } from "../utils/attachment";
 
 const props = defineProps<{
   totalCount: number | null;
@@ -406,11 +407,15 @@ onMounted(() => {
         <div class="grid">
           <article
             v-for="{ item, index } in group.items"
-            :key="`${item.message_id}:${item.path}`"
+            :key="galleryItemCacheKey(item)"
             class="card"
             :class="{ 'card-upload': item.source === 'upload' }"
           >
-            <button class="thumb-btn" type="button" @click="openLightbox(index)">
+            <button
+              class="thumb-btn"
+              type="button"
+              @click="openLightbox(index)"
+            >
               <img
                 v-if="imageSrcCache[item.path] !== ''"
                 :src="imageSrc(item.path)"
@@ -419,9 +424,6 @@ onMounted(() => {
                 @error="onImageError(item.path)"
               />
               <div v-else class="thumb-missing">无法加载</div>
-              <span class="source-badge" :class="`source-${item.source}`">
-                {{ imageTypeLabel(item.source) }}
-              </span>
             </button>
             <div class="card-meta">
               <button
@@ -603,31 +605,6 @@ onMounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.source-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-}
-
-.source-generated {
-  background: rgba(103, 194, 58, 0.85);
-}
-
-.source-upload {
-  background: rgba(64, 158, 255, 0.85);
-}
-
-.source-unknown {
-  background: rgba(230, 162, 60, 0.85);
 }
 
 .thumb-missing {

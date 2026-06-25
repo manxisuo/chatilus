@@ -21,7 +21,7 @@ pub fn parse_composite_conversation_id(id: &str) -> Option<(DataSource, String)>
 fn is_known_source_prefix(prefix: &str) -> bool {
     matches!(
         prefix,
-        "chatgpt" | "cursor" | "codex" | "claude" | "gemini" | "deepseek" | "copilot"
+        "chatgpt" | "cursor" | "codex" | "claude" | "gemini" | "deepseek" | "copilot" | "grok"
     )
 }
 

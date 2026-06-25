@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::domain::models::ImportProgress;
+use crate::domain::ports::Importer;
 use crate::infrastructure::importers::{default_importer_registry, ImporterRegistry};
 
 pub struct ResolvedImportPath {
@@ -54,7 +55,7 @@ pub fn resolve_import_path_for_importer(
 
     if input_path.is_file() {
         if is_zip_file(input_path) {
-            if importer_id != "chatgpt" && importer_id != "deepseek" {
+            if !importer_supports_zip(importer) {
                 return Err(format!(
                     "{} 不支持 ZIP 文件，请选择目录或其它文件类型",
                     importer.display_name()
@@ -157,6 +158,16 @@ pub fn resolve_import_path_with_registry(
         "路径不存在或不是支持的导入格式（目录 / zip / Cursor state.vscdb / Codex state.sqlite）: {}",
         input_path.display()
     ))
+}
+
+fn importer_supports_zip(importer: &dyn Importer) -> bool {
+    importer.import_guide().methods.iter().any(|method| {
+        method.kind == "file"
+            && method
+                .extensions
+                .iter()
+                .any(|ext| ext.eq_ignore_ascii_case("zip"))
+    })
 }
 
 fn export_label_from_path(path: &Path) -> String {
@@ -355,6 +366,25 @@ mod tests {
         assert!(find_conversation_files(&resolved.export_dir).is_ok());
         assert_eq!(resolved.export_label, "sample-export");
         assert_eq!(resolved.importer_id, "chatgpt");
+    }
+
+    #[test]
+    fn resolves_grok_zip_export_if_present() {
+        use crate::infrastructure::importers::grok::resolve_grok_export_root;
+
+        let zip_path = std::path::PathBuf::from(
+            r"D:\Personal\Grok\720f08bb-5c35-4197-af4a-d5e9b2b31efb.zip",
+        );
+        if !zip_path.is_file() {
+            return;
+        }
+
+        let registry = default_importer_registry();
+        let resolved = resolve_import_path_for_importer(&zip_path, "grok", &registry, None)
+            .expect("resolve grok zip");
+        assert_eq!(resolved.importer_id, "grok");
+        let export_root = resolve_grok_export_root(&resolved.export_dir).expect("grok root");
+        assert!(export_root.join("prod-grok-backend.json").is_file());
     }
 
     #[test]

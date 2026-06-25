@@ -10,6 +10,7 @@ pub enum DataSource {
     Gemini,
     DeepSeek,
     Copilot,
+    Grok,
 }
 
 impl DataSource {
@@ -22,6 +23,7 @@ impl DataSource {
             Self::Gemini => "gemini",
             Self::DeepSeek => "deepseek",
             Self::Copilot => "copilot",
+            Self::Grok => "grok",
         }
     }
 
@@ -33,6 +35,7 @@ impl DataSource {
             "gemini" => Self::Gemini,
             "deepseek" => Self::DeepSeek,
             "copilot" => Self::Copilot,
+            "grok" => Self::Grok,
             _ => Self::ChatGpt,
         }
     }

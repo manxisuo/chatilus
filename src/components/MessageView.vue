@@ -3,6 +3,7 @@ import { computed, nextTick, onUnmounted, reactive, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl } from "../api";
 import { renderMarkdown } from "../utils/markdown";
+import { attachmentCacheKey } from "../utils/attachment";
 import ImageLightbox from "./ImageLightbox.vue";
 import type { MessageView as MessageItem } from "../types";
 
@@ -199,6 +200,8 @@ function assistantLabel(source?: string | null) {
       return "DeepSeek";
     case "copilot":
       return "Copilot";
+    case "grok":
+      return "Grok";
     case "chatgpt":
       return "ChatGPT";
     default:
@@ -350,7 +353,7 @@ function shouldEagerLoadImages(messageId: string) {
           <div v-if="message.attachments.length" class="attachments">
             <figure
               v-for="attachment in message.attachments"
-              :key="attachment.path"
+              :key="attachmentCacheKey(attachment)"
               class="attachment"
             >
               <img
