@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import InspectorSection from "./InspectorSection.vue";
 import type { ConversationSummary, MessageView } from "../types";
-import { sourceLabel, sourceTagType } from "../utils/dataSource";
+import { sourceLabel, sourceAccentColor } from "../utils/dataSource";
 import { formatSourceContextLine, sourceContextIdHint } from "../utils/sourceContext";
 import { type AppLocale, formatDateTime } from "../utils/locale";
 
@@ -44,125 +45,122 @@ const timeSpan = computed(() => {
 
 <template>
   <aside class="conv-info" :aria-label="t('conversation.infoAria')">
-    <h3 class="title">{{ t("conversation.info") }}</h3>
-    <dl class="info-list">
-      <div class="info-row">
-        <dt>{{ t("conversation.source") }}</dt>
-        <dd>
-          <el-tag
-            size="small"
-            :type="sourceTagType(conversation.source ?? 'chatgpt')"
-            effect="plain"
-          >
+    <h3 class="panel-title">{{ t("conversation.info") }}</h3>
+
+    <InspectorSection :title="t('conversation.sectionBasic')">
+      <dl class="cl-inspector-props">
+        <div class="cl-inspector-row">
+          <dt>{{ t("conversation.source") }}</dt>
+          <dd class="source-value">
+            <span
+              class="source-dot"
+              :style="{ background: sourceAccentColor(conversation.source) }"
+            />
             {{ sourceLabel(conversation.source ?? "chatgpt") }}
-          </el-tag>
-        </dd>
-      </div>
-      <div v-if="conversation.model" class="info-row">
-        <dt>{{ t("conversation.model") }}</dt>
-        <dd>{{ conversation.model }}</dd>
-      </div>
-      <div class="info-row">
-        <dt>{{ t("conversation.messageCount") }}</dt>
-        <dd>{{ t("common.messages", { count: conversation.message_count }) }}</dd>
-      </div>
-      <div class="info-row">
-        <dt>{{ t("conversation.imageCount") }}</dt>
-        <dd>{{ t("common.images", { count: imageCount }) }}</dd>
-      </div>
-      <div v-if="codeMessageCount > 0" class="info-row">
-        <dt>{{ t("conversation.withCode") }}</dt>
-        <dd>{{ t("conversation.codeMessages", { count: codeMessageCount }) }}</dd>
-      </div>
-      <div class="info-row">
-        <dt>{{ t("conversation.started") }}</dt>
-        <dd>{{ formatTime(timeSpan.start) }}</dd>
-      </div>
-      <div class="info-row">
-        <dt>{{ t("conversation.updated") }}</dt>
-        <dd>{{ formatTime(timeSpan.end) }}</dd>
-      </div>
-      <div v-if="conversation.source_contexts?.length" class="info-row">
-        <dt>{{ t("conversation.sourceContext") }}</dt>
-        <dd class="context-list">
-          <span
-            v-for="context in conversation.source_contexts"
-            :key="context.id"
-            class="context-line"
-          >
-            <span>{{ formatSourceContextLine(context) }}</span>
-            <span v-if="sourceContextIdHint(context)" class="context-id">
-              {{ sourceContextIdHint(context) }}
+          </dd>
+        </div>
+        <div v-if="conversation.model" class="cl-inspector-row">
+          <dt>{{ t("conversation.model") }}</dt>
+          <dd>{{ conversation.model }}</dd>
+        </div>
+        <div class="cl-inspector-row">
+          <dt>{{ t("conversation.messageCount") }}</dt>
+          <dd>{{ t("common.messages", { count: conversation.message_count }) }}</dd>
+        </div>
+        <div class="cl-inspector-row">
+          <dt>{{ t("conversation.imageCount") }}</dt>
+          <dd>{{ t("common.images", { count: imageCount }) }}</dd>
+        </div>
+        <div v-if="codeMessageCount > 0" class="cl-inspector-row">
+          <dt>{{ t("conversation.withCode") }}</dt>
+          <dd>{{ t("conversation.codeMessages", { count: codeMessageCount }) }}</dd>
+        </div>
+        <div class="cl-inspector-row">
+          <dt>{{ t("conversation.started") }}</dt>
+          <dd>{{ formatTime(timeSpan.start) }}</dd>
+        </div>
+        <div class="cl-inspector-row">
+          <dt>{{ t("conversation.updated") }}</dt>
+          <dd>{{ formatTime(timeSpan.end) }}</dd>
+        </div>
+      </dl>
+    </InspectorSection>
+
+    <InspectorSection
+      v-if="conversation.source_contexts?.length || conversation.tags.length"
+      :title="t('conversation.sectionContext')"
+    >
+      <dl class="cl-inspector-props">
+        <div v-if="conversation.source_contexts?.length" class="cl-inspector-row">
+          <dt>{{ t("conversation.sourceContext") }}</dt>
+          <dd class="context-list">
+            <span
+              v-for="context in conversation.source_contexts"
+              :key="context.id"
+              class="context-line"
+            >
+              <span>{{ formatSourceContextLine(context) }}</span>
+              <span v-if="sourceContextIdHint(context)" class="context-id">
+                {{ sourceContextIdHint(context) }}
+              </span>
             </span>
-          </span>
-        </dd>
-      </div>
-      <div v-if="conversation.tags.length > 0" class="info-row">
-        <dt>{{ t("conversation.tags") }}</dt>
-        <dd class="tag-list">
-          <el-tag
-            v-for="tag in conversation.tags"
-            :key="tag"
-            size="small"
-            type="info"
-            effect="plain"
-          >
-            {{ tag }}
-          </el-tag>
-        </dd>
-      </div>
-    </dl>
+          </dd>
+        </div>
+        <div v-if="conversation.tags.length > 0" class="cl-inspector-row">
+          <dt>{{ t("conversation.tags") }}</dt>
+          <dd class="tag-list">
+            <span v-for="tag in conversation.tags" :key="tag" class="tag-pill">{{ tag }}</span>
+          </dd>
+        </div>
+      </dl>
+    </InspectorSection>
   </aside>
 </template>
 
 <style scoped>
 .conv-info {
-  width: 240px;
+  width: var(--cl-insight-width);
   flex-shrink: 0;
-  border-left: 1px solid var(--cl-border);
-  background: var(--cl-bg);
+  border-left: 1px solid var(--cl-border-subtle);
+  background: var(--cl-panel);
   padding: 16px;
   overflow: auto;
 }
 
-.title {
+.panel-title {
   margin: 0 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--cl-text-muted);
-}
-
-.info-list {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.info-row {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 8px;
-  align-items: start;
   font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cl-text-faint);
 }
 
-.info-row dt {
-  margin: 0;
-  color: var(--cl-text-muted);
-  font-weight: 500;
+.source-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.info-row dd {
-  margin: 0;
-  color: var(--cl-text);
-  word-break: break-word;
+.source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .tag-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.tag-pill {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--cl-selected);
+  color: var(--cl-text-muted);
 }
 
 .context-list {
@@ -181,7 +179,7 @@ const timeSpan = computed(() => {
 }
 
 .context-id {
-  font-family: var(--el-font-family-monospace, ui-monospace, monospace);
+  font-family: ui-monospace, monospace;
   font-size: 10px;
   word-break: break-all;
   opacity: 0.85;

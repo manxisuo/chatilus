@@ -65,6 +65,8 @@ export default {
     allSources: "All sources",
     allImages: "All images",
     sources: "Sources",
+    filters: "Filters",
+    conversations: "Chats",
     filterTitle: "Filter by title…",
     starredConversations: "Starred chats",
     starredMessages: "Starred messages",
@@ -138,6 +140,8 @@ export default {
       loadedConversations: "{loaded} chats loaded",
     },
     imageLoadFailed: "Image failed to load: {key}",
+    sectionBasic: "Details",
+    sectionContext: "Context",
   },
   tags: {
     manage: "Manage tags",
@@ -196,6 +200,8 @@ export default {
     inspector: {
       title: "Image details",
       empty: "Select an image to view details",
+      sectionBasic: "Details",
+      sectionActions: "Actions",
       source: "Source",
       type: "Type",
       time: "Time",

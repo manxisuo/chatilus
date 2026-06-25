@@ -76,6 +76,7 @@ const emit = defineEmits<{
 .source-nav-row.active {
   background: var(--cl-selected-strong);
   font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--cl-accent);
 }
 
 .source-dot {

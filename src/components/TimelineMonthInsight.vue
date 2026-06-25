@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import type { SourceCount } from "../types";
 import type { TopicBubble, TopicFilter } from "../utils/timelineTopics";
 import { isSameTopicFilter } from "../utils/timelineTopics";
-import { sourceLabel, sourceTagType } from "../utils/dataSource";
+import { sourceLabel, sourceAccentColor } from "../utils/dataSource";
 
 const props = defineProps<{
   monthLabel: string | null;
@@ -79,9 +79,13 @@ const sourceRows = computed(() => {
         <ul class="source-bars">
           <li v-for="item in sourceRows" :key="item.source" class="source-bar-item">
             <div class="source-bar-head">
-              <el-tag size="small" :type="sourceTagType(item.source)" effect="plain">
+              <span class="source-label">
+                <span
+                  class="source-dot"
+                  :style="{ background: sourceAccentColor(item.source) }"
+                />
                 {{ sourceLabel(item.source) }}
-              </el-tag>
+              </span>
               <span class="source-bar-count">{{ item.count }} · {{ item.percent }}%</span>
             </div>
             <div class="source-bar-track">
@@ -120,8 +124,8 @@ const sourceRows = computed(() => {
 .month-insight {
   width: var(--cl-insight-width);
   flex-shrink: 0;
-  border-left: 1px solid var(--cl-border);
-  background: var(--cl-bg);
+  border-left: 1px solid var(--cl-border-subtle);
+  background: var(--cl-panel);
   padding: 16px;
   overflow: auto;
 }
@@ -176,12 +180,13 @@ const sourceRows = computed(() => {
   background: transparent;
   padding: 0;
   font-size: 12px;
-  color: var(--el-color-primary);
+  color: var(--cl-text-muted);
   cursor: pointer;
 }
 
 .insight-link:hover {
   text-decoration: underline;
+  color: var(--cl-text);
 }
 
 .insight-section {
@@ -190,9 +195,11 @@ const sourceRows = computed(() => {
 
 .section-label {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--cl-text-muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--cl-text-faint);
 }
 
 .source-bars {
@@ -218,17 +225,33 @@ const sourceRows = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
+.source-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cl-text);
+}
+
+.source-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .source-bar-track {
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
-  background: var(--cl-border);
+  background: var(--cl-border-subtle);
   overflow: hidden;
 }
 
 .source-bar-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--el-color-primary);
+  background: var(--cl-accent);
+  opacity: 0.55;
   min-width: 2px;
 }
 
@@ -298,7 +321,7 @@ const sourceRows = computed(() => {
   color: var(--el-color-primary);
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1100px) {
   .month-insight {
     display: none;
   }

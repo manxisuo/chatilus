@@ -611,26 +611,19 @@ onUnmounted(() => {
                   :style="{ background: sourceAccentColor(conversation.source) }"
                   :title="sourceLabel(conversation.source)"
                 />
-                <div class="item-main">
-                  <div class="item-row">
-                    <span class="item-source">{{ sourceLabel(conversation.source) }}</span>
-                    <span class="item-title">{{ conversation.title }}</span>
-                    <span v-if="activityTime(conversation)" class="item-time">
-                      {{ formatClock(activityTime(conversation)) }}
-                    </span>
-                  </div>
-                  <div class="item-sub">
-                    <span>{{ t("common.messages", { count: conversation.message_count }) }}</span>
-                    <span v-if="conversation.model">{{ conversation.model }}</span>
-                    <span
-                      v-if="formatSourceContextSummary(conversation.source_contexts)"
-                      class="item-context"
-                    >
-                      {{ formatSourceContextSummary(conversation.source_contexts) }}
-                    </span>
-                    <span v-if="conversation.is_starred" class="item-star">{{ t("conversation.starredBadge") }}</span>
-                  </div>
-                </div>
+                <span class="col-source">{{ sourceLabel(conversation.source) }}</span>
+                <span class="col-title">{{ conversation.title }}</span>
+                <span class="col-meta">
+                  {{ t("common.messages", { count: conversation.message_count }) }}
+                  <template v-if="conversation.model"> · {{ conversation.model }}</template>
+                  <template v-if="formatSourceContextSummary(conversation.source_contexts)">
+                    · {{ formatSourceContextSummary(conversation.source_contexts) }}
+                  </template>
+                  <span v-if="conversation.is_starred" class="item-star"> · ★</span>
+                </span>
+                <span v-if="activityTime(conversation)" class="col-time">
+                  {{ formatClock(activityTime(conversation)) }}
+                </span>
                 <div
                   v-if="conversation.latest_message_id || conversation.has_images"
                   class="item-actions"
@@ -749,6 +742,7 @@ onUnmounted(() => {
 .month-nav-item.active {
   background: var(--cl-selected-strong);
   font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--cl-accent);
 }
 
 .month-nav-label {
@@ -865,10 +859,12 @@ onUnmounted(() => {
   border: none;
   border-bottom: 1px solid var(--cl-border-subtle);
   background: transparent;
-  padding: 8px 4px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  padding: 0 8px;
+  display: grid;
+  grid-template-columns: 7px 72px minmax(0, 1fr) minmax(100px, 28%) 52px;
+  gap: 8px 12px;
+  align-items: center;
+  min-height: 48px;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -887,57 +883,41 @@ onUnmounted(() => {
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-top: 7px;
+  justify-self: center;
 }
 
-.item-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.item-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: baseline;
-}
-
-.item-source {
+.col-source {
   font-size: 11px;
   color: var(--cl-text-faint);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.item-title {
+.col-title {
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--cl-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.item-time {
+.col-meta {
+  font-size: 11px;
+  color: var(--cl-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-time {
   font-size: 12px;
   color: var(--cl-text-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.item-sub {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--cl-text-muted);
-}
-
-.item-context {
-  color: var(--cl-text-faint);
+  text-align: right;
 }
 
 .item-star {
@@ -945,18 +925,19 @@ onUnmounted(() => {
 }
 
 .item-actions {
+  grid-column: 3 / -1;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
   opacity: 0;
   transition: opacity 0.12s ease;
+  padding-bottom: 4px;
 }
 
 .item-action {
   border: none;
   background: transparent;
-  padding: 2px 6px;
+  padding: 0;
   font-size: 11px;
   color: var(--cl-text-muted);
   cursor: pointer;
@@ -965,6 +946,7 @@ onUnmounted(() => {
 
 .item-action:hover {
   color: var(--cl-text);
+  text-decoration: underline;
 }
 
 .timeline-footer {

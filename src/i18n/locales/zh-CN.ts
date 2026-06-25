@@ -65,6 +65,8 @@ export default {
     allSources: "全部来源",
     allImages: "全部图片",
     sources: "来源",
+    filters: "筛选",
+    conversations: "对话",
     filterTitle: "筛选标题…",
     starredConversations: "收藏对话",
     starredMessages: "收藏消息",
@@ -138,6 +140,8 @@ export default {
       loadedConversations: "共 {loaded} 条对话",
     },
     imageLoadFailed: "图片无法加载：{key}",
+    sectionBasic: "基本信息",
+    sectionContext: "上下文",
   },
   tags: {
     manage: "管理标签",
@@ -196,6 +200,8 @@ export default {
     inspector: {
       title: "图片详情",
       empty: "选择一张图片查看详情",
+      sectionBasic: "基本信息",
+      sectionActions: "操作",
       source: "来源",
       type: "类型",
       time: "时间",

@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages, countImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
 import SourceNav from "./SourceNav.vue";
+import InspectorSection from "./InspectorSection.vue";
 import type { ImageGalleryItem, SourceCount } from "../types";
 import {
   KNOWN_DATA_SOURCES,
@@ -465,38 +466,42 @@ onMounted(() => {
             @error="onImageError(selectedImage.path)"
           />
         </div>
-        <dl class="inspector-list">
-          <div class="inspector-row">
-            <dt>{{ t("gallery.inspector.conversation") }}</dt>
-            <dd>{{ selectedImage.conversation_title }}</dd>
+        <InspectorSection :title="t('gallery.inspector.sectionBasic')">
+          <dl class="cl-inspector-props">
+            <div class="cl-inspector-row">
+              <dt>{{ t("gallery.inspector.conversation") }}</dt>
+              <dd>{{ selectedImage.conversation_title }}</dd>
+            </div>
+            <div class="cl-inspector-row">
+              <dt>{{ t("gallery.inspector.source") }}</dt>
+              <dd class="source-value">
+                <span
+                  class="source-dot"
+                  :style="{ background: sourceAccentColor(conversationSourceFromId(selectedImage.conversation_id)) }"
+                />
+                {{ conversationSourceLabel(conversationSourceFromId(selectedImage.conversation_id)) }}
+              </dd>
+            </div>
+            <div class="cl-inspector-row">
+              <dt>{{ t("gallery.inspector.type") }}</dt>
+              <dd>{{ imageTypeLabel(selectedImage.source) }}</dd>
+            </div>
+            <div class="cl-inspector-row">
+              <dt>{{ t("gallery.inspector.time") }}</dt>
+              <dd>{{ formatTime(selectedImage.create_time) }}</dd>
+            </div>
+          </dl>
+        </InspectorSection>
+        <InspectorSection :title="t('gallery.inspector.sectionActions')">
+          <div class="cl-inspector-actions">
+            <button type="button" class="cl-inspector-action" @click="openLightbox(selectedIndex!)">
+              {{ t("gallery.viewFullSize") }}
+            </button>
+            <button type="button" class="cl-inspector-action" @click="openConversation(selectedImage.conversation_id)">
+              {{ t("gallery.openConversation") }}
+            </button>
           </div>
-          <div class="inspector-row">
-            <dt>{{ t("gallery.inspector.source") }}</dt>
-            <dd>
-              <span
-                class="source-dot"
-                :style="{ background: sourceAccentColor(conversationSourceFromId(selectedImage.conversation_id)) }"
-              />
-              {{ conversationSourceLabel(conversationSourceFromId(selectedImage.conversation_id)) }}
-            </dd>
-          </div>
-          <div class="inspector-row">
-            <dt>{{ t("gallery.inspector.type") }}</dt>
-            <dd>{{ imageTypeLabel(selectedImage.source) }}</dd>
-          </div>
-          <div class="inspector-row">
-            <dt>{{ t("gallery.inspector.time") }}</dt>
-            <dd>{{ formatTime(selectedImage.create_time) }}</dd>
-          </div>
-        </dl>
-        <div class="inspector-actions">
-          <el-button size="small" @click="openLightbox(selectedIndex!)">
-            {{ t("gallery.viewFullSize") }}
-          </el-button>
-          <el-button size="small" @click="openConversation(selectedImage.conversation_id)">
-            {{ t("gallery.openConversation") }}
-          </el-button>
-        </div>
+        </InspectorSection>
       </template>
       <p v-else class="inspector-empty">{{ t("gallery.inspector.empty") }}</p>
     </aside>
@@ -555,8 +560,10 @@ onMounted(() => {
 .gallery-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--cl-panel-elevated);
 }
 
@@ -599,41 +606,10 @@ onMounted(() => {
   height: auto;
 }
 
-.inspector-list {
-  margin: 0;
-}
-
-.inspector-row {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--cl-border-subtle);
-  font-size: 12px;
-}
-
-.inspector-row dt {
-  margin: 0;
-  color: var(--cl-text-faint);
-}
-
-.inspector-row dd {
-  margin: 0;
-  color: var(--cl-text);
-  word-break: break-word;
-}
-
-.inspector-row dd .source-dot {
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 4px;
-}
-
-.inspector-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
+.source-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .inspector-empty {
@@ -651,27 +627,32 @@ onMounted(() => {
 
 .grid-scroll {
   flex: 1;
-  overflow: auto;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .time-group {
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .group-title {
   margin: 0;
-  padding: 12px 20px 4px;
+  padding: 10px 20px 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--cl-text-faint);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--cl-panel-elevated);
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
-  padding: 8px 20px 16px;
+  padding: 4px 20px 16px;
 }
 
 .card {
@@ -696,12 +677,14 @@ onMounted(() => {
   position: relative;
   border: none;
   padding: 0;
-  background: transparent;
+  background: var(--cl-bg);
   cursor: zoom-in;
   border-radius: 6px;
   overflow: hidden;
-  aspect-ratio: 1;
+  height: var(--cl-thumb-height);
+  width: 100%;
   border: 1px solid var(--cl-border-subtle);
+  flex-shrink: 0;
 }
 
 .thumb-btn img {
@@ -728,6 +711,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  min-height: 34px;
 }
 
 .card-title {
@@ -735,10 +719,9 @@ onMounted(() => {
   font-weight: 500;
   color: var(--cl-text);
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-sub {

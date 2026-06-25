@@ -38,21 +38,21 @@ export function sourceLabel(source?: string | null): string {
 export function sourceAccentColor(source?: string | null): string {
   switch (source?.toLowerCase()) {
     case "chatgpt":
-      return "#10a37f";
+      return "#3d9a80";
     case "cursor":
-      return "#6b8afd";
+      return "#6b7fd4";
     case "codex":
-      return "#c9a227";
+      return "#b8942e";
     case "claude":
-      return "#d97757";
+      return "#c4684f";
     case "gemini":
-      return "#4285f4";
+      return "#5a8fd4";
     case "deepseek":
-      return "#4f6bed";
+      return "#5a6fc9";
     case "copilot":
-      return "#7c8cff";
+      return "#7a84c4";
     case "grok":
-      return "#a3a3a3";
+      return "#8a8a8a";
     default:
       return "#9ca3af";
   }

@@ -1,27 +1,29 @@
 :root,
 html[data-theme="light"] {
-  --cl-bg: #eceef1;
-  --cl-panel: #f7f8fa;
+  --cl-bg: #f5f6f8;
+  --cl-panel: #f0f2f5;
   --cl-panel-elevated: #ffffff;
   --cl-border: #d8dce3;
-  --cl-border-subtle: #e8ebf0;
-  --cl-text: #1a1d23;
+  --cl-border-subtle: #dde2ea;
+  --cl-text: #1f2937;
   --cl-text-muted: #6b7280;
   --cl-text-faint: #9ca3af;
   --cl-message-bg: #ffffff;
+  --cl-message-user-bg: #eef4fc;
   --cl-code-bg: #f6f8fa;
   --cl-code-text: #24292f;
-  --cl-selected: rgba(26, 29, 35, 0.06);
-  --cl-selected-strong: rgba(26, 29, 35, 0.1);
-  --cl-hover: rgba(26, 29, 35, 0.04);
-  --cl-accent: #4b5563;
-  --cl-accent-soft: rgba(75, 85, 99, 0.12);
+  --cl-selected: rgba(31, 41, 55, 0.05);
+  --cl-selected-strong: #e8edf5;
+  --cl-hover: rgba(31, 41, 55, 0.04);
+  --cl-accent: #5b6b82;
+  --cl-accent-soft: rgba(91, 107, 130, 0.12);
   --cl-sidebar-width: 260px;
   --cl-content-max-width: 860px;
   --cl-insight-width: 260px;
   --cl-toolbar-height: 48px;
+  --cl-thumb-height: 160px;
 
-  --el-color-primary: #4b5563;
+  --el-color-primary: #5b6b82;
   --el-color-primary-light-3: #6b7280;
   --el-color-primary-light-5: #9ca3af;
   --el-color-primary-light-7: #d1d5db;
@@ -41,16 +43,17 @@ html[data-theme="dark"] {
   --cl-text: #e8eaed;
   --cl-text-muted: #9aa0a8;
   --cl-text-faint: #6b7280;
-  --cl-message-bg: #14161a;
+  --cl-message-bg: transparent;
+  --cl-message-user-bg: rgba(91, 107, 130, 0.14);
   --cl-code-bg: #1e1e1e;
   --cl-code-text: #dcdcdc;
-  --cl-selected: rgba(255, 255, 255, 0.06);
-  --cl-selected-strong: rgba(255, 255, 255, 0.1);
+  --cl-selected: rgba(255, 255, 255, 0.05);
+  --cl-selected-strong: rgba(255, 255, 255, 0.08);
   --cl-hover: rgba(255, 255, 255, 0.04);
-  --cl-accent: #b8bcc4;
-  --cl-accent-soft: rgba(184, 188, 196, 0.12);
+  --cl-accent: #9aa3b2;
+  --cl-accent-soft: rgba(154, 163, 178, 0.14);
 
-  --el-color-primary: #b8bcc4;
+  --el-color-primary: #9aa3b2;
   --el-color-primary-light-3: #9aa0a8;
   --el-color-primary-light-5: #6b7280;
   --el-color-primary-light-7: #4b5563;
@@ -67,8 +70,54 @@ body,
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--cl-bg);
   color: var(--cl-text);
+  overflow: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Shared inspector property list */
+.cl-inspector-props {
+  margin: 0;
+}
+
+.cl-inspector-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  font-size: 12px;
+}
+
+.cl-inspector-row dt {
+  margin: 0;
+  color: var(--cl-text-faint);
+}
+
+.cl-inspector-row dd {
+  margin: 0;
+  color: var(--cl-text);
+  word-break: break-word;
+}
+
+.cl-inspector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cl-inspector-action {
+  border: none;
+  background: transparent;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cl-inspector-action:hover {
+  color: var(--cl-text);
 }

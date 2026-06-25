@@ -10,6 +10,7 @@ import ConversationList from "./components/ConversationList.vue";
 import ConversationInfo from "./components/ConversationInfo.vue";
 import ImageGallery from "./components/ImageGallery.vue";
 import SourceNav from "./components/SourceNav.vue";
+import WindowControls from "./components/WindowControls.vue";
 import MessageView from "./components/MessageView.vue";
 import TimelineView from "./components/TimelineView.vue";
 import TagDialog from "./components/TagDialog.vue";
@@ -810,10 +811,10 @@ onMounted(async () => {
 <template>
   <el-config-provider :locale="elementLocale">
   <el-container class="app-shell">
-    <el-header class="topbar" :height="`${48}px`">
-      <div class="brand">
-        <div class="brand-text">
-          <strong class="brand-name">ChatLens</strong>
+    <el-header class="topbar titlebar" :height="`${48}px`">
+      <div class="titlebar-left">
+        <div class="brand" data-tauri-drag-region>
+          <strong class="brand-name" data-tauri-drag-region>ChatLens</strong>
         </div>
         <nav class="nav-tabs" :aria-label="t('nav.mainViews')">
           <button
@@ -828,7 +829,8 @@ onMounted(async () => {
           </button>
         </nav>
       </div>
-      <div class="actions">
+      <div class="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
+      <div class="titlebar-right">
         <el-input
           v-model="searchQuery"
           clearable
@@ -887,6 +889,7 @@ onMounted(async () => {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <WindowControls />
       </div>
     </el-header>
 
@@ -1008,6 +1011,8 @@ onMounted(async () => {
             @select="filterSource = $event"
           />
 
+          <div class="sidebar-section">
+            <div class="sidebar-section-title">{{ t("filter.filters") }}</div>
           <el-input
             v-model="listQuery"
             clearable
@@ -1073,6 +1078,7 @@ onMounted(async () => {
                 :value="tag.id"
               />
             </el-select>
+          </div>
           </div>
         </div>
 
@@ -1169,19 +1175,21 @@ onMounted(async () => {
           </template>
         </div>
 
-        <ConversationList
-          v-else
-          :conversations="conversations"
-          :active-id="activeId"
-          :loading="listLoading"
-          :loading-more="loadingMore"
-          :has-more="hasMoreConversations"
-          :loaded-count="conversations.length"
-          :total-count="listTotalHint"
-          @select="selectConversation"
-          @toggle-star="toggleConversationStarFromList"
-          @load-more="loadMoreConversations"
-        />
+        <div v-else-if="!searchMode && !starredMessagesMode" class="sidebar-list-panel">
+          <div class="sidebar-section-title">{{ t("filter.conversations") }}</div>
+          <ConversationList
+            :conversations="conversations"
+            :active-id="activeId"
+            :loading="listLoading"
+            :loading-more="loadingMore"
+            :has-more="hasMoreConversations"
+            :loaded-count="conversations.length"
+            :total-count="listTotalHint"
+            @select="selectConversation"
+            @toggle-star="toggleConversationStarFromList"
+            @load-more="loadMoreConversations"
+          />
+        </div>
       </el-aside>
 
       <el-main class="main">
@@ -1251,33 +1259,50 @@ onMounted(async () => {
 <style scoped>
 .app-shell {
   height: 100vh;
+  height: 100dvh;
   background: var(--cl-bg);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 16px;
+  gap: 12px;
+  padding: 0 0 0 16px;
   min-height: var(--cl-toolbar-height);
   border-bottom: 1px solid var(--cl-border-subtle);
   background: var(--cl-panel-elevated);
+  flex-shrink: 0;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.titlebar-drag {
+  flex: 1;
+  min-width: 24px;
+  align-self: stretch;
+}
+
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-right: 0;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
   flex-shrink: 0;
 }
 
@@ -1331,6 +1356,34 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-section-title {
+  padding: 4px 12px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cl-text-faint);
+}
+
+.sidebar-section-title-list {
+  padding: 10px 12px 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-list-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .search-input {

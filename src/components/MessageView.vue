@@ -394,6 +394,7 @@ function shouldEagerLoadImages(messageId: string) {
   display: flex;
   flex-direction: column;
   background: var(--cl-panel);
+  min-height: 0;
 }
 
 .loading-wrap {
@@ -404,13 +405,16 @@ function shouldEagerLoadImages(messageId: string) {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 24px 12px;
-  border-bottom: 1px solid var(--cl-border);
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  background: var(--cl-panel-elevated);
+  flex-shrink: 0;
 }
 
 .header-main h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--cl-text);
 }
 
@@ -437,39 +441,60 @@ function shouldEagerLoadImages(messageId: string) {
 .messages {
   flex: 1;
   overflow: auto;
-  padding: 16px 24px 32px;
+  padding: 8px 20px 24px;
+  background: var(--cl-panel-elevated);
 }
 
 .message {
-  max-width: 860px;
-  margin: 0 auto 20px;
-  padding: 16px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--cl-border);
-  background: var(--cl-message-bg);
+  max-width: var(--cl-content-max-width);
+  margin: 0 auto;
+  padding: 12px 0;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  background: transparent;
 }
 
 .message.starred {
-  border-color: rgba(230, 162, 60, 0.45);
+  border-bottom-color: rgba(201, 162, 39, 0.35);
 }
 
 .message.highlighted {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
+  background: var(--cl-selected);
+  border-bottom-color: transparent;
+  box-shadow: inset 3px 0 0 var(--cl-accent);
+  padding-left: 10px;
+  margin-left: -10px;
+  padding-right: 10px;
+  margin-right: -10px;
 }
 
 .message.user {
-  margin-left: auto;
-  background: rgba(64, 158, 255, 0.08);
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--cl-border-subtle);
+  border-radius: 8px;
+  border-bottom: 1px solid var(--cl-border-subtle);
+  background: var(--cl-message-user-bg);
+}
+
+.message.assistant,
+.message.system {
+  padding: 14px 0;
 }
 
 .message-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--cl-text-muted);
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--cl-text-faint);
+}
+
+.message.user .message-head {
+  margin-bottom: 6px;
 }
 
 .head-left {
@@ -479,8 +504,13 @@ function shouldEagerLoadImages(messageId: string) {
 }
 
 .role {
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--cl-text-muted);
+}
+
+.message.user .role {
   color: var(--cl-text);
+  font-weight: 600;
 }
 
 .star-btn {
