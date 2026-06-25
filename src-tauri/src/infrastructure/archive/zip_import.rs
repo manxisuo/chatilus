@@ -54,7 +54,7 @@ pub fn resolve_import_path_for_importer(
 
     if input_path.is_file() {
         if is_zip_file(input_path) {
-            if importer_id != "chatgpt" {
+            if importer_id != "chatgpt" && importer_id != "deepseek" {
                 return Err(format!(
                     "{} 不支持 ZIP 文件，请选择目录或其它文件类型",
                     importer.display_name()
