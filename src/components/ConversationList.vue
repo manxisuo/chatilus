@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { ConversationSummary } from "../types";
 import { sourceLabel, sourceTagType } from "../utils/dataSource";
 import { formatSourceContextSummary } from "../utils/sourceContext";
+import { type AppLocale, formatDateTime } from "../utils/locale";
 
 const props = defineProps<{
   conversations: ConversationSummary[];
@@ -20,15 +22,11 @@ const emit = defineEmits<{
   loadMore: [];
 }>();
 
+const { t, locale } = useI18n();
+
 function formatTime(timestamp: number | null) {
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTime(timestamp, locale.value as AppLocale);
 }
 
 const items = computed(() => props.conversations);
@@ -51,25 +49,28 @@ function onScroll(event: Event) {
 
 const footerText = computed(() => {
   if (props.loadingMore) {
-    return "加载中…";
+    return t("conversation.listFooter.loading");
   }
   if (props.hasMore) {
     if (props.totalCount != null) {
-      return `已加载 ${props.loadedCount} / ${props.totalCount}，继续下拉`;
+      return t("conversation.listFooter.loadMoreWithTotal", {
+        loaded: props.loadedCount,
+        total: props.totalCount,
+      });
     }
-    return `已加载 ${props.loadedCount} 条，继续下拉`;
+    return t("conversation.listFooter.loadMore", { loaded: props.loadedCount });
   }
   if (props.totalCount != null) {
-    return `共 ${props.totalCount} 条对话`;
+    return t("conversation.listFooter.totalConversations", { total: props.totalCount });
   }
-  return `共 ${props.loadedCount} 条对话`;
+  return t("conversation.listFooter.loadedConversations", { loaded: props.loadedCount });
 });
 </script>
 
 <template>
   <div class="conversation-list">
     <el-skeleton v-if="loading" animated :rows="8" />
-    <el-empty v-else-if="items.length === 0" description="还没有对话，导入数据后即可浏览你的 AI 记忆" />
+    <el-empty v-else-if="items.length === 0" :description="t('conversation.emptyList')" />
     <div v-else class="list-scroll" @scroll.passive="onScroll">
       <button
         v-for="item in items"
@@ -106,7 +107,7 @@ const footerText = computed(() => {
         </div>
         <div class="meta">
           <span>{{ formatTime(item.update_time ?? item.create_time) }}</span>
-          <span>{{ item.message_count }} 条消息</span>
+          <span>{{ t("common.messages", { count: item.message_count }) }}</span>
         </div>
       </button>
       <div class="list-footer">{{ footerText }}</div>

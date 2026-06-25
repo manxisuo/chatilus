@@ -1,23 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { ConversationSummary, MessageView } from "../types";
 import { sourceLabel, sourceTagType } from "../utils/dataSource";
 import { formatSourceContextLine, sourceContextIdHint } from "../utils/sourceContext";
+import { type AppLocale, formatDateTime } from "../utils/locale";
 
 const props = defineProps<{
   conversation: ConversationSummary;
   messages: MessageView[];
 }>();
 
+const { t, locale } = useI18n();
+
 function formatTime(timestamp: number | null) {
-  if (!timestamp) return "—";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTime(timestamp, locale.value as AppLocale);
 }
 
 const imageCount = computed(() =>
@@ -46,11 +43,11 @@ const timeSpan = computed(() => {
 </script>
 
 <template>
-  <aside class="conv-info" aria-label="对话信息">
-    <h3 class="title">对话信息</h3>
+  <aside class="conv-info" :aria-label="t('conversation.infoAria')">
+    <h3 class="title">{{ t("conversation.info") }}</h3>
     <dl class="info-list">
       <div class="info-row">
-        <dt>来源</dt>
+        <dt>{{ t("conversation.source") }}</dt>
         <dd>
           <el-tag
             size="small"
@@ -62,31 +59,31 @@ const timeSpan = computed(() => {
         </dd>
       </div>
       <div v-if="conversation.model" class="info-row">
-        <dt>模型</dt>
+        <dt>{{ t("conversation.model") }}</dt>
         <dd>{{ conversation.model }}</dd>
       </div>
       <div class="info-row">
-        <dt>消息</dt>
-        <dd>{{ conversation.message_count }} 条</dd>
+        <dt>{{ t("conversation.messageCount") }}</dt>
+        <dd>{{ t("common.messages", { count: conversation.message_count }) }}</dd>
       </div>
       <div class="info-row">
-        <dt>图片</dt>
-        <dd>{{ imageCount }} 张</dd>
+        <dt>{{ t("conversation.imageCount") }}</dt>
+        <dd>{{ t("common.images", { count: imageCount }) }}</dd>
       </div>
       <div v-if="codeMessageCount > 0" class="info-row">
-        <dt>含代码</dt>
-        <dd>{{ codeMessageCount }} 条消息</dd>
+        <dt>{{ t("conversation.withCode") }}</dt>
+        <dd>{{ t("conversation.codeMessages", { count: codeMessageCount }) }}</dd>
       </div>
       <div class="info-row">
-        <dt>开始</dt>
+        <dt>{{ t("conversation.started") }}</dt>
         <dd>{{ formatTime(timeSpan.start) }}</dd>
       </div>
       <div class="info-row">
-        <dt>最近</dt>
+        <dt>{{ t("conversation.updated") }}</dt>
         <dd>{{ formatTime(timeSpan.end) }}</dd>
       </div>
       <div v-if="conversation.source_contexts?.length" class="info-row">
-        <dt>来源上下文</dt>
+        <dt>{{ t("conversation.sourceContext") }}</dt>
         <dd class="context-list">
           <span
             v-for="context in conversation.source_contexts"
@@ -101,7 +98,7 @@ const timeSpan = computed(() => {
         </dd>
       </div>
       <div v-if="conversation.tags.length > 0" class="info-row">
-        <dt>标签</dt>
+        <dt>{{ t("conversation.tags") }}</dt>
         <dd class="tag-list">
           <el-tag
             v-for="tag in conversation.tags"

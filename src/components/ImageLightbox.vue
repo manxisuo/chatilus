@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 export interface GalleryImage {
   path: string;
@@ -20,6 +21,8 @@ const emit = defineEmits<{
   "update:visible": [value: boolean];
   openConversation: [conversationId: string];
 }>();
+
+const { t } = useI18n();
 
 const currentIndex = ref(0);
 
@@ -114,14 +117,14 @@ onUnmounted(() => {
       class="lightbox"
       @click.self="close"
     >
-      <button class="close-btn" type="button" aria-label="关闭" @click="close">
+      <button class="close-btn" type="button" :aria-label="t('common.close')" @click="close">
         ✕
       </button>
 
       <button
         class="nav-btn prev"
         type="button"
-        aria-label="上一张"
+        :aria-label="t('common.previous')"
         :disabled="!canGoPrev"
         @click.stop="goPrev"
       >
@@ -144,7 +147,7 @@ onUnmounted(() => {
               class="open-conv-btn"
               @click="openConversation"
             >
-              打开所属对话
+              {{ t("gallery.openConversation") }}
             </button>
             <span>{{ counterText }}</span>
           </div>
@@ -154,7 +157,7 @@ onUnmounted(() => {
       <button
         class="nav-btn next"
         type="button"
-        aria-label="下一张"
+        :aria-label="t('common.next')"
         :disabled="!canGoNext"
         @click.stop="goNext"
       >

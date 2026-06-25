@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { TagView } from "../types";
 
 const props = defineProps<{
@@ -14,6 +15,8 @@ const emit = defineEmits<{
   createTag: [name: string];
   deleteTag: [tagId: number];
 }>();
+
+const { t } = useI18n();
 
 const draftTagIds = ref<number[]>([]);
 const newTagName = ref("");
@@ -48,31 +51,35 @@ function createTag() {
 <template>
   <el-dialog
     :model-value="visible"
-    title="管理标签"
+    :title="t('tags.manage')"
     width="420px"
     @update:model-value="emit('update:visible', $event)"
   >
     <div class="section">
-      <div class="section-title">为当前对话选择标签</div>
+      <div class="section-title">{{ t("tags.selectForConversation") }}</div>
       <el-checkbox-group v-model="draftTagIds" class="tag-list">
         <el-checkbox v-for="tag in tags" :key="tag.id" :label="tag.id">
           {{ tag.name }}
           <span class="count">({{ tag.conversation_count }})</span>
         </el-checkbox>
       </el-checkbox-group>
-      <el-empty v-if="tags.length === 0" description="还没有标签" />
+      <el-empty v-if="tags.length === 0" :description="t('tags.empty')" />
     </div>
 
     <div class="section">
-      <div class="section-title">新建标签</div>
+      <div class="section-title">{{ t("tags.create") }}</div>
       <div class="create-row">
-        <el-input v-model="newTagName" placeholder="输入标签名" @keyup.enter="createTag" />
-        <el-button @click="createTag">添加</el-button>
+        <el-input
+          v-model="newTagName"
+          :placeholder="t('tags.namePlaceholder')"
+          @keyup.enter="createTag"
+        />
+        <el-button @click="createTag">{{ t("common.add") }}</el-button>
       </div>
     </div>
 
     <div v-if="tags.length" class="section">
-      <div class="section-title">删除标签</div>
+      <div class="section-title">{{ t("tags.deleteSection") }}</div>
       <div class="delete-list">
         <div v-for="tag in tags" :key="tag.id" class="delete-item">
           <span>{{ tag.name }}</span>
@@ -82,15 +89,15 @@ function createTag() {
             size="small"
             @click="emit('deleteTag', tag.id)"
           >
-            删除
+            {{ t("common.delete") }}
           </el-button>
         </div>
       </div>
     </div>
 
     <template #footer>
-      <el-button @click="close">取消</el-button>
-      <el-button type="primary" @click="save">保存</el-button>
+      <el-button @click="close">{{ t("common.cancel") }}</el-button>
+      <el-button type="primary" @click="save">{{ t("common.save") }}</el-button>
     </template>
   </el-dialog>
 </template>

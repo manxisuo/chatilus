@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl } from "../api";
 import { renderMarkdown } from "../utils/markdown";
 import { attachmentCacheKey } from "../utils/attachment";
+import { type AppLocale, formatDateTime } from "../utils/locale";
 import ImageLightbox from "./ImageLightbox.vue";
 import type { MessageView as MessageItem } from "../types";
 
@@ -22,6 +24,8 @@ const emit = defineEmits<{
   exportMarkdown: [];
   toggleMessageStar: [messageId: string, starred: boolean];
 }>();
+
+const { t, locale } = useI18n();
 
 const imageSrcCache = reactive<Record<string, string>>({});
 const lightboxVisible = ref(false);
@@ -183,7 +187,7 @@ const galleryImages = computed(() =>
 
 function formatTime(timestamp: number | null) {
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN");
+  return formatDateTime(timestamp, locale.value as AppLocale);
 }
 
 function assistantLabel(source?: string | null) {
@@ -205,17 +209,17 @@ function assistantLabel(source?: string | null) {
     case "chatgpt":
       return "ChatGPT";
     default:
-      return "助手";
+      return t("common.assistant");
   }
 }
 
 function roleLabel(role: string) {
-  if (role === "user") return "你";
+  if (role === "user") return t("common.you");
   if (role === "assistant") return assistantLabel(props.dataSource);
   if (role === "system") {
     return props.dataSource?.toLowerCase() === "cursor"
       ? "Cursor"
-      : "系统";
+      : t("common.system");
   }
   return role;
 }
@@ -285,13 +289,13 @@ function shouldEagerLoadImages(messageId: string) {
     <div v-if="loading" class="loading-wrap">
       <el-skeleton animated :rows="10" />
     </div>
-    <el-empty v-else-if="messages.length === 0" description="从左侧选择一段对话，开始浏览你的 AI 记忆" />
+    <el-empty v-else-if="messages.length === 0" :description="t('conversation.selectPrompt')" />
     <template v-else>
       <header class="header">
         <div class="header-main">
           <h2>{{ title }}</h2>
           <div class="header-meta">
-            <span class="count">{{ renderedMessages.length }} 条消息</span>
+            <span class="count">{{ t("common.messages", { count: renderedMessages.length }) }}</span>
             <el-tag
               v-for="tag in conversationTags"
               :key="tag"
@@ -309,9 +313,9 @@ function shouldEagerLoadImages(messageId: string) {
             text
             @click="emit('toggleConversationStar')"
           >
-            {{ conversationStarred ? "★ 已收藏" : "☆ 收藏对话" }}
+            {{ conversationStarred ? t("conversation.starred") : t("conversation.star") }}
           </el-button>
-          <el-button text @click="emit('exportMarkdown')">导出 Markdown</el-button>
+          <el-button text @click="emit('exportMarkdown')">{{ t("conversation.exportMarkdown") }}</el-button>
         </div>
       </header>
       <div ref="messagesContainerRef" class="messages">
@@ -365,7 +369,9 @@ function shouldEagerLoadImages(messageId: string) {
                 @error="onImageError(attachment.path)"
                 @click="openLightbox(attachment.path)"
               />
-              <div v-else class="image-missing">图片无法加载：{{ attachment.file_key }}</div>
+              <div v-else class="image-missing">
+                {{ t("conversation.imageLoadFailed", { key: attachment.file_key }) }}
+              </div>
             </figure>
           </div>
         </article>

@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { listTimeline, listTimelineMonths } from "../api";
 import TimelineMonthInsight from "./TimelineMonthInsight.vue";
 import type { ConversationSummary, SourceCount, TimelineMonthBucket } from "../types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "../utils/dataSource";
 import { formatSourceContextSummary } from "../utils/sourceContext";
+import {
+  type AppLocale,
+  formatDayKey,
+  formatMonthKey,
+  intlLocale,
+} from "../utils/locale";
 import {
   buildMonthTopics,
   filterConversationsByTopic,
@@ -26,6 +33,8 @@ const emit = defineEmits<{
   openGallery: [options: { month?: string; conversationId?: string }];
   "update:filterSource": [source: string | null];
 }>();
+
+const { t, locale } = useI18n();
 
 const PAGE_SIZE = 80;
 const months = ref<TimelineMonthBucket[]>([]);
@@ -61,7 +70,7 @@ const sourceNavItems = computed(() => {
   const items: Array<{ id: string | null; label: string; count: number }> = [
     {
       id: null,
-      label: "全部来源",
+      label: t("filter.allSources"),
       count: props.totalCount ?? 0,
     },
   ];
@@ -100,13 +109,12 @@ function monthKey(timestamp: number | null): string | null {
 }
 
 function monthLabel(key: string): string {
-  const [year, month] = key.split("-");
-  return `${year}年${Number(month)}月`;
+  return formatMonthKey(key, locale.value as AppLocale);
 }
 
 function formatClock(timestamp: number | null) {
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+  return new Date(timestamp * 1000).toLocaleString(intlLocale(locale.value as AppLocale), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -121,8 +129,7 @@ function dayKey(timestamp: number | null): string | null {
 }
 
 function dayLabel(key: string): string {
-  const [, month, day] = key.split("-");
-  return `${Number(month)}月${Number(day)}日`;
+  return formatDayKey(key, locale.value as AppLocale);
 }
 
 function conversationMonth(conversation: ConversationSummary): string | null {
@@ -186,8 +193,9 @@ function conversationsForMonthSection(monthKey: string, items: ConversationSumma
 function topicFilterSummaryText(conversations: ConversationSummary[]): string | null {
   if (conversations.length === 0) return null;
   const sources = sourceCountsFromConversations(conversations);
-  const fromPart = formatTopicSourceBreakdown(sources, sourceLabel, "、");
-  return `${conversations.length} 个对话，来自 ${fromPart}`;
+  const separator = locale.value === "zh-CN" ? "、" : ", ";
+  const fromPart = formatTopicSourceBreakdown(sources, sourceLabel, separator);
+  return t("timeline.fromSources", { count: conversations.length, sources: fromPart });
 }
 
 const groupedSections = computed(() => {
@@ -280,16 +288,19 @@ const activeMonthInsight = computed(() => {
 });
 
 const footerText = computed(() => {
-  if (loadingMore.value) return "加载中…";
+  if (loadingMore.value) return t("timeline.listFooter.loading");
   if (hasMore.value) {
     const total = visibleTotal.value;
     if (total != null) {
-      return `已加载 ${conversations.value.length} / ${total}，继续下拉`;
+      return t("timeline.listFooter.loadMoreWithTotal", {
+        loaded: conversations.value.length,
+        total,
+      });
     }
-    return `已加载 ${conversations.value.length} 条，继续下拉`;
+    return t("timeline.listFooter.loadMore", { loaded: conversations.value.length });
   }
   const total = visibleTotal.value ?? conversations.value.length;
-  return `共 ${total} 段对话`;
+  return t("timeline.listFooter.total", { total });
 });
 
 async function loadMonths() {
@@ -516,7 +527,7 @@ onUnmounted(() => {
   <div class="timeline-view">
     <header class="timeline-header">
       <div class="timeline-header-main">
-        <p class="subtitle">按月份回顾你与 AI 的对话足迹，跨 ChatGPT、Cursor、Gemini 等来源混排。</p>
+        <p class="subtitle">{{ t("timeline.subtitle") }}</p>
         <div class="source-nav">
           <button
             v-for="item in sourceNavItems"
@@ -535,7 +546,7 @@ onUnmounted(() => {
 
     <div class="timeline-body">
       <aside class="month-nav">
-        <div class="month-nav-title">月份</div>
+        <div class="month-nav-title">{{ t("timeline.monthNav") }}</div>
         <div ref="monthNavRef" class="month-nav-scroll">
           <el-skeleton v-if="loading && months.length === 0" animated :rows="8" />
           <button
@@ -549,9 +560,9 @@ onUnmounted(() => {
           >
             <span class="month-nav-label">{{ monthLabel(bucket.month) }}</span>
             <span class="month-nav-meta">
-              <span class="month-nav-count">{{ bucket.conversation_count }} 对话</span>
+              <span class="month-nav-count">{{ t("timeline.monthConversations", { count: bucket.conversation_count }) }}</span>
               <span v-if="bucket.image_count" class="month-nav-images">
-                {{ bucket.image_count }} 图片
+                {{ t("timeline.monthImages", { count: bucket.image_count }) }}
               </span>
             </span>
           </button>
@@ -563,7 +574,7 @@ onUnmounted(() => {
         <el-skeleton v-if="loading" animated :rows="10" />
         <el-empty
           v-else-if="conversations.length === 0"
-          description="暂无带时间戳的对话，导入数据后即可按月份浏览"
+          :description="t('timeline.empty')"
         />
         <template v-else>
           <section
@@ -580,7 +591,7 @@ onUnmounted(() => {
                 class="topic-filter-chip"
                 @click="clearTopicFilter"
               >
-                话题：{{ activeTopicFilter?.label }} ✕
+                {{ t("timeline.topicFilter", { label: activeTopicFilter?.label ?? "" }) }}
               </button>
             </div>
             <p v-if="section.topicFilterSummary" class="topic-filter-summary">
@@ -590,7 +601,7 @@ onUnmounted(() => {
               v-if="section.topicFiltered && section.conversations.length === 0"
               class="topic-filter-empty"
             >
-              本月没有匹配「{{ activeTopicFilter?.label }}」的对话
+              {{ t("timeline.noTopicMatch", { label: activeTopicFilter?.label ?? "" }) }}
             </p>
             <div
               v-for="day in section.days"
@@ -625,9 +636,9 @@ onUnmounted(() => {
                   {{ formatSourceContextSummary(conversation.source_contexts) }}
                 </div>
                 <div class="item-meta">
-                  <span>{{ conversation.message_count }} 条消息</span>
+                  <span>{{ t("common.messages", { count: conversation.message_count }) }}</span>
                   <span v-if="conversation.model">{{ conversation.model }}</span>
-                  <span v-if="conversation.is_starred" class="item-star">★ 已收藏</span>
+                  <span v-if="conversation.is_starred" class="item-star">{{ t("conversation.starredBadge") }}</span>
                 </div>
                 <div
                   v-if="conversation.latest_message_id || conversation.has_images"
@@ -641,7 +652,7 @@ onUnmounted(() => {
                       emit('openMessage', conversation.id, conversation.latest_message_id!)
                     "
                   >
-                    最新消息
+                    {{ t("conversation.latestMessage") }}
                   </button>
                   <button
                     v-if="conversation.has_images"
@@ -649,7 +660,7 @@ onUnmounted(() => {
                     class="item-action"
                     @click.stop="emit('openGallery', { conversationId: conversation.id })"
                   >
-                    图片
+                    {{ t("nav.images") }}
                   </button>
                 </div>
                 <div v-if="conversation.tags.length" class="item-tags">

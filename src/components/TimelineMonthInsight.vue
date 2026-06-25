@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { SourceCount } from "../types";
 import type { TopicBubble, TopicFilter } from "../utils/timelineTopics";
 import { isSameTopicFilter } from "../utils/timelineTopics";
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   selectTopic: [topic: TopicFilter];
 }>();
 
+const { t } = useI18n();
+
 const isPartial = computed(() => props.loadedCount < props.totalCount);
 
 const sourceRows = computed(() => {
@@ -37,42 +40,42 @@ const sourceRows = computed(() => {
 </script>
 
 <template>
-  <aside class="month-insight" aria-label="本月洞察">
+  <aside class="month-insight" :aria-label="t('timeline.insight.aria')">
     <template v-if="monthLabel">
       <h3 class="insight-title">{{ monthLabel }}</h3>
       <p v-if="isPartial" class="insight-hint">
-        基于已加载 {{ loadedCount }} / {{ totalCount }} 条对话
+        {{ t("timeline.insight.partialHint", { loaded: loadedCount, total: totalCount }) }}
       </p>
 
       <dl class="insight-stats">
         <div class="stat-row">
-          <dt>对话</dt>
+          <dt>{{ t("timeline.insight.conversations") }}</dt>
           <dd>{{ totalCount.toLocaleString() }}</dd>
         </div>
         <div class="stat-row">
-          <dt>消息</dt>
+          <dt>{{ t("timeline.insight.messages") }}</dt>
           <dd>{{ messageCount.toLocaleString() }}</dd>
         </div>
         <div class="stat-row">
-          <dt>活跃天</dt>
+          <dt>{{ t("timeline.insight.activeDays") }}</dt>
           <dd>{{ activeDays }}</dd>
         </div>
         <div v-if="starredCount > 0" class="stat-row">
-          <dt>收藏</dt>
+          <dt>{{ t("timeline.insight.starred") }}</dt>
           <dd>{{ starredCount }}</dd>
         </div>
         <div v-if="imageCount > 0" class="stat-row">
-          <dt>图片</dt>
+          <dt>{{ t("timeline.insight.images") }}</dt>
           <dd>
             <button type="button" class="insight-link" @click="emit('openGallery')">
-              {{ imageCount }} 张
+              {{ t("common.images", { count: imageCount }) }}
             </button>
           </dd>
         </div>
       </dl>
 
       <section v-if="sourceRows.length" class="insight-section">
-        <h4 class="section-label">来源分布</h4>
+        <h4 class="section-label">{{ t("timeline.insight.sourceDistribution") }}</h4>
         <ul class="source-bars">
           <li v-for="item in sourceRows" :key="item.source" class="source-bar-item">
             <div class="source-bar-head">
@@ -89,9 +92,11 @@ const sourceRows = computed(() => {
       </section>
 
       <section class="insight-section">
-        <h4 class="section-label" title="根据本月对话标题与标签统计">标题话题</h4>
+        <h4 class="section-label" :title="t('timeline.insight.titleTopicsHint')">
+          {{ t("timeline.insight.titleTopics") }}
+        </h4>
         <el-skeleton v-if="loading && topics.length === 0" animated :rows="3" />
-        <p v-else-if="topics.length === 0" class="empty-topics">暂无足够数据提取话题</p>
+        <p v-else-if="topics.length === 0" class="empty-topics">{{ t("timeline.insight.noTopics") }}</p>
         <div v-else class="topic-bubbles">
           <button
             v-for="topic in topics"
@@ -107,7 +112,7 @@ const sourceRows = computed(() => {
         </div>
       </section>
     </template>
-    <p v-else class="insight-placeholder">滚动或点击左侧月份查看本月洞察</p>
+    <p v-else class="insight-placeholder">{{ t("timeline.insight.placeholder") }}</p>
   </aside>
 </template>
 

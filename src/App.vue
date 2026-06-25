@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
+import en from "element-plus/es/locale/lang/en";
+import zhCn from "element-plus/es/locale/lang/zh-cn";
 import ConversationList from "./components/ConversationList.vue";
 import ConversationInfo from "./components/ConversationInfo.vue";
 import ImageGallery from "./components/ImageGallery.vue";
@@ -43,6 +46,15 @@ import {
   getStoredAppearance,
   setAppearance,
 } from "./utils/appearance";
+import { setAppLocale } from "./i18n";
+import {
+  type AppLocale,
+  formatDateTime,
+} from "./utils/locale";
+
+const { t, locale } = useI18n();
+
+const elementLocale = computed(() => (locale.value === "zh-CN" ? zhCn : en));
 
 const conversations = ref<ConversationSummary[]>([]);
 const messages = ref<Awaited<ReturnType<typeof getMessages>>>([]);
@@ -89,26 +101,30 @@ const galleryMonth = ref<string | null>(null);
 const galleryConversationId = ref<string | null>(null);
 const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
 
-const appearanceOptions: Array<{ value: AppearanceMode; label: string }> = [
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
-  { value: "system", label: "跟随系统" },
+const appearanceOptions = computed(() => [
+  { value: "light" as const, label: t("appearance.light") },
+  { value: "dark" as const, label: t("appearance.dark") },
+  { value: "system" as const, label: t("appearance.system") },
+]);
+
+const languageOptions: Array<{ value: AppLocale; label: string }> = [
+  { value: "zh-CN", label: "简体中文" },
+  { value: "en", label: "English" },
 ];
 
-const appearanceButtonLabel = computed(() => {
-  switch (appearanceMode.value) {
-    case "light":
-      return "浅色";
-    case "dark":
-      return "深色";
-    default:
-      return "系统";
-  }
-});
+const appearanceButtonLabel = computed(() => t(`appearance.${appearanceMode.value}`));
+
+const languageButtonLabel = computed(
+  () => languageOptions.find((item) => item.value === locale.value)?.label ?? "Language",
+);
 
 function handleAppearanceCommand(mode: AppearanceMode) {
   appearanceMode.value = mode;
   setAppearance(mode);
+}
+
+function handleLanguageCommand(next: AppLocale) {
+  setAppLocale(next);
 }
 
 const sourceCount = computed(() => {
@@ -117,28 +133,21 @@ const sourceCount = computed(() => {
 });
 
 function formatStatsTime(timestamp: number | null | undefined) {
-  if (!timestamp) return "—";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTime(timestamp, locale.value as AppLocale);
 }
 
 const dashboardStats = computed(() => {
   if (!stats.value) return [];
   const s = stats.value;
   return [
-    { label: "对话", value: s.conversation_count, icon: "💬" },
-    { label: "图片", value: s.image_count, icon: "🖼" },
-    { label: "来源", value: sourceCount.value, icon: "📦" },
-    { label: "收藏对话", value: s.starred_conversation_count, icon: "★" },
-    { label: "收藏消息", value: s.starred_message_count, icon: "☆" },
-    { label: "标签", value: s.tag_count, icon: "🏷" },
+    { label: t("stats.conversations"), value: s.conversation_count, icon: "💬" },
+    { label: t("stats.images"), value: s.image_count, icon: "🖼" },
+    { label: t("stats.sources"), value: sourceCount.value, icon: "📦" },
+    { label: t("stats.starredConversations"), value: s.starred_conversation_count, icon: "★" },
+    { label: t("stats.starredMessages"), value: s.starred_message_count, icon: "☆" },
+    { label: t("stats.tags"), value: s.tag_count, icon: "🏷" },
     {
-      label: "最近导入",
+      label: t("stats.lastImport"),
       value: formatStatsTime(s.last_imported_at),
       icon: "📥",
       isText: true,
@@ -150,19 +159,19 @@ const navItems = computed(() => [
   {
     id: "chats" as const,
     icon: "💬",
-    label: "对话",
+    label: t("nav.chats"),
     count: stats.value?.conversation_count ?? null,
   },
   {
     id: "timeline" as const,
     icon: "🗓",
-    label: "时间线",
+    label: t("nav.timeline"),
     count: stats.value?.conversation_count ?? null,
   },
   {
     id: "images" as const,
     icon: "🖼",
-    label: "图片",
+    label: t("nav.images"),
     count: stats.value?.image_count ?? null,
   },
 ]);
@@ -203,7 +212,7 @@ const sourceNavItems = computed(() => {
   const items: Array<{ id: string | null; label: string; count: number }> = [
     {
       id: null,
-      label: "全部对话",
+      label: t("filter.allConversations"),
       count: stats.value?.conversation_count ?? 0,
     },
   ];
@@ -247,7 +256,7 @@ const displayConversation = computed(
 );
 
 const displayConversationTitle = computed(
-  () => displayConversation.value?.title ?? "对话详情",
+  () => displayConversation.value?.title ?? t("conversation.details"),
 );
 
 const displayConversationSource = computed(
@@ -355,28 +364,25 @@ async function ensureConversationSummary(conversationId: string) {
 }
 
 const importPhaseLabel = computed(() => {
-  switch (importProgress.value.phase) {
-    case "extracting":
-      return "正在解压…";
-    case "parsing":
-      return "正在解析对话…";
-    case "persisting":
-      return "正在写入数据库…";
-    case "done":
-      return "导入完成";
-    default:
-      return "准备导入…";
+  const phase = importProgress.value.phase;
+  if (phase === "extracting" || phase === "parsing" || phase === "persisting" || phase === "done") {
+    return t(`import.phase.${phase}`);
   }
+  return t("import.phase.pending");
 });
 
 function formatImportElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes > 0) {
-    return `${minutes} 分 ${String(seconds).padStart(2, "0")} 秒`;
-  }
-  return `${totalSeconds} 秒`;
+  const time =
+    minutes > 0
+      ? t("import.elapsedMinutes", {
+          m: minutes,
+          s: String(seconds).padStart(2, "0"),
+        })
+      : t("import.elapsedSeconds", { n: totalSeconds });
+  return t("import.elapsed", { time });
 }
 
 function startImportTimer() {
@@ -410,20 +416,21 @@ onUnmounted(() => {
 function formatImportResultMessage(result: ImportResult): string {
   const parts: string[] = [];
   if (result.conversations_imported > 0) {
-    parts.push(`新增 ${result.conversations_imported} 个对话`);
+    parts.push(t("import.result.imported", { count: result.conversations_imported }));
   }
   if (result.conversations_updated > 0) {
-    parts.push(`更新 ${result.conversations_updated} 个对话`);
+    parts.push(t("import.result.updated", { count: result.conversations_updated }));
   }
   if (result.conversations_deduplicated > 0) {
-    parts.push(`包内合并 ${result.conversations_deduplicated} 个重复对话`);
+    parts.push(t("import.result.deduplicated", { count: result.conversations_deduplicated }));
   }
   if (parts.length === 0) {
-    parts.push("未发现对话");
+    parts.push(t("import.result.noneFound"));
   }
-  parts.push(`写入 ${result.messages_imported} 条消息`);
-  parts.push(`索引媒体 ${result.media_files_indexed} 个`);
-  return `导入完成：${parts.join("，")}`;
+  parts.push(t("import.result.messagesWritten", { count: result.messages_imported }));
+  parts.push(t("import.result.mediaIndexed", { count: result.media_files_indexed }));
+  const separator = locale.value === "zh-CN" ? "，" : ", ";
+  return t("import.result.title", { details: parts.join(separator) });
 }
 
 async function finishImport(job: ImportJobView) {
@@ -445,7 +452,7 @@ async function finishImport(job: ImportJobView) {
     return;
   }
 
-  ElMessage.error(job.error ?? "导入失败");
+  ElMessage.error(job.error ?? t("import.failed"));
 }
 
 async function startImportFlow(path: string, importerId?: string) {
@@ -508,7 +515,7 @@ async function openImportWizard() {
 }
 
 function importSupportStatusLabel(status: ImportGuide["support_status"]) {
-  return status === "experimental" ? "实验性" : "已支持";
+  return status === "experimental" ? t("import.experimental") : t("import.stable");
 }
 
 function importSupportStatusType(
@@ -565,9 +572,11 @@ async function pickImportPath(method: ImportMethodGuide) {
 
 const importWizardTitle = computed(() => {
   if (importWizardStep.value === "source") {
-    return "选择数据源";
+    return t("import.selectSource");
   }
-  return `导入 ${selectedImportGuide.value?.display_name ?? ""}`;
+  return t("import.importFrom", {
+    name: selectedImportGuide.value?.display_name ?? "",
+  });
 });
 
 function clearSearch() {
@@ -659,7 +668,7 @@ function openSearchHit(hit: SearchHit) {
 
 function formatHitTime(timestamp: number | null) {
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
+  return formatDateTime(timestamp, locale.value as AppLocale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -668,12 +677,12 @@ function formatHitTime(timestamp: number | null) {
 }
 
 function searchHitRoleLabel(hit: SearchHit) {
-  if (hit.role === "user") return "你";
+  if (hit.role === "user") return t("common.you");
   if (hit.role === "assistant") return sourceLabel(hit.source ?? "chatgpt");
   if (hit.role === "system") {
     const src = hit.source?.toLowerCase();
     if (src === "cursor" || src === "codex") return sourceLabel(src);
-    return "系统";
+    return t("common.system");
   }
   return hit.role;
 }
@@ -718,7 +727,7 @@ async function handleExportMarkdown() {
   const outputPath = await save({
     defaultPath: defaultName,
     filters: [{ name: "Markdown", extensions: ["md"] }],
-    title: "导出 Markdown",
+    title: t("conversation.exportDialogTitle"),
   });
 
   if (!outputPath) return;
@@ -729,7 +738,7 @@ async function handleExportMarkdown() {
       displayConversation.value.id,
       outputPath,
     );
-    ElMessage.success(`已导出 ${result.message_count} 条消息`);
+    ElMessage.success(t("conversation.exportSuccess", { count: result.message_count }));
   } catch (error) {
     ElMessage.error(String(error));
   } finally {
@@ -741,7 +750,7 @@ async function handleCreateTag(name: string) {
   try {
     await createTag(name);
     await refreshTags();
-    ElMessage.success(`标签「${name}」已创建`);
+    ElMessage.success(t("tags.created", { name }));
   } catch (error) {
     ElMessage.error(String(error));
   }
@@ -755,7 +764,7 @@ async function handleDeleteTag(tagId: number) {
     }
     await refreshTags();
     await loadConversations();
-    ElMessage.success("标签已删除");
+    ElMessage.success(t("tags.deleted"));
   } catch (error) {
     ElMessage.error(String(error));
   }
@@ -772,7 +781,7 @@ async function handleSaveTags(tagIds: number[]) {
     }
     await refreshTags();
     await loadConversations();
-    ElMessage.success("标签已更新");
+    ElMessage.success(t("tags.updated"));
   } catch (error) {
     ElMessage.error(String(error));
   }
@@ -808,6 +817,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <el-config-provider :locale="elementLocale">
   <el-container class="app-shell">
     <el-header class="topbar" height="56px">
       <div class="brand">
@@ -815,7 +825,7 @@ onMounted(async () => {
           <strong class="brand-name">ChatLens</strong>
           <span class="brand-tagline">Browse your AI memory</span>
         </div>
-        <nav class="nav-tabs" aria-label="主视图">
+        <nav class="nav-tabs" :aria-label="t('nav.mainViews')">
           <button
             v-for="item in navItems"
             :key="item.id"
@@ -834,14 +844,35 @@ onMounted(async () => {
         <el-input
           v-model="searchQuery"
           clearable
-          placeholder="全文搜索消息…"
+          :placeholder="t('search.placeholder')"
           class="search-input"
           @keyup.enter="handleSearch"
           @clear="clearSearch"
         />
-        <el-button @click="handleSearch">搜索</el-button>
+        <el-button @click="handleSearch">{{ t("common.search") }}</el-button>
+        <el-dropdown trigger="click" @command="handleLanguageCommand">
+          <el-button :title="t('language.title')">
+            {{ languageButtonLabel }}
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="option in languageOptions"
+                :key="option.value"
+                :command="option.value"
+              >
+                <span
+                  class="appearance-item"
+                  :class="{ selected: locale === option.value }"
+                >
+                  {{ option.label }}
+                </span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-dropdown trigger="click" @command="handleAppearanceCommand">
-          <el-button title="外观">
+          <el-button :title="t('appearance.title')">
             {{ appearanceButtonLabel }}
           </el-button>
           <template #dropdown>
@@ -862,12 +893,12 @@ onMounted(async () => {
           </template>
         </el-dropdown>
         <el-button type="primary" :loading="importing" @click="openImportWizard">
-          导入数据
+          {{ t("import.data") }}
         </el-button>
       </div>
     </el-header>
 
-    <div v-if="stats" class="stats-bar" aria-label="库统计">
+    <div v-if="stats" class="stats-bar" :aria-label="t('nav.libraryStats')">
       <div
         v-for="item in dashboardStats"
         :key="item.label"
@@ -916,7 +947,7 @@ onMounted(async () => {
       <div v-else-if="selectedImportGuide" class="import-method-panel">
         <p class="import-method-desc">{{ selectedImportGuide.description }}</p>
         <p class="import-recognition-hint">
-          <span class="import-recognition-label">识别依据</span>
+          <span class="import-recognition-label">{{ t("import.recognitionBasis") }}</span>
           {{ selectedImportGuide.recognition_hint }}
         </p>
         <div
@@ -929,7 +960,7 @@ onMounted(async () => {
             class="import-detected-default"
           >
             <p class="import-detected-label">
-              {{ method.detected_default_label ?? "检测到本机默认路径" }}
+              {{ method.detected_default_label ?? t("import.detectedDefaultPath") }}
             </p>
             <code class="import-method-example">{{ method.detected_default_path }}</code>
             <div class="import-detected-actions">
@@ -938,10 +969,10 @@ onMounted(async () => {
                 size="small"
                 @click="importFromDetectedPath(method.detected_default_path!)"
               >
-                直接导入
+                {{ t("import.importDirectly") }}
               </el-button>
               <el-button size="small" @click="pickImportPath(method)">
-                手动选择
+                {{ t("import.chooseManually") }}
               </el-button>
             </div>
           </div>
@@ -960,14 +991,14 @@ onMounted(async () => {
           </template>
         </div>
         <el-button class="import-wizard-back" @click="backToImportSources">
-          ← 选择其他数据源
+          {{ t("import.backToSources") }}
         </el-button>
       </div>
     </el-dialog>
 
     <el-dialog
       v-model="importDialogVisible"
-      title="正在导入"
+      :title="t('import.inProgress')"
       width="420px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
@@ -975,7 +1006,7 @@ onMounted(async () => {
     >
       <p>{{ importPhaseLabel }}</p>
       <p class="import-progress-elapsed">
-        已用时 {{ formatImportElapsed(importElapsedMs) }}
+        {{ formatImportElapsed(importElapsedMs) }}
       </p>
       <el-progress
         :percentage="importProgress.progress"
@@ -1000,7 +1031,7 @@ onMounted(async () => {
               :class="{ active: filterSource === item.id }"
               @click="filterSource = item.id"
             >
-              <span>{{ item.id === null ? "全部" : item.label }}</span>
+              <span>{{ item.id === null ? t("common.all") : item.label }}</span>
               <span class="source-pill-count">{{ item.count }}</span>
             </button>
           </div>
@@ -1009,7 +1040,7 @@ onMounted(async () => {
             v-model="listQuery"
             clearable
             size="small"
-            placeholder="筛选标题…"
+            :placeholder="t('filter.filterTitle')"
           />
 
           <div class="filter-row">
@@ -1020,7 +1051,7 @@ onMounted(async () => {
                 :class="{ active: starredOnly }"
                 @click="toggleStarredOnlyFilter"
               >
-                收藏对话
+                {{ t("filter.starredConversations") }}
               </button>
               <button
                 type="button"
@@ -1028,7 +1059,7 @@ onMounted(async () => {
                 :class="{ active: starredMessagesMode }"
                 @click="toggleStarredMessagesFilter"
               >
-                收藏消息
+                {{ t("filter.starredMessages") }}
               </button>
               <button
                 type="button"
@@ -1036,7 +1067,7 @@ onMounted(async () => {
                 :class="{ active: filterHasImages }"
                 @click="filterHasImages = !filterHasImages"
               >
-                有图
+                {{ t("filter.hasImages") }}
               </button>
               <button
                 type="button"
@@ -1044,7 +1075,7 @@ onMounted(async () => {
                 :class="{ active: filterHasCode }"
                 @click="filterHasCode = !filterHasCode"
               >
-                有码
+                {{ t("filter.hasCode") }}
               </button>
               <button
                 type="button"
@@ -1052,7 +1083,7 @@ onMounted(async () => {
                 :class="{ active: filterHasAttachments }"
                 @click="filterHasAttachments = !filterHasAttachments"
               >
-                有附件
+                {{ t("filter.hasAttachments") }}
               </button>
             </div>
             <el-select
@@ -1060,7 +1091,7 @@ onMounted(async () => {
               v-model="filterTagId"
               clearable
               size="small"
-              placeholder="标签"
+              :placeholder="t('filter.tags')"
               class="tag-filter-inline"
             >
               <el-option
@@ -1083,7 +1114,7 @@ onMounted(async () => {
               :class="{ active: filterSource === item.id }"
               @click="filterSource = item.id"
             >
-              <span>{{ item.id === null ? "全部" : item.label }}</span>
+              <span>{{ item.id === null ? t("common.all") : item.label }}</span>
               <span class="source-pill-count">{{ item.count }}</span>
             </button>
           </div>
@@ -1092,18 +1123,18 @@ onMounted(async () => {
             class="filter-chip filter-chip-wide active"
             @click="toggleStarredMessagesFilter"
           >
-            收藏消息 ✕
+            {{ t("filter.clearStarredMessages") }}
           </button>
         </div>
 
         <div v-if="searchMode" class="search-results">
           <div class="section-title">
-            搜索结果
+            {{ t("search.results") }}
             <span v-if="searchHits.length > 0" class="search-count">
-              {{ searchHits.length }} 条
+              {{ t("search.hits", { count: searchHits.length }) }}
             </span>
           </div>
-          <el-empty v-if="searchHits.length === 0" description="没有匹配的消息" />
+          <el-empty v-if="searchHits.length === 0" :description="t('search.noHits')" />
           <button
             v-for="hit in searchHits"
             :key="hit.message_id"
@@ -1133,15 +1164,15 @@ onMounted(async () => {
 
         <div v-else-if="starredMessagesMode" class="search-results">
           <div class="section-title">
-            收藏消息
+            {{ t("filter.starredMessages") }}
             <span v-if="starredMessageHits.length > 0" class="search-count">
-              {{ starredMessageHits.length }} 条
+              {{ t("search.hits", { count: starredMessageHits.length }) }}
             </span>
           </div>
           <el-skeleton v-if="starredMessagesLoading" animated :rows="6" />
           <el-empty
             v-else-if="starredMessageHits.length === 0"
-            description="暂无收藏消息，在对话中点击消息旁的 ☆ 即可收藏"
+            :description="t('starred.empty')"
           />
           <template v-else>
             <button
@@ -1208,7 +1239,7 @@ onMounted(async () => {
           />
         </div>
         <div v-if="displayConversation" class="tag-fab">
-          <el-button size="small" @click="tagDialogVisible = true">管理标签</el-button>
+          <el-button size="small" @click="tagDialogVisible = true">{{ t("tags.manage") }}</el-button>
         </div>
       </el-main>
     </el-container>
@@ -1248,6 +1279,7 @@ onMounted(async () => {
       @delete-tag="handleDeleteTag"
     />
   </el-container>
+  </el-config-provider>
 </template>
 
 <style scoped>

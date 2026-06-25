@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages, countImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
@@ -11,6 +12,7 @@ import {
   sourceTagType as conversationSourceTagType,
 } from "../utils/dataSource";
 import { galleryItemCacheKey } from "../utils/attachment";
+import { type AppLocale, formatDateTime, formatMonthKey } from "../utils/locale";
 
 const props = defineProps<{
   totalCount: number | null;
@@ -26,6 +28,8 @@ const emit = defineEmits<{
   openConversation: [conversationId: string];
   "update:filterSource": [source: string | null];
 }>();
+
+const { t, locale } = useI18n();
 
 const PAGE_SIZE = 60;
 const images = ref<ImageGalleryItem[]>([]);
@@ -68,7 +72,7 @@ const sourceNavItems = computed(() => {
   const items: Array<{ id: string | null; label: string; count: number }> = [
     {
       id: null,
-      label: "全部图片",
+      label: t("filter.allImages"),
       count: props.totalCount ?? 0,
     },
   ];
@@ -103,9 +107,9 @@ const statsText = computed(() => {
   if (generated == null || upload == null) return "";
   const unknown = Math.max(0, (props.totalCount ?? 0) - generated - upload);
   if (unknown > 0) {
-    return `生成 ${generated} · 上传 ${upload} · 其他 ${unknown}`;
+    return t("gallery.stats.breakdown", { generated, upload, other: unknown });
   }
-  return `生成 ${generated} · 上传 ${upload}`;
+  return t("gallery.stats.pair", { generated, upload });
 });
 
 const lightboxImages = computed(() =>
@@ -117,33 +121,40 @@ const lightboxImages = computed(() =>
 
 const lightboxCaptions = computed(() =>
   images.value.map((item) => {
-    const sourceLabel =
-      item.source === "generated" ? "生成" : item.source === "upload" ? "上传" : "图片";
+    const source =
+      item.source === "generated"
+        ? t("gallery.source.generated")
+        : item.source === "upload"
+          ? t("gallery.source.upload")
+          : t("gallery.source.image");
     const prompt = item.prompt?.trim();
     if (prompt) {
-      return `${sourceLabel} · ${item.conversation_title}\n${prompt}`;
+      return `${source} · ${item.conversation_title}\n${prompt}`;
     }
-    return `${sourceLabel} · ${item.conversation_title}`;
+    return `${source} · ${item.conversation_title}`;
   }),
 );
 
 const footerText = computed(() => {
-  if (loadingMore.value) return "加载中…";
+  if (loadingMore.value) return t("gallery.listFooter.loading");
   if (hasMore.value) {
     const total = visibleTotal.value;
     if (total != null) {
-      return `已加载 ${images.value.length} / ${total}，继续下拉`;
+      return t("gallery.listFooter.loadMoreWithTotal", {
+        loaded: images.value.length,
+        total,
+      });
     }
-    return `已加载 ${images.value.length} 张，继续下拉`;
+    return t("gallery.listFooter.loadMore", { loaded: images.value.length });
   }
   const total = visibleTotal.value ?? images.value.length;
-  return `共 ${total} 张图片`;
+  return t("gallery.listFooter.total", { total });
 });
 
 function imageTypeLabel(source: ImageGalleryItem["source"]) {
-  if (source === "generated") return "生成";
-  if (source === "upload") return "上传";
-  return "其他";
+  if (source === "generated") return t("gallery.source.generated");
+  if (source === "upload") return t("gallery.source.upload");
+  return t("gallery.source.other");
 }
 
 function imageTypeTagType(source: ImageGalleryItem["source"]) {
@@ -154,13 +165,7 @@ function imageTypeTagType(source: ImageGalleryItem["source"]) {
 
 function formatTime(timestamp: number | null) {
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTime(timestamp, locale.value as AppLocale);
 }
 
 function timeGroupKey(timestamp: number | null): string {
@@ -190,17 +195,16 @@ function timeGroupKey(timestamp: number | null): string {
 function timeGroupLabel(key: string): string {
   switch (key) {
     case "today":
-      return "今天";
+      return t("gallery.timeGroup.today");
     case "yesterday":
-      return "昨天";
+      return t("gallery.timeGroup.yesterday");
     case "this-week":
-      return "本周";
+      return t("gallery.timeGroup.thisWeek");
     case "unknown":
-      return "未知时间";
+      return t("gallery.timeGroup.unknown");
     default:
       if (key.startsWith("month:")) {
-        const [year, month] = key.slice(6).split("-");
-        return `${year}年${Number(month)}月`;
+        return formatMonthKey(key.slice(6), locale.value as AppLocale);
       }
       return key;
   }
@@ -362,9 +366,9 @@ onMounted(() => {
     <header class="gallery-header">
       <div class="gallery-header-main">
         <p class="subtitle">
-          <template v-if="filterConversationId">当前对话的图片</template>
-          <template v-else-if="filterMonth">{{ filterMonth }} 的图片</template>
-          <template v-else>浏览所有对话中的图片，点击放大，或跳回所属对话</template>
+          <template v-if="filterConversationId">{{ t("gallery.conversationImages") }}</template>
+          <template v-else-if="filterMonth">{{ t("gallery.monthImages", { month: filterMonth }) }}</template>
+          <template v-else>{{ t("gallery.browseAll") }}</template>
         </p>
         <p v-if="statsText && !filterSource" class="stats">{{ statsText }}</p>
         <div class="source-nav">
@@ -381,7 +385,7 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <el-checkbox v-model="showUploads" label="显示用户上传的图片" />
+      <el-checkbox v-model="showUploads" :label="t('gallery.showUploads')" />
     </header>
 
     <el-skeleton v-if="loading" animated :rows="8" class="loading" />
@@ -390,10 +394,10 @@ onMounted(() => {
       v-else-if="images.length === 0"
       :description="
         filterSource
-          ? `暂无来自 ${conversationSourceLabel(filterSource)} 的图片`
+          ? t('gallery.emptyFromSource', { source: conversationSourceLabel(filterSource) })
           : showUploads
-            ? '暂无图片，请先导入包含图片的对话数据'
-            : '暂无生成图片，可勾选显示用户上传的图片'
+            ? t('gallery.emptyNoData')
+            : t('gallery.emptyGeneratedOnly')
       "
     />
 
@@ -423,13 +427,13 @@ onMounted(() => {
                 loading="lazy"
                 @error="onImageError(item.path)"
               />
-              <div v-else class="thumb-missing">无法加载</div>
+              <div v-else class="thumb-missing">{{ t("gallery.loadFailed") }}</div>
             </button>
             <div class="card-meta">
               <button
                 class="conv-link"
                 type="button"
-                title="打开所属对话"
+                :title="t('gallery.openConversationTitle')"
                 @click="openConversation(item.conversation_id)"
               >
                 {{ item.conversation_title }}
