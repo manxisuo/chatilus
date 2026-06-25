@@ -30,6 +30,73 @@ impl Drop for TempExtractDir {
     }
 }
 
+pub fn resolve_import_path_for_importer(
+    input_path: &Path,
+    importer_id: &str,
+    registry: &ImporterRegistry,
+    on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
+) -> Result<ResolvedImportPath, String> {
+    let importer = registry
+        .by_id(importer_id)
+        .ok_or_else(|| format!("未知数据源: {importer_id}"))?;
+
+    if input_path.is_dir() {
+        let (export_dir, detect) = registry.find_export_root_for_importer(input_path, importer_id)?;
+        let export_label = export_label_from_path(input_path);
+        return Ok(ResolvedImportPath {
+            export_dir,
+            cleanup: None,
+            export_label,
+            importer_id: detect.importer_id,
+            importer_display_name: detect.display_name,
+        });
+    }
+
+    if input_path.is_file() {
+        if is_zip_file(input_path) {
+            if importer_id != "chatgpt" {
+                return Err(format!(
+                    "{} 不支持 ZIP 文件，请选择目录或其它文件类型",
+                    importer.display_name()
+                ));
+            }
+            report(on_progress.as_ref(), "extracting", 0, 1, 0.02);
+            let cleanup = TempExtractDir {
+                path: create_extract_dir(input_path)?,
+            };
+            extract_zip(input_path, cleanup.path())?;
+            report(on_progress.as_ref(), "extracting", 1, 1, 0.18);
+            extract_nested_zips(cleanup.path(), on_progress.clone())?;
+            let (export_dir, detect) =
+                registry.find_export_root_for_importer(cleanup.path(), importer_id)?;
+            let export_label = export_label_from_path(input_path);
+            return Ok(ResolvedImportPath {
+                export_dir,
+                cleanup: Some(cleanup),
+                export_label,
+                importer_id: detect.importer_id,
+                importer_display_name: detect.display_name,
+            });
+        }
+
+        let detect = registry.detect_with_importer(input_path, importer_id)?;
+        let export_label = export_label_from_path(input_path);
+        return Ok(ResolvedImportPath {
+            export_dir: input_path.to_path_buf(),
+            cleanup: None,
+            export_label,
+            importer_id: detect.importer_id,
+            importer_display_name: detect.display_name,
+        });
+    }
+
+    Err(format!(
+        "路径不存在或不是 {} 支持的导入格式: {}",
+        importer.display_name(),
+        input_path.display()
+    ))
+}
+
 pub fn resolve_import_path(
     input_path: &Path,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,

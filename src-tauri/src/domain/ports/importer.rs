@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::import_guide::ImportGuide;
 use super::import_package::ImportPackage;
 use crate::domain::models::{DataSource, ImportProgress};
 
@@ -43,6 +44,8 @@ pub trait Importer: Send + Sync {
     fn display_name(&self) -> &'static str;
     fn source(&self) -> DataSource;
     fn version(&self) -> &'static str;
+
+    fn import_guide(&self) -> ImportGuide;
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String>;
     fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String>;

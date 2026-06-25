@@ -1,7 +1,7 @@
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
-    ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
-    NormalizedImportResult,
+    ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
+    ImportPreview, Importer, NormalizedImportResult, platform_display_path,
 };
 
 use super::db::{list_threads, open_codex_db};
@@ -32,6 +32,52 @@ impl Importer for CodexImporter {
 
     fn version(&self) -> &'static str {
         "0.1.0"
+    }
+
+    fn import_guide(&self) -> ImportGuide {
+        ImportGuide {
+            importer_id: self.id().to_string(),
+            source: self.source().as_str().to_string(),
+            display_name: "Codex".to_string(),
+            description: "OpenAI Codex CLI 本地会话数据".to_string(),
+            support_status: "experimental".to_string(),
+            support_summary: "本地 ~/.codex".to_string(),
+            recognition_hint: "ChatLens 会读取 state_*.sqlite 中的线程索引，\
+                               并解析 sessions 目录下的 rollout JSONL 会话记录。"
+                .to_string(),
+            methods: vec![
+                ImportMethodGuide {
+                    id: "home_dir".to_string(),
+                    label: "选择 Codex 数据目录".to_string(),
+                    kind: "directory".to_string(),
+                    dialog_title: "选择 Codex 数据目录".to_string(),
+                    extensions: Vec::new(),
+                    hint: "选择含 sessions 子目录与 state_*.sqlite 的 Codex 数据目录。".to_string(),
+                    example_path: Some(platform_display_path(
+                        r"%USERPROFILE%\.codex",
+                        "~/.codex",
+                        "~/.codex",
+                    )),
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+                ImportMethodGuide {
+                    id: "state_db".to_string(),
+                    label: "选择 state SQLite 文件".to_string(),
+                    kind: "file".to_string(),
+                    dialog_title: "选择 Codex state SQLite".to_string(),
+                    extensions: vec!["sqlite".to_string()],
+                    hint: "直接选择 state_*.sqlite 文件（通常在 .codex 目录下）。".to_string(),
+                    example_path: Some(platform_display_path(
+                        r"%USERPROFILE%\.codex\state_5.sqlite",
+                        "~/.codex/state_5.sqlite",
+                        "~/.codex/state_5.sqlite",
+                    )),
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+            ],
+        }
     }
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {

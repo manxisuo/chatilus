@@ -58,6 +58,29 @@ export interface TagView {
   conversation_count: number;
 }
 
+export interface ImportMethodGuide {
+  id: string;
+  label: string;
+  kind: "directory" | "file";
+  dialog_title: string;
+  extensions?: string[];
+  hint: string;
+  example_path?: string | null;
+  detected_default_path?: string | null;
+  detected_default_label?: string | null;
+}
+
+export interface ImportGuide {
+  importer_id: string;
+  source: string;
+  display_name: string;
+  description: string;
+  support_status: "stable" | "experimental";
+  support_summary: string;
+  recognition_hint: string;
+  methods: ImportMethodGuide[];
+}
+
 export interface ImportResult {
   conversations_imported: number;
   conversations_updated: number;

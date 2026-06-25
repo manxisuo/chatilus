@@ -8,7 +8,8 @@ mod models;
 use commands::{
     create_tag, delete_tag, export_conversation_markdown, get_conversation, get_import_job,
     get_messages, get_stats, list_starred_messages, list_timeline, list_timeline_months,
-    import_export_dir, init_state, list_conversations, count_images, list_images, list_tags, read_image_data_url,
+    import_export_dir, init_state, list_conversations, count_images, list_images, list_tags,
+    list_import_guides, read_image_data_url,
     search_messages, set_conversation_starred, set_conversation_tags, set_message_starred,
     start_import,
 };
@@ -26,6 +27,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             import_export_dir,
+            list_import_guides,
             start_import,
             get_import_job,
             list_conversations,

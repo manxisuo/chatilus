@@ -2,8 +2,8 @@ use std::fs;
 
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
-    ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
-    NormalizedImportResult,
+    ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
+    ImportPreview, Importer, NormalizedImportResult,
 };
 use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
 use crate::infrastructure::media::MediaIndex;
@@ -35,6 +35,31 @@ impl Importer for GeminiImporter {
 
     fn version(&self) -> &'static str {
         "0.1.0"
+    }
+
+    fn import_guide(&self) -> ImportGuide {
+        ImportGuide {
+            importer_id: self.id().to_string(),
+            source: self.source().as_str().to_string(),
+            display_name: "Gemini".to_string(),
+            description: "Google Takeout 中的 Gemini Apps 活动记录".to_string(),
+            support_status: "stable".to_string(),
+            support_summary: "Google Takeout".to_string(),
+            recognition_hint: "ChatLens 会解析 Gemini Apps 活动记录目录中的 HTML 文件。".to_string(),
+            methods: vec![ImportMethodGuide {
+                id: "takeout_dir".to_string(),
+                label: "选择 Gemini Apps 目录".to_string(),
+                kind: "directory".to_string(),
+                dialog_title: "选择 Gemini Apps 目录".to_string(),
+                extensions: Vec::new(),
+                hint: "选择 Google Takeout 解压后「我的活动 / Gemini Apps」文件夹，\
+                       其中应包含活动记录的 .html 文件。"
+                    .to_string(),
+                example_path: Some("Takeout/我的活动/Gemini Apps".to_string()),
+                detected_default_path: None,
+                detected_default_label: None,
+            }],
+        }
     }
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {

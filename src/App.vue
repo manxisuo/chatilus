@@ -21,6 +21,7 @@ import {
   listTags,
   searchMessages,
   setConversationStarred,
+  listImportGuides,
   setConversationTags,
   setMessageStarred,
   startImport,
@@ -28,6 +29,8 @@ import {
 import type {
   ConversationSummary,
   DatabaseStats,
+  ImportGuide,
+  ImportMethodGuide,
   ImportJobView,
   ImportProgressEvent,
   ImportResult,
@@ -53,6 +56,10 @@ const listLoading = ref(false);
 const messageLoading = ref(false);
 const importing = ref(false);
 const importDialogVisible = ref(false);
+const importWizardVisible = ref(false);
+const importWizardStep = ref<"source" | "method">("source");
+const importGuides = ref<ImportGuide[]>([]);
+const selectedImportGuide = ref<ImportGuide | null>(null);
 const importJobId = ref<string | null>(null);
 const importProgress = ref({
   phase: "pending",
@@ -412,7 +419,7 @@ async function finishImport(job: ImportJobView) {
   ElMessage.error(job.error ?? "导入失败");
 }
 
-async function startImportFlow(path: string) {
+async function startImportFlow(path: string, importerId?: string) {
   cleanupImportListeners();
   importing.value = true;
   importDialogVisible.value = true;
@@ -424,7 +431,7 @@ async function startImportFlow(path: string) {
   };
 
   try {
-    const jobId = await startImport(path);
+    const jobId = await startImport(path, importerId);
     importJobId.value = jobId;
 
     importUnlisten.push(
@@ -457,46 +464,81 @@ async function startImportFlow(path: string) {
   }
 }
 
-async function handleImportFile() {
+async function openImportWizard() {
+  importWizardStep.value = "source";
+  selectedImportGuide.value = null;
+  importWizardVisible.value = true;
+
+  try {
+    importGuides.value = await listImportGuides();
+  } catch (error) {
+    importWizardVisible.value = false;
+    ElMessage.error(String(error));
+  }
+}
+
+function importSupportStatusLabel(status: ImportGuide["support_status"]) {
+  return status === "experimental" ? "实验性" : "已支持";
+}
+
+function importSupportStatusType(
+  status: ImportGuide["support_status"],
+): "success" | "warning" {
+  return status === "experimental" ? "warning" : "success";
+}
+
+async function importFromDetectedPath(path: string) {
+  const guide = selectedImportGuide.value;
+  if (!guide) {
+    return;
+  }
+  importWizardVisible.value = false;
+  await startImportFlow(path, guide.importer_id);
+}
+
+function selectImportSource(guide: ImportGuide) {
+  selectedImportGuide.value = guide;
+  importWizardStep.value = "method";
+}
+
+function backToImportSources() {
+  importWizardStep.value = "source";
+  selectedImportGuide.value = null;
+}
+
+async function pickImportPath(method: ImportMethodGuide) {
+  const guide = selectedImportGuide.value;
+  if (!guide) {
+    return;
+  }
+
+  const isDirectory = method.kind === "directory";
+  const extensions = (method.extensions ?? []).filter(Boolean);
+
   const selected = await open({
     multiple: false,
-    title: "选择导入文件",
-    filters: [
-      {
-        name: "支持的导入文件",
-        extensions: ["zip", "vscdb", "sqlite"],
-      },
-    ],
+    directory: isDirectory,
+    title: method.dialog_title,
+    filters:
+      !isDirectory && extensions.length > 0
+        ? [{ name: method.label, extensions }]
+        : undefined,
   });
 
   if (!selected || Array.isArray(selected)) {
     return;
   }
 
-  await startImportFlow(selected);
+  importWizardVisible.value = false;
+  await startImportFlow(selected, guide.importer_id);
 }
 
-async function handleImportDir() {
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: "选择导入目录（ChatGPT 导出 / Cursor User / Codex ~/.codex）",
-  });
-
-  if (!selected || Array.isArray(selected)) {
-    return;
+const importWizardTitle = computed(() => {
+  if (importWizardStep.value === "source") {
+    return "选择数据源";
   }
-
-  await startImportFlow(selected);
-}
-
-function handleImportCommand(command: string) {
-  if (command === "file") {
-    void handleImportFile();
-    return;
-  }
-  void handleImportDir();
-}
+  return `导入 ${selectedImportGuide.value?.display_name ?? ""}`;
+});
 
 function clearSearch() {
   searchMode.value = false;
@@ -789,17 +831,9 @@ onMounted(async () => {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-dropdown trigger="click" @command="handleImportCommand">
-          <el-button type="primary" :loading="importing">
-            导入数据
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="file">导入文件（ZIP / Cursor .vscdb / Codex state.sqlite / Gemini Takeout）</el-dropdown-item>
-              <el-dropdown-item command="dir">导入目录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <el-button type="primary" :loading="importing" @click="openImportWizard">
+          导入数据
+        </el-button>
       </div>
     </el-header>
 
@@ -816,6 +850,90 @@ onMounted(async () => {
         </span>
       </div>
     </div>
+
+    <el-dialog
+      v-model="importWizardVisible"
+      :title="importWizardTitle"
+      width="520px"
+      destroy-on-close
+    >
+      <div v-if="importWizardStep === 'source'" class="import-source-grid">
+        <button
+          v-for="guide in importGuides"
+          :key="guide.importer_id"
+          type="button"
+          class="import-source-card"
+          @click="selectImportSource(guide)"
+        >
+          <div class="import-source-card-header">
+            <el-tag size="small" :type="sourceTagType(guide.source)">
+              {{ sourceLabel(guide.source) }}
+            </el-tag>
+            <el-tag
+              size="small"
+              :type="importSupportStatusType(guide.support_status)"
+              effect="plain"
+            >
+              {{ importSupportStatusLabel(guide.support_status) }}
+            </el-tag>
+          </div>
+          <strong class="import-source-name">{{ guide.display_name }}</strong>
+          <p class="import-source-summary">{{ guide.support_summary }}</p>
+          <p class="import-source-desc">{{ guide.description }}</p>
+        </button>
+      </div>
+
+      <div v-else-if="selectedImportGuide" class="import-method-panel">
+        <p class="import-method-desc">{{ selectedImportGuide.description }}</p>
+        <p class="import-recognition-hint">
+          <span class="import-recognition-label">识别依据</span>
+          {{ selectedImportGuide.recognition_hint }}
+        </p>
+        <div
+          v-for="method in selectedImportGuide.methods"
+          :key="method.id"
+          class="import-method-card"
+        >
+          <div
+            v-if="method.detected_default_path"
+            class="import-detected-default"
+          >
+            <p class="import-detected-label">
+              {{ method.detected_default_label ?? "检测到本机默认路径" }}
+            </p>
+            <code class="import-method-example">{{ method.detected_default_path }}</code>
+            <div class="import-detected-actions">
+              <el-button
+                type="primary"
+                size="small"
+                @click="importFromDetectedPath(method.detected_default_path!)"
+              >
+                直接导入
+              </el-button>
+              <el-button size="small" @click="pickImportPath(method)">
+                手动选择
+              </el-button>
+            </div>
+          </div>
+          <template v-else>
+            <button
+              type="button"
+              class="import-method-action"
+              @click="pickImportPath(method)"
+            >
+              {{ method.label }}
+            </button>
+            <p class="import-method-hint">{{ method.hint }}</p>
+            <code v-if="method.example_path" class="import-method-example">
+              {{ method.example_path }}
+            </code>
+          </template>
+        </div>
+        <el-button class="import-wizard-back" @click="backToImportSources">
+          ← 选择其他数据源
+        </el-button>
+      </div>
+    </el-dialog>
 
     <el-dialog
       v-model="importDialogVisible"
@@ -1509,5 +1627,155 @@ onMounted(async () => {
   margin-top: 8px;
   font-size: 12px;
   color: var(--cl-text-muted);
+}
+
+.import-source-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.import-source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  background: var(--cl-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.import-source-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.import-source-summary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+.import-source-card:hover {
+  border-color: var(--el-color-primary);
+  background: var(--cl-surface-raised, var(--cl-surface));
+}
+
+.import-source-name {
+  font-size: 15px;
+  color: var(--cl-text);
+}
+
+.import-source-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--cl-text-muted);
+}
+
+.import-method-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-method-desc {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--cl-text-muted);
+}
+
+.import-recognition-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--cl-code-bg, rgba(127, 127, 127, 0.08));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cl-text-muted);
+}
+
+.import-recognition-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cl-text);
+}
+
+.import-detected-default {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-detected-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cl-text);
+}
+
+.import-detected-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.import-method-card {
+  padding: 12px 14px;
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  background: var(--cl-surface);
+}
+
+.import-method-action {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.import-method-action:hover {
+  text-decoration: underline;
+}
+
+.import-method-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cl-text-muted);
+  white-space: pre-wrap;
+}
+
+.import-method-example {
+  display: block;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--cl-code-bg, rgba(127, 127, 127, 0.12));
+  font-size: 11px;
+  color: var(--cl-text);
+  word-break: break-all;
+}
+
+.import-wizard-back {
+  align-self: flex-start;
+  margin-top: 8px;
 }
 </style>

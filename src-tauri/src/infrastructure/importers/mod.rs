@@ -2,6 +2,7 @@ pub mod chatgpt;
 pub mod codex;
 pub mod cursor;
 pub mod gemini;
+mod import_guide_enrich;
 mod registry;
 
 pub use chatgpt::ChatGptImporter;

@@ -1,7 +1,7 @@
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
-    ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
-    NormalizedImportResult,
+    ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
+    ImportPreview, Importer, NormalizedImportResult, platform_display_path,
 };
 use crate::infrastructure::importers::chatgpt::attachments::resolve_imported_attachments;
 use crate::infrastructure::media::MediaIndex;
@@ -32,6 +32,52 @@ impl Importer for CursorImporter {
 
     fn version(&self) -> &'static str {
         "0.1.0"
+    }
+
+    fn import_guide(&self) -> ImportGuide {
+        ImportGuide {
+            importer_id: self.id().to_string(),
+            source: self.source().as_str().to_string(),
+            display_name: "Cursor".to_string(),
+            description: "Cursor IDE 本地对话数据库".to_string(),
+            support_status: "stable".to_string(),
+            support_summary: "本地 state.vscdb".to_string(),
+            recognition_hint: "ChatLens 会读取 state.vscdb 中的工作区、会话和消息记录。".to_string(),
+            methods: vec![
+                ImportMethodGuide {
+                    id: "vscdb".to_string(),
+                    label: "选择 state.vscdb 文件".to_string(),
+                    kind: "file".to_string(),
+                    dialog_title: "选择 Cursor state.vscdb".to_string(),
+                    extensions: vec!["vscdb".to_string()],
+                    hint: "推荐直接选择 Cursor 的全局状态数据库文件。".to_string(),
+                    example_path: Some(platform_display_path(
+                        r"%APPDATA%\Cursor\User\globalStorage\state.vscdb",
+                        "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+                        "~/.config/Cursor/User/globalStorage/state.vscdb",
+                    )),
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+                ImportMethodGuide {
+                    id: "user_dir".to_string(),
+                    label: "选择 Cursor User 目录".to_string(),
+                    kind: "directory".to_string(),
+                    dialog_title: "选择 Cursor User 目录".to_string(),
+                    extensions: Vec::new(),
+                    hint: "选择包含 globalStorage/state.vscdb 的 User 目录；\
+                           ChatLens 会自动定位数据库文件。"
+                        .to_string(),
+                    example_path: Some(platform_display_path(
+                        r"%APPDATA%\Cursor\User",
+                        "~/Library/Application Support/Cursor/User",
+                        "~/.config/Cursor/User",
+                    )),
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+            ],
+        }
     }
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {

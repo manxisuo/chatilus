@@ -16,11 +16,7 @@ pub fn resolve_codex_home(input: &Path) -> Option<PathBuf> {
         return Some(home);
     }
 
-    let candidates = [
-        input.to_path_buf(),
-        input.join(".codex"),
-        default_codex_home(),
-    ];
+    let candidates = [input.to_path_buf(), input.join(".codex")];
 
     for candidate in candidates {
         if candidate.is_dir() && looks_like_codex_home(&candidate) {

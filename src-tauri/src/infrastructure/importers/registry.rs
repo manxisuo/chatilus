@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::domain::ports::{ImportDetectResult, ImportInput, Importer};
+use crate::domain::ports::{ImportDetectResult, ImportGuide, ImportInput, Importer};
 
 pub struct ImporterRegistry {
     importers: Vec<Box<dyn Importer>>,
@@ -60,6 +60,81 @@ impl ImporterRegistry {
         ))
     }
 
+    pub fn detect_with_importer(
+        &self,
+        path: &Path,
+        importer_id: &str,
+    ) -> Result<ImportDetectResult, String> {
+        let importer = self
+            .by_id(importer_id)
+            .ok_or_else(|| format!("未知数据源: {importer_id}"))?;
+        let input = ImportInput {
+            path: path.to_path_buf(),
+        };
+        let result = importer.detect(&input)?;
+        if result.matched {
+            Ok(result)
+        } else {
+            Err(format!(
+                "路径不符合 {} 的导入要求: {}",
+                importer.display_name(),
+                path.display()
+            ))
+        }
+    }
+
+    pub fn find_export_root_for_importer(
+        &self,
+        search_root: &Path,
+        importer_id: &str,
+    ) -> Result<(PathBuf, ImportDetectResult), String> {
+        if let Ok(result) = self.detect_with_importer(search_root, importer_id) {
+            return Ok((search_root.to_path_buf(), result));
+        }
+
+        let mut queue = vec![search_root.to_path_buf()];
+        while let Some(dir) = queue.pop() {
+            let entries =
+                std::fs::read_dir(&dir).map_err(|e| format!("无法读取目录 {}: {e}", dir.display()))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+
+                if let Ok(result) = self.detect_with_importer(&path, importer_id) {
+                    return Ok((path, result));
+                }
+
+                queue.push(path);
+            }
+        }
+
+        let importer = self
+            .by_id(importer_id)
+            .ok_or_else(|| format!("未知数据源: {importer_id}"))?;
+        Err(format!(
+            "在 {} 中未找到符合 {} 的导出数据",
+            search_root.display(),
+            importer.display_name()
+        ))
+    }
+
+    pub fn list_import_guides(&self) -> Vec<ImportGuide> {
+        use super::import_guide_enrich::enrich_import_guide;
+
+        const ORDER: &[&str] = &["chatgpt", "cursor", "codex", "gemini"];
+        ORDER
+            .iter()
+            .filter_map(|id| {
+                self.by_id(id)
+                    .map(|importer| enrich_import_guide(importer.import_guide()))
+            })
+            .collect()
+    }
+
     pub fn by_id(&self, importer_id: &str) -> Option<&dyn Importer> {
         self.importers
             .iter()
@@ -90,6 +165,19 @@ mod tests {
 
     fn sample_export_dir() -> PathBuf {
         PathBuf::from(r"D:\Personal\ChatGPT数据下载-2026年5月18日\2026-05-16-12-08-35")
+    }
+
+    #[test]
+    fn list_import_guides_returns_all_importers_in_order() {
+        let registry = default_importer_registry();
+        let guides = registry.list_import_guides();
+        assert_eq!(
+            guides.iter().map(|guide| guide.importer_id.as_str()).collect::<Vec<_>>(),
+            vec!["chatgpt", "cursor", "codex", "gemini"]
+        );
+        assert!(guides.iter().all(|guide| !guide.methods.is_empty()));
+        assert!(guides.iter().all(|guide| !guide.support_summary.is_empty()));
+        assert!(guides.iter().all(|guide| !guide.recognition_hint.is_empty()));
     }
 
     #[test]

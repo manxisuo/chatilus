@@ -7,6 +7,8 @@ use uuid::Uuid;
 use crate::application::{self, new_import_job_store, spawn_import_job, SharedImportJobStore};
 use crate::db::Database;
 use crate::domain::models::ImportJob;
+use crate::domain::ports::ImportGuide;
+use crate::infrastructure::importers::default_importer_registry;
 use crate::models::{
     ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportJobView,
     ImportResult, MessageView, SearchHit, TagView, TimelineMonthBucket,
@@ -48,18 +50,31 @@ pub fn import_export_dir(
 }
 
 #[tauri::command]
+pub fn list_import_guides() -> Result<Vec<ImportGuide>, String> {
+    Ok(default_importer_registry().list_import_guides())
+}
+
+#[tauri::command]
 pub fn start_import(
     state: State<'_, AppState>,
     app: AppHandle,
     path: String,
+    importer_id: Option<String>,
 ) -> Result<String, String> {
     let input_path = PathBuf::from(&path);
     if !input_path.exists() {
         return Err(format!("路径不存在: {}", input_path.display()));
     }
 
+    if let Some(ref id) = importer_id {
+        if default_importer_registry().by_id(id).is_none() {
+            return Err(format!("未知数据源: {id}"));
+        }
+    }
+
     let job_id = Uuid::new_v4().to_string();
-    let job = ImportJob::new(job_id.clone(), path);
+    let mut job = ImportJob::new(job_id.clone(), path);
+    job.importer_id = importer_id;
     spawn_import_job(app, state.import_jobs.clone(), state.db_path.clone(), job);
     Ok(job_id)
 }

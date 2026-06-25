@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter};
 use crate::application::{import_job_store::SharedImportJobStore, run_import_resolved};
 use crate::db::Database;
 use crate::domain::models::{ImportJob, ImportProgress, SourceInfo};
-use crate::infrastructure::archive::resolve_import_path;
+use crate::infrastructure::archive::{resolve_import_path, resolve_import_path_for_importer};
 use crate::infrastructure::importers::default_importer_registry;
 use crate::models::{ImportJobView, ImportProgressEvent};
 
@@ -18,6 +18,7 @@ pub fn spawn_import_job(
 ) {
     let job_id = job.id.clone();
     let source_path = job.source_path.clone();
+    let importer_id = job.importer_id.clone();
 
     {
         let mut registry = store
@@ -47,10 +48,19 @@ pub fn spawn_import_job(
         });
 
         let outcome = (|| {
-            let resolved = resolve_import_path(
-                std::path::Path::new(&source_path),
-                Some(progress.clone()),
-            )?;
+            let resolved = if let Some(ref id) = importer_id {
+                resolve_import_path_for_importer(
+                    std::path::Path::new(&source_path),
+                    id,
+                    &default_importer_registry(),
+                    Some(progress.clone()),
+                )?
+            } else {
+                resolve_import_path(
+                    std::path::Path::new(&source_path),
+                    Some(progress.clone()),
+                )?
+            };
 
             let importer_registry = default_importer_registry();
             let importer = importer_registry

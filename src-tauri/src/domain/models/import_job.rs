@@ -38,6 +38,8 @@ pub struct ImportProgress {
 pub struct ImportJob {
     pub id: String,
     pub source_path: String,
+    /// 用户通过导入向导指定的 Importer；为空时回退为自动检测。
+    pub importer_id: Option<String>,
     pub resolved_path: Option<String>,
     pub status: ImportJobStatus,
     pub phase: String,
@@ -53,6 +55,7 @@ impl ImportJob {
         Self {
             id: id.into(),
             source_path: source_path.into(),
+            importer_id: None,
             resolved_path: None,
             status: ImportJobStatus::Pending,
             phase: String::new(),

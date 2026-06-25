@@ -2,8 +2,8 @@ use super::attachments::resolve_imported_attachments;
 use super::{find_conversation_files, load_project_name_index, parse_conversation_file};
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
-    ImportDetectResult, ImportInput, ImportOptions, ImportPackage, ImportPreview, Importer,
-    NormalizedImportResult,
+    ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
+    ImportPreview, Importer, NormalizedImportResult,
 };
 use crate::infrastructure::media::MediaIndex;
 
@@ -31,6 +31,46 @@ impl Importer for ChatGptImporter {
 
     fn version(&self) -> &'static str {
         "0.1.0"
+    }
+
+    fn import_guide(&self) -> ImportGuide {
+        ImportGuide {
+            importer_id: self.id().to_string(),
+            source: self.source().as_str().to_string(),
+            display_name: "ChatGPT".to_string(),
+            description: "OpenAI 官方数据导出（Settings → Data controls → Export）".to_string(),
+            support_status: "stable".to_string(),
+            support_summary: "ZIP / 解压目录".to_string(),
+            recognition_hint: "ChatLens 会查找 conversations.json 或 conversations-*.json；\
+                               可选还有 user.json、projects.json 及图片附件。"
+                .to_string(),
+            methods: vec![
+                ImportMethodGuide {
+                    id: "directory".to_string(),
+                    label: "选择解压后的导出目录".to_string(),
+                    kind: "directory".to_string(),
+                    dialog_title: "选择 ChatGPT 导出目录".to_string(),
+                    extensions: Vec::new(),
+                    hint: "选择已解压的文件夹，应包含 conversations.json 或 conversations-*.json。"
+                        .to_string(),
+                    example_path: None,
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+                ImportMethodGuide {
+                    id: "zip".to_string(),
+                    label: "选择原始 ZIP 导出包".to_string(),
+                    kind: "file".to_string(),
+                    dialog_title: "选择 ChatGPT 导出 ZIP".to_string(),
+                    extensions: vec!["zip".to_string()],
+                    hint: "直接选择从 OpenAI 下载的 .zip 导出包，ChatLens 会自动解压并导入。"
+                        .to_string(),
+                    example_path: None,
+                    detected_default_path: None,
+                    detected_default_label: None,
+                },
+            ],
+        }
     }
 
     fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
