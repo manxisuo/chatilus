@@ -91,7 +91,56 @@ const STOPWORDS = new Set([
   "问题",
   "帮忙",
   "关于",
+  "使用",
+  "生成",
+  "帮我",
+  "看一下",
+  "主题要",
+  "主题",
+  "一下",
+  "这个",
+  "那个",
+  "能否",
+  "是否",
+  "告诉",
+  "适合",
+  "一篇",
+  "需要",
+  "想要",
+  "东西",
+  "内容",
+  "方法",
+  "方案",
+  "情况",
+  "意思",
+  "名字",
+  "文件",
+  "程序",
+  "功能",
+  "版本",
+  "模式",
+  "deepseek",
 ]);
+
+/** 纯中文标题片段超过此长度时视为整句碎片，不作为话题。 */
+const MAX_CJK_TOKEN_LENGTH = 8;
+
+/** 常见自动标题 / 指令前缀，匹配则丢弃该片段。 */
+const LOW_QUALITY_PREFIXES = [
+  "请生成",
+  "请写",
+  "请帮",
+  "请帮我",
+  "帮我看",
+  "帮我",
+  "看一下",
+  "生成一",
+  "写一篇",
+  "一篇适",
+  "能否帮",
+  "是否可以",
+  "麻烦",
+];
 
 const TITLE_TOKEN_PATTERN = /[\u4e00-\u9fff]{2,}|[a-zA-Z][a-zA-Z0-9_-]{1,}/g;
 
@@ -116,6 +165,28 @@ export function isSameTopicFilter(
   return left.kind === right.kind && left.label === right.label;
 }
 
+function isLowQualityKeyword(token: string): boolean {
+  const key = token.toLowerCase();
+  if (STOPWORDS.has(key) || STOPWORDS.has(token)) {
+    return true;
+  }
+
+  if (/^[\u4e00-\u9fff]+$/.test(token) && token.length > MAX_CJK_TOKEN_LENGTH) {
+    return true;
+  }
+
+  if (LOW_QUALITY_PREFIXES.some((prefix) => token.startsWith(prefix))) {
+    return true;
+  }
+
+  // 「小学高年级的」这类标题切片
+  if (/^[\u4e00-\u9fff]+的$/.test(token) && token.length >= 4) {
+    return true;
+  }
+
+  return false;
+}
+
 export function extractTitleKeywords(title: string): string[] {
   const matches = title.match(TITLE_TOKEN_PATTERN) ?? [];
   const unique = new Set<string>();
@@ -123,8 +194,7 @@ export function extractTitleKeywords(title: string): string[] {
   for (const raw of matches) {
     const token = raw.trim();
     if (token.length < 2) continue;
-    const key = token.toLowerCase();
-    if (STOPWORDS.has(key) || STOPWORDS.has(token)) continue;
+    if (isLowQualityKeyword(token)) continue;
     unique.add(token);
   }
 

@@ -89,7 +89,7 @@ const sourceRows = computed(() => {
       </section>
 
       <section class="insight-section">
-        <h4 class="section-label">主要话题</h4>
+        <h4 class="section-label" title="根据本月对话标题与标签统计">标题话题</h4>
         <el-skeleton v-if="loading && topics.length === 0" animated :rows="3" />
         <p v-else-if="topics.length === 0" class="empty-topics">暂无足够数据提取话题</p>
         <div v-else class="topic-bubbles">
