@@ -362,6 +362,13 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 - [x] 共享附件解析迁至 `infrastructure/attachments/`（`resolve_imported_attachments` 等）
 - [ ] 前端展示统一：`MessageView` 角色标签改用 `sourceLabel`；`sourceContext` 中 ChatGPT `g-p` 项目名等特殊文案收拢到 `dataSource` / `sourceContext` 工具（去掉 Cursor system 等散落分支）
 
+### 数据库 schema（发布前策略）
+
+- [x] 保留 `meta.schema_version` + `run_migrations` 框架，**当前 `CURRENT_SCHEMA_VERSION = 1`**
+- [x] 删除 v1～v9 历史增量脚本；完整表结构在 `schema.rs` 一次性初始化
+- **发布前**：改表结构后**删除 `chatlens.db` 并重新导入**；若版本不匹配，应用会报错提示而非自动升级
+- **正式发布后**：递增 `CURRENT_SCHEMA_VERSION`，在 `migration.rs` 新增 `migrate_vN` 做存量用户原地升级
+
 ### 架构收敛（已完成，PR 1–5）
 
 轻量收敛，每步可独立合并、UI 行为不变。双轨运行：domain 模型与 View DTO 并存，经 mapper 转换。
@@ -408,7 +415,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 | key | TEXT PK | 如 `schema_version`、`app_version` |
 | value | TEXT | 版本号或元数据 |
 
-用于统一 `v4 → v6` 等 schema 迁移，替代零散 `ALTER TABLE`。当前版本：**6**（含 `assets` 物化）。
+用于记录 `schema_version`、`app_version`。当前版本：**1**（发布前 squash；改 schema 请删库重导。正式发布后在此递增并添加 `migrate_vN`）。
 
 ### conversations
 
