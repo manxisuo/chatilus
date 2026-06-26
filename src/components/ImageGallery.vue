@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages, countImages } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
+import GalleryThumb from "./GalleryThumb.vue";
 import SourceNav from "./SourceNav.vue";
 import InspectorSection from "./InspectorSection.vue";
 import type { ImageGalleryItem, SourceCount } from "../types";
@@ -34,6 +35,9 @@ const emit = defineEmits<{
 const { t, locale } = useI18n();
 
 const PAGE_SIZE = 60;
+const LOAD_MORE_THRESHOLD = 160;
+const AT_BOTTOM_THRESHOLD = 4;
+const WHEEL_BOTTOM_COOLDOWN_MS = 400;
 const images = ref<ImageGalleryItem[]>([]);
 const scopedTotal = ref<number | null>(null);
 const loading = ref(false);
@@ -44,6 +48,74 @@ const lightboxVisible = ref(false);
 const lightboxIndex = ref(0);
 const selectedIndex = ref<number | null>(null);
 const imageSrcCache = reactive<Record<string, string>>({});
+const IMAGE_LOAD_FAILED = "__load_failed__";
+const IMAGE_FALLBACK_CONCURRENCY = 4;
+const scrollContainerRef = ref<HTMLElement | null>(null);
+const nextOffset = ref(0);
+let prefetchUntilScrollable = false;
+let prefetchPages = 0;
+let wasNearBottom = false;
+let wheelBottomCooldownUntil = 0;
+
+type ScrollAnchor = {
+  atBottom: boolean;
+  scrollTop: number;
+  scrollHeight: number;
+};
+
+function maxScrollTop(el: HTMLElement): number {
+  return Math.max(0, el.scrollHeight - el.clientHeight);
+}
+
+function distanceFromBottom(el: HTMLElement): number {
+  return maxScrollTop(el) - el.scrollTop;
+}
+
+function isNearBottom(el: HTMLElement): boolean {
+  const maxScroll = maxScrollTop(el);
+  if (maxScroll <= 0) return false;
+  return distanceFromBottom(el) <= LOAD_MORE_THRESHOLD;
+}
+
+function isAtBottom(el: HTMLElement): boolean {
+  const maxScroll = maxScrollTop(el);
+  if (maxScroll <= 0) return false;
+  return distanceFromBottom(el) <= AT_BOTTOM_THRESHOLD;
+}
+
+function canLoadMore(): boolean {
+  return hasMore.value && !loading.value && !loadingMore.value;
+}
+
+function tryLoadMore() {
+  if (!canLoadMore()) return;
+  void loadImages(false);
+}
+
+function needsFillViewport(el: HTMLElement): boolean {
+  return maxScrollTop(el) <= 0;
+}
+
+function restoreScrollAfterAppend(anchor: ScrollAnchor | null) {
+  if (!anchor) return;
+  const el = scrollContainerRef.value;
+  if (!el) return;
+
+  if (anchor.atBottom) {
+    el.scrollTop = maxScrollTop(el);
+  } else {
+    const heightDelta = el.scrollHeight - anchor.scrollHeight;
+    if (heightDelta > 0) {
+      el.scrollTop = anchor.scrollTop + heightDelta;
+    }
+  }
+}
+
+function scheduleScrollRestore(anchor: ScrollAnchor | null) {
+  requestAnimationFrame(() => {
+    restoreScrollAfterAppend(anchor);
+  });
+}
 
 const selectedImage = computed(() =>
   selectedIndex.value != null ? images.value[selectedIndex.value] ?? null : null,
@@ -119,29 +191,6 @@ const statsText = computed(() => {
   return t("gallery.stats.pair", { generated, upload });
 });
 
-const lightboxImages = computed(() =>
-  images.value.map((item) => ({
-    path: item.path,
-    fileKey: item.file_key,
-  })),
-);
-
-const lightboxCaptions = computed(() =>
-  images.value.map((item) => {
-    const source =
-      item.source === "generated"
-        ? t("gallery.source.generated")
-        : item.source === "upload"
-          ? t("gallery.source.upload")
-          : t("gallery.source.image");
-    const prompt = item.prompt?.trim();
-    if (prompt) {
-      return `${source} · ${item.conversation_title}\n${prompt}`;
-    }
-    return `${source} · ${item.conversation_title}`;
-  }),
-);
-
 const footerText = computed(() => {
   if (loadingMore.value) return t("gallery.listFooter.loading");
   if (hasMore.value) {
@@ -154,7 +203,7 @@ const footerText = computed(() => {
     }
     return t("gallery.listFooter.loadMore", { loaded: images.value.length });
   }
-  const total = visibleTotal.value ?? images.value.length;
+  const total = images.value.length;
   return t("gallery.listFooter.total", { total });
 });
 
@@ -227,7 +276,8 @@ function timeGroupSort(key: string): number {
       return 9999;
     default:
       if (key.startsWith("month:")) {
-        return 1000 - Number(key.slice(6).replace("-", ""));
+        // After this-week; larger YYYYMM → smaller rank so newer months appear first.
+        return 1_000_000 - Number(key.slice(6).replace("-", ""));
       }
       return 5000;
   }
@@ -255,24 +305,103 @@ const imageGroups = computed(() => {
     }));
 });
 
-const lightboxConversationIds = computed(() =>
-  images.value.map((item) => item.conversation_id),
+const displayOrderedItems = computed(() =>
+  imageGroups.value.flatMap((group) => group.items),
 );
 
-function imageSrc(path: string) {
-  if (!imageSrcCache[path]) {
-    imageSrcCache[path] = convertFileSrc(path);
-  }
-  return imageSrcCache[path];
+function arrayIndexToDisplayIndex(arrayIndex: number): number {
+  const displayIndex = displayOrderedItems.value.findIndex(
+    (entry) => entry.index === arrayIndex,
+  );
+  return displayIndex >= 0 ? displayIndex : arrayIndex;
 }
 
-async function onImageError(path: string) {
-  if (imageSrcCache[path]?.startsWith("data:")) return;
-  try {
-    imageSrcCache[path] = await readImageDataUrl(path);
-  } catch {
-    imageSrcCache[path] = "";
+const lightboxImages = computed(() =>
+  displayOrderedItems.value.map(({ item }) => ({
+    path: item.path,
+    fileKey: item.file_key,
+  })),
+);
+
+const lightboxCaptions = computed(() =>
+  displayOrderedItems.value.map(({ item }) => {
+    const source =
+      item.source === "generated"
+        ? t("gallery.source.generated")
+        : item.source === "upload"
+          ? t("gallery.source.upload")
+          : t("gallery.source.image");
+    const prompt = item.prompt?.trim();
+    if (prompt) {
+      return `${source} · ${item.conversation_title}\n${prompt}`;
+    }
+    return `${source} · ${item.conversation_title}`;
+  }),
+);
+
+const lightboxConversationIds = computed(() =>
+  displayOrderedItems.value.map(({ item }) => item.conversation_id),
+);
+
+let imageFallbackActive = 0;
+const imageFallbackQueue: Array<() => void> = [];
+const imageFallbackPending = new Set<string>();
+
+function clearImageSrcCache() {
+  for (const key of Object.keys(imageSrcCache)) {
+    delete imageSrcCache[key];
   }
+  imageFallbackPending.clear();
+}
+
+function enqueueImageFallback(task: () => Promise<void>) {
+  const run = () => {
+    imageFallbackActive += 1;
+    void task().finally(() => {
+      imageFallbackActive -= 1;
+      const next = imageFallbackQueue.shift();
+      if (next) next();
+    });
+  };
+
+  if (imageFallbackActive < IMAGE_FALLBACK_CONCURRENCY) {
+    run();
+  } else {
+    imageFallbackQueue.push(run);
+  }
+}
+
+function imageLoadFailed(path: string): boolean {
+  return !path || imageSrcCache[path] === IMAGE_LOAD_FAILED;
+}
+
+function imageSrc(path: string) {
+  if (!path) return "";
+  const cached = imageSrcCache[path];
+  if (cached && cached !== IMAGE_LOAD_FAILED) {
+    return cached;
+  }
+  const src = convertFileSrc(path);
+  imageSrcCache[path] = src;
+  return src;
+}
+
+function onImageError(path: string) {
+  if (!path) return;
+  const cached = imageSrcCache[path];
+  if (typeof cached === "string" && cached.startsWith("data:")) return;
+  if (cached === IMAGE_LOAD_FAILED || imageFallbackPending.has(path)) return;
+
+  imageFallbackPending.add(path);
+  enqueueImageFallback(async () => {
+    try {
+      imageSrcCache[path] = await readImageDataUrl(path);
+    } catch {
+      imageSrcCache[path] = IMAGE_LOAD_FAILED;
+    } finally {
+      imageFallbackPending.delete(path);
+    }
+  });
 }
 
 async function refreshScopedTotal() {
@@ -288,21 +417,58 @@ async function refreshScopedTotal() {
   );
 }
 
+async function maybePrefetchUntilScrollable() {
+  if (!prefetchUntilScrollable || !hasMore.value || loading.value || loadingMore.value) {
+    return;
+  }
+
+  await nextTick();
+  const el = scrollContainerRef.value;
+  if (!el || !needsFillViewport(el)) {
+    prefetchUntilScrollable = false;
+    return;
+  }
+
+  if (prefetchPages >= 3) {
+    prefetchUntilScrollable = false;
+    return;
+  }
+
+  prefetchPages += 1;
+  await loadImages(false);
+  void maybePrefetchUntilScrollable();
+}
+
 async function loadImages(reset = true) {
   if (reset) {
     if (loading.value) return;
     loading.value = true;
     hasMore.value = true;
+    clearImageSrcCache();
+    nextOffset.value = 0;
+    wasNearBottom = false;
+    wheelBottomCooldownUntil = 0;
+    prefetchUntilScrollable = true;
+    prefetchPages = 0;
   } else {
     if (loading.value || loadingMore.value || !hasMore.value) return;
     loadingMore.value = true;
   }
 
+  const scrollAnchor: ScrollAnchor | null =
+    !reset && scrollContainerRef.value
+      ? {
+          atBottom: isNearBottom(scrollContainerRef.value),
+          scrollTop: scrollContainerRef.value.scrollTop,
+          scrollHeight: scrollContainerRef.value.scrollHeight,
+        }
+      : null;
+
   try {
     if (reset) {
       await refreshScopedTotal();
     }
-    const offset = reset ? 0 : images.value.length;
+    const offset = nextOffset.value;
     const batch = await listImages(
       PAGE_SIZE,
       offset,
@@ -311,39 +477,70 @@ async function loadImages(reset = true) {
       props.filterMonth,
       props.filterConversationId,
     );
+    nextOffset.value = offset + batch.length;
 
     if (reset) {
       images.value = batch;
     } else {
-      const existing = new Set(images.value.map((item) => `${item.message_id}:${item.path}`));
+      const existing = new Set(images.value.map((item) => galleryItemCacheKey(item)));
       images.value = [
         ...images.value,
-        ...batch.filter((item) => !existing.has(`${item.message_id}:${item.path}`)),
+        ...batch.filter((item) => !existing.has(galleryItemCacheKey(item))),
       ];
     }
 
     if (scopedTotal.value != null) {
-      hasMore.value = images.value.length < scopedTotal.value;
+      hasMore.value = nextOffset.value < scopedTotal.value;
     } else {
-      hasMore.value = batch.length === PAGE_SIZE;
+      const listTotal = visibleTotal.value;
+      hasMore.value =
+        listTotal != null
+          ? nextOffset.value < listTotal
+          : batch.length === PAGE_SIZE;
     }
   } finally {
     loading.value = false;
     loadingMore.value = false;
+
+    if (reset) {
+      await nextTick();
+      void maybePrefetchUntilScrollable();
+      return;
+    }
+
+    await nextTick();
+    scheduleScrollRestore(scrollAnchor);
   }
 }
 
-function onScroll(event: Event) {
-  if (!hasMore.value || loading.value || loadingMore.value) return;
-  const el = event.target as HTMLElement;
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 160) {
-    loadImages(false);
+function onScroll() {
+  prefetchUntilScrollable = false;
+
+  const el = scrollContainerRef.value;
+  if (!el) return;
+
+  const nearBottom = isNearBottom(el);
+  if (nearBottom && !wasNearBottom) {
+    tryLoadMore();
   }
+  wasNearBottom = nearBottom;
 }
 
-function openLightbox(index: number) {
-  selectedIndex.value = index;
-  lightboxIndex.value = index;
+function onWheel(event: WheelEvent) {
+  if (event.deltaY <= 0) return;
+
+  const el = scrollContainerRef.value;
+  if (!el || !isAtBottom(el) || !wasNearBottom) return;
+  if (!canLoadMore()) return;
+  if (Date.now() < wheelBottomCooldownUntil) return;
+
+  wheelBottomCooldownUntil = Date.now() + WHEEL_BOTTOM_COOLDOWN_MS;
+  tryLoadMore();
+}
+
+function openLightbox(arrayIndex: number) {
+  selectedIndex.value = arrayIndex;
+  lightboxIndex.value = arrayIndexToDisplayIndex(arrayIndex);
   lightboxVisible.value = true;
 }
 
@@ -408,7 +605,13 @@ onMounted(() => {
         "
       />
 
-      <div v-else class="grid-scroll" @scroll.passive="onScroll">
+      <div
+        v-else
+        ref="scrollContainerRef"
+        class="grid-scroll"
+        @scroll.passive="onScroll"
+        @wheel.passive="onWheel"
+      >
         <section
           v-for="group in imageGroups"
           :key="group.key"
@@ -428,14 +631,15 @@ onMounted(() => {
                 type="button"
                 @click.stop="openLightbox(index)"
               >
-                <img
-                  v-if="imageSrcCache[item.path] !== ''"
-                  :src="imageSrc(item.path)"
+                <GalleryThumb
+                  :path="item.path"
                   :alt="item.file_key"
-                  loading="lazy"
-                  @error="onImageError(item.path)"
+                  :scroll-root="scrollContainerRef"
+                  :load-failed="imageLoadFailed"
+                  :resolve-src="imageSrc"
+                  :on-image-error="onImageError"
+                  :missing-label="t('gallery.loadFailed')"
                 />
-                <div v-else class="thumb-missing">{{ t("gallery.loadFailed") }}</div>
               </button>
               <div class="card-meta">
                 <div class="card-title">{{ item.conversation_title }}</div>
@@ -460,9 +664,10 @@ onMounted(() => {
         <h3 class="inspector-title">{{ t("gallery.inspector.title") }}</h3>
         <div class="inspector-preview">
           <img
-            v-if="imageSrcCache[selectedImage.path] !== ''"
+            v-if="!imageLoadFailed(selectedImage.path)"
             :src="imageSrc(selectedImage.path)"
             :alt="selectedImage.file_key"
+            decoding="async"
             @error="onImageError(selectedImage.path)"
           />
         </div>
@@ -685,25 +890,7 @@ onMounted(() => {
   width: 100%;
   border: 1px solid var(--cl-border-subtle);
   flex-shrink: 0;
-}
-
-.thumb-btn img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
   display: block;
-  background: var(--cl-bg);
-}
-
-.thumb-missing {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: var(--cl-text-muted);
-  background: var(--cl-selected);
 }
 
 .card-meta {
