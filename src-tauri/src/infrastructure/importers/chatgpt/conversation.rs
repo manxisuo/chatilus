@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use crate::domain::ports::{ImportedAttachment, ImportedConversation, ImportedMessage, ImportedSourceContext};
+use crate::infrastructure::media::normalize_file_key;
 
 use super::projects::{is_chatgpt_project_id, resolve_project_name, ProjectNameIndex};
 
@@ -32,7 +33,7 @@ pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<Importe
         infos.extend(extract_attachment_infos_from_content(content, role));
     }
     for pointer in extract_message_attachments(&message) {
-        if infos.iter().any(|item| item.pointer == pointer) {
+        if attachment_pointer_seen(&infos, &pointer) {
             continue;
         }
         infos.push(ImportedAttachment {
@@ -42,8 +43,7 @@ pub fn extract_attachment_infos_from_message_json(raw_json: &str) -> Vec<Importe
             path: None,
         });
     }
-    infos.sort_by(|a, b| a.pointer.cmp(&b.pointer));
-    infos.dedup_by(|a, b| a.pointer == b.pointer);
+    dedupe_imported_attachments(&mut infos);
     infos
 }
 
@@ -315,7 +315,7 @@ fn parse_message(message: &Value) -> Option<ImportedMessage> {
     let raw_json = message.to_string();
     let mut attachments = extract_attachment_infos_from_content(content_value, &role);
     for pointer in extract_message_attachments(message) {
-        if attachments.iter().any(|item| item.pointer == pointer) {
+        if attachment_pointer_seen(&attachments, &pointer) {
             continue;
         }
         attachments.push(ImportedAttachment {
@@ -325,8 +325,7 @@ fn parse_message(message: &Value) -> Option<ImportedMessage> {
             path: None,
         });
     }
-    attachments.sort_by(|a, b| a.pointer.cmp(&b.pointer));
-    attachments.dedup_by(|a, b| a.pointer == b.pointer);
+    dedupe_imported_attachments(&mut attachments);
 
     Some(ImportedMessage {
         id,
@@ -466,6 +465,22 @@ fn extract_message_attachments(message: &Value) -> Vec<String> {
     pointers
 }
 
+fn attachment_pointer_seen(attachments: &[ImportedAttachment], pointer: &str) -> bool {
+    let key = normalize_file_key(pointer);
+    attachments
+        .iter()
+        .any(|item| normalize_file_key(&item.pointer) == key)
+}
+
+fn dedupe_imported_attachments(attachments: &mut Vec<ImportedAttachment>) {
+    attachments.sort_by(|a, b| {
+        normalize_file_key(&a.pointer).cmp(&normalize_file_key(&b.pointer))
+    });
+    attachments.dedup_by(|a, b| {
+        normalize_file_key(&a.pointer) == normalize_file_key(&b.pointer)
+    });
+}
+
 fn collect_attachment_ids(value: &Value, out: &mut Vec<String>) {
     match value {
         Value::String(text) => out.push(text.clone()),
@@ -484,6 +499,28 @@ fn collect_attachment_ids(value: &Value, out: &mut Vec<String>) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn dedupes_duplicate_attachment_pointers() {
+        let raw = r#"{
+            "id": "m1",
+            "author": { "role": "user" },
+            "content": {
+                "content_type": "multimodal_text",
+                "parts": [{
+                    "content_type": "image_asset_pointer",
+                    "asset_pointer": "file-service://file-abc123"
+                }]
+            },
+            "metadata": {
+                "attachments": [{ "id": "file-abc123" }]
+            },
+            "create_time": 1.0
+        }"#;
+        let infos = extract_attachment_infos_from_message_json(raw);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].pointer, "file-service://file-abc123");
+    }
 
     #[test]
     fn extracts_project_from_conversation_template_id() {

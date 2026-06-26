@@ -180,7 +180,7 @@ mod tests {
     use crate::infrastructure::importers::chatgpt::find_conversation_files;
 
     fn sample_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载-2026年5月18日\2026-05-16-12-08-35")
+        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35")
     }
 
     #[test]

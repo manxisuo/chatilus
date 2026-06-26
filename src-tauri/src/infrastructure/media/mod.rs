@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn resolves_real_export_files() {
-        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载-2026年5月18日\2026-05-16-12-08-35");
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35");
         if !dir.is_dir() {
             return;
         }

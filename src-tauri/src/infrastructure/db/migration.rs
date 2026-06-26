@@ -1,5 +1,7 @@
 use rusqlite::{params, Connection};
 
+use super::asset_index::backfill_all_assets;
+
 /// Current database schema version.
 ///
 /// Pre-release policy: only v1 exists. Bump this and add `migrate_vN` when shipping
@@ -30,6 +32,20 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<(), String> {
         }
     }
     upsert_meta(conn, "app_version", env!("CARGO_PKG_VERSION"))?;
+    maybe_rebuild_assets_path_dedupe(conn)?;
+    Ok(())
+}
+
+fn maybe_rebuild_assets_path_dedupe(conn: &Connection) -> Result<(), String> {
+    if read_meta(conn, "assets_path_dedupe_v1")?.as_deref() == Some("1") {
+        return Ok(());
+    }
+
+    if table_exists(conn, "assets")? && table_exists(conn, "messages")? {
+        backfill_all_assets(conn)?;
+    }
+
+    upsert_meta(conn, "assets_path_dedupe_v1", "1")?;
     Ok(())
 }
 

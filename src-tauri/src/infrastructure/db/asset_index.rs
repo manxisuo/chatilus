@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rusqlite::{params, Connection};
 
 use crate::models::AttachmentView;
@@ -71,7 +73,9 @@ pub(crate) fn reindex_conversation_assets(
         let (message_id, role, create_time, attachments) =
             row.map_err(|e| format!("读取消息附件失败: {e}"))?;
 
-        let attachment_views = parse_stored_attachments(attachments.as_deref());
+        let attachment_views = dedupe_attachment_views(parse_stored_attachments(
+            attachments.as_deref(),
+        ));
 
         for attachment in attachment_views {
             insert_asset_row(
@@ -124,6 +128,14 @@ fn parse_stored_attachments(attachments: Option<&str>) -> Vec<AttachmentView> {
         .unwrap_or_default()
         .into_iter()
         .filter(|item| !item.path.trim().is_empty())
+        .collect()
+}
+
+fn dedupe_attachment_views(attachments: Vec<AttachmentView>) -> Vec<AttachmentView> {
+    let mut seen_paths = HashSet::new();
+    attachments
+        .into_iter()
+        .filter(|item| seen_paths.insert(item.path.to_ascii_lowercase()))
         .collect()
 }
 
