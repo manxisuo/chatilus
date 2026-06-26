@@ -1,5 +1,8 @@
 mod conversation;
+mod format;
+mod import_export;
 mod importer;
+mod importer_v1;
 mod projects;
 
 pub use conversation::{
@@ -7,8 +10,10 @@ pub use conversation::{
     extract_pointers_from_message_json, parse_conversation,
     ParsedAttachment, ParsedConversation, ParsedMessage,
 };
-pub use projects::{load_project_name_index, ProjectNameIndex};
+pub use format::is_manifest_v1_export;
 pub use importer::ChatGptImporter;
+pub use importer_v1::ChatGptV1Importer;
+pub use projects::{load_project_name_index, ProjectNameIndex};
 
 use std::fs;
 use std::path::{Path, PathBuf};

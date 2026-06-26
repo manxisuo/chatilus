@@ -199,8 +199,22 @@ fn is_image_filename(name: &str) -> bool {
 }
 
 /// `file-UZjt2wbMlSFQEdh6nzVVybgI-1000036297.jpg` → `file-UZjt2wbMlSFQEdh6nzVVybgI`
+/// `file-UZjt2wbMlSFQEdh6nzVVybgI.dat` → `file-UZjt2wbMlSFQEdh6nzVVybgI`
 fn pointer_key_from_filename(name: &str) -> Option<String> {
-    let base = name.split('#').next()?;
+    let mut base = name.split('#').next()?;
+    if let Some(stripped) = base
+        .rsplit_once('.')
+        .filter(|(_, ext)| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "dat" | "jpg" | "jpeg" | "png" | "webp" | "gif" | "bmp"
+            )
+        })
+        .map(|(stem, _)| stem)
+    {
+        base = stripped;
+    }
+
     let prefix = if base.starts_with("file-") {
         "file-"
     } else if base.starts_with("file_") {
@@ -463,6 +477,23 @@ mod tests {
                 "file-jYOPKSz8VPyhHyfrastQCE3H-a58a2745-a096-44f3-8760-672a20fcd42a653372494411067361"
             ),
             Some("file-jYOPKSz8VPyhHyfrastQCE3H".to_string())
+        );
+    }
+
+    #[test]
+    fn pointer_key_from_dat_name() {
+        assert_eq!(
+            pointer_key_from_filename("file-UZjt2wbMlSFQEdh6nzVVybgI.dat"),
+            Some("file-UZjt2wbMlSFQEdh6nzVVybgI".to_string())
+        );
+        assert_eq!(
+            pointer_key_from_filename(
+                "file_19f84c3545d0303c2e49c0d6971ceb38395159a8cb10a5b7ba7dcc96e8dcc9b1df462079404e2aa8e6e8de6740b5d9d4.dat"
+            ),
+            Some(
+                "file_19f84c3545d0303c2e49c0d6971ceb38395159a8cb10a5b7ba7dcc96e8dcc9b1df462079404e2aa8e6e8de6740b5d9d4"
+                    .to_string()
+            )
         );
     }
 

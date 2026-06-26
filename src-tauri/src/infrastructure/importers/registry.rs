@@ -125,7 +125,16 @@ impl ImporterRegistry {
     pub fn list_import_guides(&self) -> Vec<ImportGuide> {
         use super::import_guide_enrich::enrich_import_guide;
 
-        const ORDER: &[&str] = &["chatgpt", "deepseek", "copilot", "grok", "cursor", "codex", "gemini"];
+        const ORDER: &[&str] = &[
+            "chatgpt-v1",
+            "chatgpt",
+            "deepseek",
+            "copilot",
+            "grok",
+            "cursor",
+            "codex",
+            "gemini",
+        ];
         ORDER
             .iter()
             .filter_map(|id| {
@@ -149,8 +158,8 @@ impl ImporterRegistry {
 
 pub fn default_importer_registry() -> ImporterRegistry {
     use super::{
-        ChatGptImporter, CodexImporter, CopilotImporter, CursorImporter, DeepSeekImporter,
-        GeminiImporter, GrokImporter,
+        ChatGptImporter, ChatGptV1Importer, CodexImporter, CopilotImporter, CursorImporter,
+        DeepSeekImporter, GeminiImporter, GrokImporter,
     };
 
     ImporterRegistry::new(vec![
@@ -159,6 +168,7 @@ pub fn default_importer_registry() -> ImporterRegistry {
         Box::new(GeminiImporter::new()),
         Box::new(GrokImporter::new()),
         Box::new(DeepSeekImporter::new()),
+        Box::new(ChatGptV1Importer::new()),
         Box::new(ChatGptImporter::new()),
         Box::new(CursorImporter::new()),
     ])
@@ -179,11 +189,47 @@ mod tests {
         let guides = registry.list_import_guides();
         assert_eq!(
             guides.iter().map(|guide| guide.importer_id.as_str()).collect::<Vec<_>>(),
-            vec!["chatgpt", "deepseek", "copilot", "grok", "cursor", "codex", "gemini"]
+            vec![
+                "chatgpt-v1",
+                "chatgpt",
+                "deepseek",
+                "copilot",
+                "grok",
+                "cursor",
+                "codex",
+                "gemini"
+            ]
         );
         assert!(guides.iter().all(|guide| !guide.methods.is_empty()));
         assert!(guides.iter().all(|guide| !guide.support_summary.is_empty()));
         assert!(guides.iter().all(|guide| !guide.recognition_hint.is_empty()));
+    }
+
+    #[test]
+    fn registry_rejects_manifest_v1_as_legacy_chatgpt() {
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26");
+        if !dir.is_dir() {
+            return;
+        }
+
+        let registry = default_importer_registry();
+        let importer = registry.by_id("chatgpt").expect("chatgpt importer");
+        let result = importer
+            .detect(&ImportInput { path: dir })
+            .expect("detect");
+        assert!(!result.matched);
+    }
+
+    #[test]
+    fn registry_detects_manifest_v1_export() {
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26");
+        if !dir.is_dir() {
+            return;
+        }
+
+        let registry = default_importer_registry();
+        let result = registry.detect(&dir).expect("detect");
+        assert_eq!(result.importer_id, "chatgpt-v1");
     }
 
     #[test]

@@ -8,7 +8,7 @@ pub mod grok;
 mod import_guide_enrich;
 mod registry;
 
-pub use chatgpt::ChatGptImporter;
+pub use chatgpt::{ChatGptImporter, ChatGptV1Importer};
 pub use codex::CodexImporter;
 pub use copilot::CopilotImporter;
 pub use cursor::CursorImporter;
