@@ -529,6 +529,19 @@ function onWheel(event: WheelEvent) {
   tryLoadMore();
 }
 
+async function onLightboxLoadMore() {
+  if (!lightboxVisible.value || !canLoadMore()) return;
+
+  const prevLength = displayOrderedItems.value.length;
+  await loadImages(false);
+  await nextTick();
+
+  if (!lightboxVisible.value) return;
+  if (displayOrderedItems.value.length > prevLength) {
+    lightboxIndex.value = prevLength;
+  }
+}
+
 function openLightbox(arrayIndex: number) {
   selectedIndex.value = arrayIndex;
   lightboxIndex.value = arrayIndexToDisplayIndex(arrayIndex);
@@ -710,7 +723,10 @@ onMounted(() => {
       :on-image-error="onImageError"
       :captions="lightboxCaptions"
       :conversation-ids="lightboxConversationIds"
+      :can-load-more="hasMore"
+      :loading-more="loadingMore"
       @open-conversation="openConversation"
+      @load-more="onLightboxLoadMore"
     />
   </div>
 </template>

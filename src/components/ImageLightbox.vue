@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, withDefaults } from "vue";
 import { useI18n } from "vue-i18n";
 
 export interface GalleryImage {
@@ -7,19 +7,28 @@ export interface GalleryImage {
   fileKey: string;
 }
 
-const props = defineProps<{
-  visible: boolean;
-  images: GalleryImage[];
-  initialIndex: number;
-  resolveSrc: (path: string) => string;
-  onImageError?: (path: string) => void;
-  captions?: string[];
-  conversationIds?: string[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    visible: boolean;
+    images: GalleryImage[];
+    initialIndex: number;
+    resolveSrc: (path: string) => string;
+    onImageError?: (path: string) => void;
+    captions?: string[];
+    conversationIds?: string[];
+    canLoadMore?: boolean;
+    loadingMore?: boolean;
+  }>(),
+  {
+    canLoadMore: false,
+    loadingMore: false,
+  },
+);
 
 const emit = defineEmits<{
   "update:visible": [value: boolean];
   openConversation: [conversationId: string];
+  loadMore: [];
 }>();
 
 const { t } = useI18n();
@@ -49,9 +58,27 @@ function openConversation() {
 }
 
 const canGoPrev = computed(() => currentIndex.value > 0);
-const canGoNext = computed(
-  () => currentIndex.value < props.images.length - 1,
+
+const atLastImage = computed(
+  () => props.images.length > 0 && currentIndex.value >= props.images.length - 1,
 );
+
+const canActivateNext = computed(
+  () => currentIndex.value < props.images.length - 1 || props.canLoadMore,
+);
+
+const nextDisabled = computed(
+  () => !canActivateNext.value || (props.loadingMore && atLastImage.value),
+);
+
+const nextAriaLabel = computed(() => {
+  if (atLastImage.value && props.canLoadMore) {
+    return props.loadingMore
+      ? t("gallery.listFooter.loading")
+      : t("gallery.lightboxLoadMore");
+  }
+  return t("common.next");
+});
 
 watch(
   () => props.visible,
@@ -84,8 +111,12 @@ function goPrev() {
 }
 
 function goNext() {
-  if (canGoNext.value) {
+  if (currentIndex.value < props.images.length - 1) {
     currentIndex.value += 1;
+    return;
+  }
+  if (props.canLoadMore && !props.loadingMore) {
+    emit("loadMore");
   }
 }
 
@@ -156,9 +187,10 @@ onUnmounted(() => {
 
       <button
         class="nav-btn next"
+        :class="{ loading: loadingMore && atLastImage }"
         type="button"
-        :aria-label="t('common.next')"
-        :disabled="!canGoNext"
+        :aria-label="nextAriaLabel"
+        :disabled="nextDisabled"
         @click.stop="goNext"
       >
         ›
@@ -175,7 +207,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
   padding: 24px;
   background: rgba(0, 0, 0, 0.88);
 }
@@ -184,7 +215,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: calc(100vw - 160px);
+  max-width: min(100%, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
 }
 
@@ -255,7 +286,10 @@ onUnmounted(() => {
 }
 
 .nav-btn {
-  flex-shrink: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
   width: 44px;
   height: 44px;
   border: none;
@@ -267,8 +301,21 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.nav-btn.prev {
+  left: max(16px, env(safe-area-inset-left, 0px));
+}
+
+.nav-btn.next {
+  right: max(16px, env(safe-area-inset-right, 0px));
+}
+
 .nav-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.22);
+}
+
+.nav-btn.next.loading {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .nav-btn:disabled {

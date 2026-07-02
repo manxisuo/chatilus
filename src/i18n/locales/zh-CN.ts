@@ -229,6 +229,7 @@ export default {
       loadMore: "已加载 {loaded} 张，继续下拉",
       total: "共 {total} 张图片",
     },
+    lightboxLoadMore: "加载更多图片",
   },
   starred: {
     empty: "暂无收藏消息，在对话中点击消息旁的 ☆ 即可收藏",

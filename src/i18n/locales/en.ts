@@ -229,6 +229,7 @@ export default {
       loadMore: "Loaded {loaded} — scroll for more",
       total: "{total} images total",
     },
+    lightboxLoadMore: "Load more images",
   },
   starred: {
     empty: "No starred messages. Click ☆ next to a message to star it.",
