@@ -321,7 +321,7 @@ const sourceRows = computed(() => {
   color: var(--el-color-primary);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1180px) {
   .month-insight {
     display: none;
   }

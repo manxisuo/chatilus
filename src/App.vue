@@ -49,7 +49,9 @@ import {
   setAppearance,
 } from "./utils/appearance";
 import { installDesktopBehaviors } from "./composables/useKeyboardShortcuts";
+import { useLayoutBreakpoints } from "./composables/useLayoutBreakpoints";
 import { setAppLocale } from "./i18n";
+import { LAYOUT_WIDTHS } from "./utils/layout";
 import {
   type AppLocale,
   formatDateTime,
@@ -103,6 +105,9 @@ const viewMode = ref<"chats" | "timeline" | "images">("chats");
 const galleryMonth = ref<string | null>(null);
 const galleryConversationId = ref<string | null>(null);
 const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
+const { showRightPanel, compactLeftPanel } = useLayoutBreakpoints();
+const conversationInfoDrawerVisible = ref(false);
+const insightPanelWidth = LAYOUT_WIDTHS.insight;
 
 const appearanceOptions = computed(() => [
   { value: "light" as const, label: t("appearance.light") },
@@ -784,12 +789,23 @@ async function handleSaveTags(tagIds: number[]) {
 }
 
 watch(activeId, async (id) => {
+  conversationInfoDrawerVisible.value = false;
   if (id) {
     await Promise.all([loadMessages(id), ensureConversationSummary(id)]);
   } else {
     messages.value = [];
     fetchedConversation.value = null;
   }
+});
+
+watch(showRightPanel, (visible) => {
+  if (visible) {
+    conversationInfoDrawerVisible.value = false;
+  }
+});
+
+watch(viewMode, () => {
+  conversationInfoDrawerVisible.value = false;
 });
 
 watch(
@@ -1006,7 +1022,15 @@ onMounted(async () => {
     </el-dialog>
 
     <el-container v-if="viewMode === 'chats'" class="body">
-      <el-aside class="sidebar" :style="{ width: 'var(--cl-sidebar-width)' }">
+      <el-aside
+        class="sidebar"
+        :class="{ compact: compactLeftPanel }"
+        :style="{
+          width: compactLeftPanel
+            ? 'var(--cl-sidebar-width-compact)'
+            : 'var(--cl-sidebar-width)',
+        }"
+      >
         <div v-if="!searchMode && !starredMessagesMode" class="sidebar-controls">
           <SourceNav
             :items="visibleSourceNavItems"
@@ -1207,12 +1231,14 @@ onMounted(async () => {
             :conversation-starred="displayConversation?.is_starred ?? false"
             :conversation-tags="displayConversation?.tags ?? []"
             :highlight-message-id="activeSearchHitId"
+            :show-info-button="!showRightPanel && !!displayConversation"
             @toggle-conversation-star="toggleConversationStar"
             @export-markdown="handleExportMarkdown"
             @toggle-message-star="toggleMessageStar"
+            @open-conversation-info="conversationInfoDrawerVisible = true"
           />
           <ConversationInfo
-            v-if="displayConversation"
+            v-if="displayConversation && showRightPanel"
             :conversation="displayConversation"
             :messages="messages"
           />
@@ -1248,6 +1274,22 @@ onMounted(async () => {
         @open-conversation="openConversationFromGallery"
       />
     </el-main>
+
+    <el-drawer
+      v-if="viewMode === 'chats'"
+      v-model="conversationInfoDrawerVisible"
+      :title="t('conversation.info')"
+      direction="rtl"
+      :size="insightPanelWidth"
+      append-to-body
+    >
+      <ConversationInfo
+        v-if="displayConversation"
+        variant="drawer"
+        :conversation="displayConversation"
+        :messages="messages"
+      />
+    </el-drawer>
 
     <TagDialog
       v-model:visible="tagDialogVisible"
@@ -1487,6 +1529,14 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+.sidebar.compact .sidebar-controls {
+  padding-inline: 6px;
+}
+
+.sidebar.compact .sidebar-section-title {
+  padding-inline: 8px;
+}
+
 .sidebar-controls {
   padding: 8px 8px 10px;
   border-bottom: 1px solid var(--cl-border-subtle);
@@ -1652,6 +1702,7 @@ onMounted(async () => {
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: var(--cl-main-min-width);
   overflow: hidden;
 }
 

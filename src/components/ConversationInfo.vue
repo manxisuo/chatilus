@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, withDefaults } from "vue";
 import { useI18n } from "vue-i18n";
 import InspectorSection from "./InspectorSection.vue";
 import type { ConversationSummary, MessageView } from "../types";
@@ -7,10 +7,14 @@ import { sourceLabel, sourceAccentColor } from "../utils/dataSource";
 import { formatSourceContextLine, sourceContextIdHint } from "../utils/sourceContext";
 import { type AppLocale, formatDateTime } from "../utils/locale";
 
-const props = defineProps<{
-  conversation: ConversationSummary;
-  messages: MessageView[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    conversation: ConversationSummary;
+    messages: MessageView[];
+    variant?: "panel" | "drawer";
+  }>(),
+  { variant: "panel" },
+);
 
 const { t, locale } = useI18n();
 
@@ -44,8 +48,12 @@ const timeSpan = computed(() => {
 </script>
 
 <template>
-  <aside class="conv-info" :aria-label="t('conversation.infoAria')">
-    <h3 class="panel-title">{{ t("conversation.info") }}</h3>
+  <aside
+    class="conv-info"
+    :class="{ drawer: variant === 'drawer' }"
+    :aria-label="t('conversation.infoAria')"
+  >
+    <h3 v-if="variant !== 'drawer'" class="panel-title">{{ t("conversation.info") }}</h3>
 
     <InspectorSection :title="t('conversation.sectionBasic')">
       <dl class="cl-inspector-props">
@@ -185,9 +193,10 @@ const timeSpan = computed(() => {
   opacity: 0.85;
 }
 
-@media (max-width: 1100px) {
-  .conv-info {
-    display: none;
-  }
+.conv-info.drawer {
+  width: 100%;
+  border-left: none;
+  padding: 0;
+  background: transparent;
 }
 </style>

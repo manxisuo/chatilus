@@ -18,9 +18,11 @@ html[data-theme="light"] {
   --cl-accent: #5b6b82;
   --cl-accent-soft: rgba(91, 107, 130, 0.12);
   --cl-text-selection: rgba(91, 107, 130, 0.28);
-  --cl-sidebar-width: 260px;
+  --cl-sidebar-width: 280px;
+  --cl-sidebar-width-compact: 220px;
   --cl-content-max-width: 860px;
-  --cl-insight-width: 260px;
+  --cl-insight-width: 270px;
+  --cl-main-min-width: 560px;
   --cl-toolbar-height: 48px;
   --cl-thumb-height: 160px;
 

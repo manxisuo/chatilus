@@ -17,12 +17,14 @@ const props = defineProps<{
   conversationTags: string[];
   dataSource?: string | null;
   highlightMessageId?: string | null;
+  showInfoButton?: boolean;
 }>();
 
 const emit = defineEmits<{
   toggleConversationStar: [];
   exportMarkdown: [];
   toggleMessageStar: [messageId: string, starred: boolean];
+  openConversationInfo: [];
 }>();
 
 const { t, locale } = useI18n();
@@ -296,6 +298,17 @@ function shouldEagerLoadImages(messageId: string) {
           <h2>{{ title }}</h2>
           <div class="header-meta">
             <span class="count">{{ t("common.messages", { count: renderedMessages.length }) }}</span>
+            <template v-if="showInfoButton">
+              <span class="meta-sep" aria-hidden="true">·</span>
+              <button
+                type="button"
+                class="info-link"
+                :aria-label="t('conversation.infoAria')"
+                @click="emit('openConversationInfo')"
+              >
+                {{ t("conversation.info") }}
+              </button>
+            </template>
             <el-tag
               v-for="tag in conversationTags"
               :key="tag"
@@ -430,6 +443,25 @@ function shouldEagerLoadImages(messageId: string) {
 .count {
   font-size: 12px;
   color: var(--cl-text-muted);
+}
+
+.meta-sep {
+  font-size: 12px;
+  color: var(--cl-text-faint);
+}
+
+.info-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--cl-text-muted);
+  cursor: pointer;
+}
+
+.info-link:hover {
+  color: var(--cl-text);
+  text-decoration: underline;
 }
 
 .header-actions {
