@@ -352,7 +352,7 @@ function shouldEagerLoadImages(messageId: string) {
           </div>
           <div
             v-if="message.html.trim()"
-            class="content markdown-body selectable-text"
+            class="content message-markdown selectable-text"
             v-html="message.html"
           />
           <div v-if="message.attachments.length" class="attachments">
@@ -525,26 +525,98 @@ function shouldEagerLoadImages(messageId: string) {
   padding: 0 4px;
 }
 
+.content {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--cl-text);
+}
+
 .content :deep(p) {
-  margin: 0 0 0.8em;
+  margin: 0.45em 0;
+}
+
+.content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.content :deep(h1) {
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+  margin: 1.1em 0 0.55em;
+}
+
+.content :deep(h2) {
+  font-size: 16.5px;
+  line-height: 1.4;
+  font-weight: 700;
+  margin: 1em 0 0.5em;
+  border-bottom: none;
+}
+
+.content :deep(h3) {
+  font-size: 15.5px;
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 0.9em 0 0.45em;
+}
+
+.content :deep(h4),
+.content :deep(h5),
+.content :deep(h6) {
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 0.85em 0 0.4em;
+}
+
+.content :deep(ul),
+.content :deep(ol) {
+  margin: 0.45em 0 0.65em;
+  padding-left: 1.35em;
+}
+
+.content :deep(li) {
+  margin: 0.25em 0;
+}
+
+.content :deep(hr) {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--cl-border-subtle);
+}
+
+.content :deep(blockquote) {
+  margin: 0.65em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--cl-border);
+  color: var(--cl-text-muted);
 }
 
 .content :deep(pre) {
   overflow: auto;
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: 8px;
+  margin: 0.65em 0;
+  font-size: 13px;
+  line-height: 1.55;
   background: var(--cl-code-bg);
   color: var(--cl-code-text);
 }
 
 .content :deep(code) {
   font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
 }
 
 .content :deep(p code) {
   padding: 2px 6px;
   border-radius: 4px;
   background: rgba(127, 127, 127, 0.15);
+}
+
+.message.user .content {
+  line-height: 1.58;
 }
 
 .attachments {
