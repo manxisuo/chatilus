@@ -28,6 +28,8 @@ pub struct ImportPreview {
 #[derive(Clone, Default)]
 pub struct ImportOptions {
     pub on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
+    /// When true, the user explicitly chose this importer; skip cross-format rejection.
+    pub user_selected: bool,
 }
 
 #[derive(Debug, Clone)]

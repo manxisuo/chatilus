@@ -51,6 +51,7 @@ pub fn run_import_resolved(
         &ImportInput { path: export_dir },
         &ImportOptions {
             on_progress: on_progress.clone(),
+            user_selected: resolved.user_selected,
         },
     )?;
 

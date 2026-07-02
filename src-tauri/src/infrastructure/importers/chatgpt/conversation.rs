@@ -450,14 +450,14 @@ fn extract_message_attachments(message: &Value) -> Vec<String> {
 
     if let Some(items) = message.get("attachments").and_then(|v| v.as_array()) {
         for item in items {
-            collect_attachment_ids(item, &mut pointers);
+            collect_image_attachment_ids(item, &mut pointers);
         }
     }
 
     if let Some(metadata) = message.get("metadata").and_then(|v| v.as_object()) {
         if let Some(items) = metadata.get("attachments").and_then(|v| v.as_array()) {
             for item in items {
-                collect_attachment_ids(item, &mut pointers);
+                collect_image_attachment_ids(item, &mut pointers);
             }
         }
     }
@@ -481,6 +481,51 @@ fn dedupe_imported_attachments(attachments: &mut Vec<ImportedAttachment>) {
     });
 }
 
+fn collect_image_attachment_ids(value: &Value, out: &mut Vec<String>) {
+    if !is_image_attachment_item(value) {
+        return;
+    }
+    collect_attachment_ids(value, out);
+}
+
+fn is_image_attachment_item(value: &Value) -> bool {
+    match value {
+        Value::String(_) => true,
+        Value::Object(obj) => attachment_object_is_image(obj),
+        _ => false,
+    }
+}
+
+fn attachment_object_is_image(obj: &serde_json::Map<String, Value>) -> bool {
+    if let Some(mime) = obj.get("mime_type").and_then(|v| v.as_str()) {
+        return mime.starts_with("image/");
+    }
+
+    if obj.get("width").is_some() && obj.get("height").is_some() {
+        return true;
+    }
+
+    if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+        return is_image_filename(name);
+    }
+
+    if obj.contains_key("asset_pointer") {
+        return true;
+    }
+
+    // Legacy bare file id without filename metadata.
+    obj.contains_key("id") || obj.contains_key("file_id")
+}
+
+fn is_image_filename(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".heic", ".heif", ".avif",
+    ]
+    .iter()
+    .any(|ext| lower.ends_with(ext))
+}
+
 fn collect_attachment_ids(value: &Value, out: &mut Vec<String>) {
     match value {
         Value::String(text) => out.push(text.clone()),
@@ -499,6 +544,62 @@ fn collect_attachment_ids(value: &Value, out: &mut Vec<String>) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn skips_non_image_message_attachments() {
+        let raw = r#"{
+            "id": "m1",
+            "author": { "role": "user" },
+            "content": {
+                "content_type": "text",
+                "parts": ["see files"]
+            },
+            "metadata": {
+                "attachments": [
+                    {
+                        "id": "file_0000000046987207a608956d303f5357",
+                        "mime_type": "image/png",
+                        "name": "image.png",
+                        "width": 2048,
+                        "height": 1206
+                    },
+                    {
+                        "id": "file_00000000ab087207beaa4fa7ab9be5b2",
+                        "name": "ROADMAP.md",
+                        "size": 13487
+                    },
+                    {
+                        "id": "file_00000000e9fc7207984ae8333d0684cd",
+                        "name": "ARCHITECTURE.md",
+                        "size": 14744
+                    }
+                ]
+            },
+            "create_time": 1.0
+        }"#;
+        let infos = extract_attachment_infos_from_message_json(raw);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(
+            infos[0].pointer,
+            "file_0000000046987207a608956d303f5357"
+        );
+    }
+
+    #[test]
+    fn keeps_legacy_bare_attachment_id() {
+        let raw = r#"{
+            "id": "m1",
+            "author": { "role": "user" },
+            "content": { "content_type": "text", "parts": ["x"] },
+            "metadata": {
+                "attachments": [{ "id": "file-abc123" }]
+            },
+            "create_time": 1.0
+        }"#;
+        let infos = extract_attachment_infos_from_message_json(raw);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].pointer, "file-abc123");
+    }
 
     #[test]
     fn dedupes_duplicate_attachment_pointers() {

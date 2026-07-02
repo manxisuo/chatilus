@@ -11,12 +11,12 @@ use crate::domain::ports::{
     MessageRepository, TimelineListQuery,
 };
 use crate::domain::ports::SearchIndexEntry;
-use crate::infrastructure::attachments::imported_attachments_to_views;
+use crate::infrastructure::attachments::{imported_attachments_to_views, merge_attachment_views};
 use crate::infrastructure::search::{index_message, remove_conversation_index};
 use crate::models::{ConversationSummary, ExportResult, SourceCount, TimelineMonthBucket};
 
 use super::helpers::{
-    format_timestamp, map_conversation_summary, role_heading,
+    format_timestamp, map_conversation_summary, parse_attachments_json, role_heading,
 };
 use super::asset_index::reindex_conversation_assets;
 use super::source_context_index::{attach_source_contexts, link_conversation_source_contexts};
@@ -634,7 +634,9 @@ fn merge_messages(
 
     for message in &conversation.messages {
         let stored_id = message_storage_id(storage_id, &message.id);
-        let attachments = imported_attachments_to_views(&message.attachments);
+        let existing_attachments = read_message_attachments(tx, &stored_id)?;
+        let incoming_attachments = imported_attachments_to_views(&message.attachments);
+        let attachments = merge_attachment_views(&existing_attachments, &incoming_attachments);
         let attachments_json = serde_json::to_string(&attachments)
             .map_err(|e| format!("序列化附件失败: {e}"))?;
 
@@ -678,6 +680,30 @@ fn merge_messages(
     )?;
 
     Ok(touched)
+}
+
+fn read_message_attachments(
+    tx: &Transaction<'_>,
+    message_id: &str,
+) -> Result<Vec<crate::models::AttachmentView>, String> {
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT attachments FROM messages WHERE id = ?1",
+            params![message_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("读取消息附件失败: {e}"))?;
+
+    Ok(raw
+        .filter(|value| !value.is_empty() && value != "[]")
+        .map(|value| {
+            parse_attachments_json(&value)
+                .into_iter()
+                .filter(|item| !item.path.trim().is_empty())
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 fn reorder_conversation_messages(
@@ -785,6 +811,7 @@ mod merge_tests {
         ConversationListQuery, ImportedAttachment, ImportedConversation, ImportedMessage,
         TimelineListQuery,
     };
+    use crate::infrastructure::db::helpers::parse_attachments_json;
 
     fn sample_conversation(message_ids: &[&str]) -> ImportedConversation {
         ImportedConversation {
@@ -863,6 +890,97 @@ mod merge_tests {
             )
             .expect("source id");
         assert_eq!(source_id, "conv-1");
+    }
+
+    #[test]
+    fn merge_import_preserves_existing_attachments_when_incoming_is_empty() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-attachment-merge-test-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let mut db = Database::open(&path).expect("open db");
+        let legacy_image_path = r"C:\legacy-export\file-abc.png".to_string();
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "conv-attachments".to_string(),
+                title: "Images".to_string(),
+                create_time: Some(1.0),
+                update_time: Some(2.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "see image".to_string(),
+                    create_time: Some(3.0),
+                    raw_json: "{}".to_string(),
+                    attachments: vec![ImportedAttachment {
+                        pointer: "file-abc".to_string(),
+                        source: "upload".to_string(),
+                        prompt: None,
+                        path: Some(legacy_image_path.clone()),
+                    }],
+                }],
+                source_contexts: Vec::new(),
+            }],
+            "/legacy-export",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("legacy import");
+
+        ConversationRepository::save_many(
+            &mut db,
+            &[ImportedConversation {
+                id: "conv-attachments".to_string(),
+                title: "Images".to_string(),
+                create_time: Some(1.0),
+                update_time: Some(4.0),
+                model: None,
+                messages: vec![ImportedMessage {
+                    id: "m1".to_string(),
+                    role: "user".to_string(),
+                    content: "see image".to_string(),
+                    create_time: Some(3.0),
+                    raw_json: "{}".to_string(),
+                    attachments: Vec::new(),
+                }],
+                source_contexts: Vec::new(),
+            }],
+            "/manifest-v1-export",
+            DataSource::ChatGpt,
+            0,
+        )
+        .expect("manifest v1 import");
+
+        let attachments_json: String = db
+            .conn
+            .query_row(
+                "SELECT attachments FROM messages WHERE id = 'chatgpt::conv-attachments::m1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("attachments");
+        let attachments = parse_attachments_json(&attachments_json);
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].file_key, "file-abc");
+        assert_eq!(attachments[0].path, legacy_image_path);
+
+        let asset_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM assets WHERE conversation_id = 'chatgpt::conv-attachments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("asset count");
+        assert_eq!(asset_count, 1);
     }
 
     #[test]

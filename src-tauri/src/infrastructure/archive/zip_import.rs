@@ -13,6 +13,7 @@ pub struct ResolvedImportPath {
     pub export_label: String,
     pub importer_id: String,
     pub importer_display_name: String,
+    pub user_selected: bool,
 }
 
 pub struct TempExtractDir {
@@ -50,6 +51,7 @@ pub fn resolve_import_path_for_importer(
             export_label,
             importer_id: detect.importer_id,
             importer_display_name: detect.display_name,
+            user_selected: true,
         });
     }
 
@@ -77,10 +79,11 @@ pub fn resolve_import_path_for_importer(
                 export_label,
                 importer_id: detect.importer_id,
                 importer_display_name: detect.display_name,
+                user_selected: true,
             });
         }
 
-        let detect = registry.detect_with_importer(input_path, importer_id)?;
+        let detect = registry.detect_with_importer(input_path, importer_id, true)?;
         let export_label = export_label_from_path(input_path);
         return Ok(ResolvedImportPath {
             export_dir: input_path.to_path_buf(),
@@ -88,6 +91,7 @@ pub fn resolve_import_path_for_importer(
             export_label,
             importer_id: detect.importer_id,
             importer_display_name: detect.display_name,
+            user_selected: true,
         });
     }
 
@@ -119,6 +123,7 @@ pub fn resolve_import_path_with_registry(
             export_label,
             importer_id: detect.importer_id,
             importer_display_name: detect.display_name,
+            user_selected: false,
         });
     }
 
@@ -139,6 +144,7 @@ pub fn resolve_import_path_with_registry(
                 export_label,
                 importer_id: detect.importer_id,
                 importer_display_name: detect.display_name,
+                user_selected: false,
             });
         }
 
@@ -150,6 +156,7 @@ pub fn resolve_import_path_with_registry(
                 export_label,
                 importer_id: detect.importer_id,
                 importer_display_name: detect.display_name,
+                user_selected: false,
             });
         }
     }

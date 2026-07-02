@@ -103,7 +103,7 @@ impl Importer for ChatGptImporter {
         input: &ImportInput,
         options: &ImportOptions,
     ) -> Result<NormalizedImportResult, String> {
-        if is_manifest_v1_export(&input.path) {
+        if !options.user_selected && is_manifest_v1_export(&input.path) {
             return Err(format!(
                 "该目录为 ChatGPT Manifest v1 导出，请使用「ChatGPT (Manifest v1)」导入: {}",
                 input.path.display()
@@ -149,6 +149,24 @@ mod tests {
     }
 
     #[test]
+    fn user_selected_import_accepts_manifest_v1_export() {
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26");
+        if !dir.is_dir() {
+            return;
+        }
+
+        let importer = ChatGptImporter::new();
+        let result = importer.import(
+            &ImportInput { path: dir },
+            &ImportOptions {
+                user_selected: true,
+                ..ImportOptions::default()
+            },
+        );
+        assert!(result.is_ok(), "expected import to succeed: {:?}", result.err());
+    }
+
+    #[test]
     fn import_resolves_media_paths() {
         let dir = sample_export_dir();
         if !dir.is_dir() {
@@ -157,7 +175,13 @@ mod tests {
 
         let importer = ChatGptImporter::new();
         let result = importer
-            .import(&ImportInput { path: dir }, &ImportOptions::default())
+            .import(
+                &ImportInput { path: dir },
+                &ImportOptions {
+                    user_selected: true,
+                    ..ImportOptions::default()
+                },
+            )
             .expect("import");
 
         assert!(!result.package.conversations.is_empty());

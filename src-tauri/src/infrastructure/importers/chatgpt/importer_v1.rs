@@ -103,11 +103,15 @@ impl Importer for ChatGptV1Importer {
         input: &ImportInput,
         options: &ImportOptions,
     ) -> Result<NormalizedImportResult, String> {
-        if !is_manifest_v1_export(&input.path) {
+        if !options.user_selected && !is_manifest_v1_export(&input.path) {
             return Err(format!(
                 "不是 ChatGPT Manifest v1 导出目录: {}",
                 input.path.display()
             ));
+        }
+
+        if options.user_selected {
+            super::find_conversation_files(&input.path)?;
         }
 
         let output = import_chatgpt_export_dir(&input.path, options)?;
@@ -146,6 +150,24 @@ mod tests {
             .expect("detect");
         assert!(result.matched);
         assert_eq!(result.importer_id, "chatgpt-v1");
+    }
+
+    #[test]
+    fn user_selected_import_accepts_legacy_style_export() {
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35");
+        if !dir.is_dir() {
+            return;
+        }
+
+        let importer = ChatGptV1Importer::new();
+        let result = importer.import(
+            &ImportInput { path: dir },
+            &ImportOptions {
+                user_selected: true,
+                ..ImportOptions::default()
+            },
+        );
+        assert!(result.is_ok(), "expected import to succeed: {:?}", result.err());
     }
 
     #[test]

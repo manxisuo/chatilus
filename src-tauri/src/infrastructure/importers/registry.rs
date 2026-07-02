@@ -64,6 +64,7 @@ impl ImporterRegistry {
         &self,
         path: &Path,
         importer_id: &str,
+        user_selected: bool,
     ) -> Result<ImportDetectResult, String> {
         let importer = self
             .by_id(importer_id)
@@ -71,7 +72,11 @@ impl ImporterRegistry {
         let input = ImportInput {
             path: path.to_path_buf(),
         };
-        let result = importer.detect(&input)?;
+        let result = if user_selected {
+            self.detect_user_selected_importer(importer, &input)?
+        } else {
+            importer.detect(&input)?
+        };
         if result.matched {
             Ok(result)
         } else {
@@ -83,12 +88,31 @@ impl ImporterRegistry {
         }
     }
 
+    fn detect_user_selected_importer(
+        &self,
+        importer: &dyn Importer,
+        input: &ImportInput,
+    ) -> Result<ImportDetectResult, String> {
+        use super::chatgpt::find_conversation_files;
+
+        let matched = match importer.id() {
+            "chatgpt" | "chatgpt-v1" => find_conversation_files(&input.path).is_ok(),
+            _ => importer.detect(input)?.matched,
+        };
+
+        Ok(ImportDetectResult {
+            matched,
+            importer_id: importer.id().to_string(),
+            display_name: importer.display_name().to_string(),
+        })
+    }
+
     pub fn find_export_root_for_importer(
         &self,
         search_root: &Path,
         importer_id: &str,
     ) -> Result<(PathBuf, ImportDetectResult), String> {
-        if let Ok(result) = self.detect_with_importer(search_root, importer_id) {
+        if let Ok(result) = self.detect_with_importer(search_root, importer_id, true) {
             return Ok((search_root.to_path_buf(), result));
         }
 
@@ -104,7 +128,7 @@ impl ImporterRegistry {
                     continue;
                 }
 
-                if let Ok(result) = self.detect_with_importer(&path, importer_id) {
+                if let Ok(result) = self.detect_with_importer(&path, importer_id, true) {
                     return Ok((path, result));
                 }
 
@@ -218,6 +242,36 @@ mod tests {
             .detect(&ImportInput { path: dir })
             .expect("detect");
         assert!(!result.matched);
+    }
+
+    #[test]
+    fn user_selected_legacy_importer_accepts_manifest_v1_export() {
+        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26");
+        if !dir.is_dir() {
+            return;
+        }
+
+        let registry = default_importer_registry();
+        let result = registry
+            .detect_with_importer(&dir, "chatgpt", true)
+            .expect("detect");
+        assert!(result.matched);
+        assert_eq!(result.importer_id, "chatgpt");
+    }
+
+    #[test]
+    fn user_selected_v1_importer_accepts_legacy_style_export() {
+        let dir = sample_export_dir();
+        if !dir.is_dir() {
+            return;
+        }
+
+        let registry = default_importer_registry();
+        let result = registry
+            .detect_with_importer(&dir, "chatgpt-v1", true)
+            .expect("detect");
+        assert!(result.matched);
+        assert_eq!(result.importer_id, "chatgpt-v1");
     }
 
     #[test]
