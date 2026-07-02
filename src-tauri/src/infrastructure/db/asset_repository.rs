@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rusqlite::ToSql;
 
 use crate::domain::mappers::image_fields_to_asset;
-use crate::domain::models::Asset;
+use crate::domain::models::{Asset, ImageKindFilter};
 use crate::domain::ports::{AssetListQuery, AssetRepository};
 use crate::models::SourceCount;
 
@@ -13,7 +13,7 @@ const ASSET_MONTH_SQL: &str =
     "strftime('%Y-%m', datetime(COALESCE(a.created_at, 0), 'unixepoch', 'localtime'))";
 
 struct ImageFilters<'a> {
-    include_uploads: bool,
+    image_kind: ImageKindFilter,
     conversation_source: Option<&'a str>,
     month: Option<&'a str>,
     conversation_id: Option<&'a str>,
@@ -22,7 +22,7 @@ struct ImageFilters<'a> {
 impl AssetRepository for Database {
     fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String> {
         let filters = ImageFilters {
-            include_uploads: query.include_uploads,
+            image_kind: query.image_kind,
             conversation_source: normalized_source(query.conversation_source.as_deref()),
             month: normalized_source(query.month.as_deref()),
             conversation_id: normalized_source(query.conversation_id.as_deref()),
@@ -32,11 +32,11 @@ impl AssetRepository for Database {
 
     fn count(
         &self,
-        include_uploads: bool,
+        image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
     ) -> Result<i64, String> {
         let filters = ImageFilters {
-            include_uploads,
+            image_kind,
             conversation_source: normalized_source(conversation_source),
             month: None,
             conversation_id: None,
@@ -54,13 +54,13 @@ impl AssetRepository for Database {
 
     fn count_filtered(
         &self,
-        include_uploads: bool,
+        image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
         month: Option<&str>,
         conversation_id: Option<&str>,
     ) -> Result<i64, String> {
         let filters = ImageFilters {
-            include_uploads,
+            image_kind,
             conversation_source: normalized_source(conversation_source),
             month: normalized_source(month),
             conversation_id: normalized_source(conversation_id),
@@ -81,8 +81,10 @@ fn normalized_source(source: Option<&str>) -> Option<&str> {
 }
 
 fn append_asset_filters(sql: &mut String, bind: &mut Vec<Box<dyn ToSql>>, filters: &ImageFilters) {
-    if !filters.include_uploads {
-        sql.push_str(" AND a.image_source != 'upload'");
+    match filters.image_kind {
+        ImageKindFilter::All => {}
+        ImageKindFilter::Generated => sql.push_str(" AND a.image_source != 'upload'"),
+        ImageKindFilter::Upload => sql.push_str(" AND a.image_source = 'upload'"),
     }
     if let Some(source) = filters.conversation_source {
         sql.push_str(" AND a.conversation_source = ?");
@@ -260,6 +262,7 @@ fn image_counts_by_conversation_source(conn: &rusqlite::Connection) -> Result<Ve
 mod tests {
     use super::*;
     use crate::db::Database;
+    use crate::domain::models::ImageKindFilter;
     use crate::domain::ports::AssetRepository;
     use super::super::asset_index::reindex_conversation_assets;
     use rusqlite::params;
@@ -325,7 +328,7 @@ mod tests {
             AssetListQuery {
                 limit: 10,
                 offset: 0,
-                include_uploads: true,
+                image_kind: ImageKindFilter::All,
                 conversation_source: None,
                 month: None,
                 conversation_id: None,
@@ -339,7 +342,7 @@ mod tests {
             AssetListQuery {
                 limit: 10,
                 offset: 0,
-                include_uploads: true,
+                image_kind: ImageKindFilter::All,
                 conversation_source: Some("chatgpt".to_string()),
                 month: None,
                 conversation_id: None,
@@ -352,7 +355,105 @@ mod tests {
             Some("chatgpt::cg-1")
         );
 
-        let cursor_count = AssetRepository::count(&db, true, Some("cursor")).expect("count");
+        let cursor_count = AssetRepository::count(&db, ImageKindFilter::All, Some("cursor")).expect("count");
         assert_eq!(cursor_count, 1);
+    }
+
+    #[test]
+    fn list_filters_by_image_kind() {
+        let path = std::env::temp_dir().join(format!(
+            "chatlens-asset-kind-test-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let db = Database::open(Path::new(&path)).expect("open db");
+        db.conn
+            .execute(
+                "INSERT INTO conversations (
+                    id, title, create_time, update_time, source_path, model, message_count, source, source_id
+                 ) VALUES ('chatgpt::cg-1', 'generated image', 1, 2, '/export', NULL, 1, 'chatgpt', 'chatgpt::cg-1')",
+                [],
+            )
+            .expect("insert conversation");
+        db.conn
+            .execute(
+                "INSERT INTO messages (
+                    id, conversation_id, role, content, create_time, sort_order, raw_json, attachments
+                 ) VALUES ('chatgpt::cg-1::msg-1', 'chatgpt::cg-1', 'assistant', 'image', 1, 0, '{}', '[]')",
+                [],
+            )
+            .expect("insert generated message");
+        db.conn
+            .execute(
+                "INSERT INTO assets (
+                    message_id, conversation_id, conversation_source, role, conversation_title, local_path, file_key, image_source, prompt, created_at
+                 ) VALUES ('chatgpt::cg-1::msg-1', 'chatgpt::cg-1', 'chatgpt', 'assistant', 'generated image', '/tmp/generated.png', 'gen.png', 'generated', NULL, 1)",
+                [],
+            )
+            .expect("insert generated asset");
+        db.conn
+            .execute(
+                "INSERT INTO messages (
+                    id, conversation_id, role, content, create_time, sort_order, raw_json, attachments
+                 ) VALUES ('chatgpt::cg-1::msg-2', 'chatgpt::cg-1', 'user', 'image', 2, 1, '{}', '[]')",
+                [],
+            )
+            .expect("insert upload message");
+        db.conn
+            .execute(
+                "INSERT INTO assets (
+                    message_id, conversation_id, conversation_source, role, conversation_title, local_path, file_key, image_source, prompt, created_at
+                 ) VALUES ('chatgpt::cg-1::msg-2', 'chatgpt::cg-1', 'chatgpt', 'user', 'generated image', '/tmp/upload.png', 'up.png', 'upload', NULL, 2)",
+                [],
+            )
+            .expect("insert upload asset");
+
+        let all = AssetRepository::list(
+            &db,
+            AssetListQuery {
+                limit: 10,
+                offset: 0,
+                image_kind: ImageKindFilter::All,
+                conversation_source: None,
+                month: None,
+                conversation_id: None,
+            },
+        )
+        .expect("list all");
+        assert_eq!(all.len(), 2);
+
+        let generated_only = AssetRepository::list(
+            &db,
+            AssetListQuery {
+                limit: 10,
+                offset: 0,
+                image_kind: ImageKindFilter::Generated,
+                conversation_source: None,
+                month: None,
+                conversation_id: None,
+            },
+        )
+        .expect("list generated");
+        assert_eq!(generated_only.len(), 1);
+        assert_eq!(generated_only[0].local_path.as_deref(), Some("/tmp/generated.png"));
+
+        let upload_only = AssetRepository::list(
+            &db,
+            AssetListQuery {
+                limit: 10,
+                offset: 0,
+                image_kind: ImageKindFilter::Upload,
+                conversation_source: None,
+                month: None,
+                conversation_id: None,
+            },
+        )
+        .expect("list upload");
+        assert_eq!(upload_only.len(), 1);
+        assert_eq!(upload_only[0].local_path.as_deref(), Some("/tmp/upload.png"));
     }
 }

@@ -1,3 +1,4 @@
+use crate::domain::models::ImageKindFilter;
 use crate::domain::models::Asset;
 use crate::domain::models::DataSource;
 use crate::domain::ports::ImportedConversation;
@@ -28,7 +29,7 @@ pub struct TimelineListQuery {
 pub struct AssetListQuery {
     pub limit: i64,
     pub offset: i64,
-    pub include_uploads: bool,
+    pub image_kind: ImageKindFilter,
     pub conversation_source: Option<String>,
     pub month: Option<String>,
     pub conversation_id: Option<String>,
@@ -88,14 +89,14 @@ pub trait AssetRepository {
     fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String>;
     fn count(
         &self,
-        include_uploads: bool,
+        image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
     ) -> Result<i64, String>;
     fn count_by_source(&self) -> Result<(i64, i64, i64), String>;
     fn image_counts_by_conversation_source(&self) -> Result<Vec<crate::models::SourceCount>, String>;
     fn count_filtered(
         &self,
-        include_uploads: bool,
+        image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
         month: Option<&str>,
         conversation_id: Option<&str>,

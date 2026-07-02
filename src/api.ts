@@ -128,10 +128,12 @@ export function exportConversationMarkdown(conversationId: string, outputPath: s
   });
 }
 
+export type ImageKindFilter = "all" | "generated" | "upload";
+
 export function listImages(
   limit = 60,
   offset = 0,
-  includeUploads = true,
+  imageKind: ImageKindFilter = "all",
   conversationSource?: string | null,
   month?: string | null,
   conversationId?: string | null,
@@ -139,7 +141,7 @@ export function listImages(
   return invoke<ImageGalleryItem[]>("list_images", {
     limit,
     offset,
-    includeUploads,
+    imageKind,
     conversationSource: conversationSource ?? null,
     month: month ?? null,
     conversationId: conversationId ?? null,
@@ -147,13 +149,13 @@ export function listImages(
 }
 
 export function countImages(
-  includeUploads = true,
+  imageKind: ImageKindFilter = "all",
   conversationSource?: string | null,
   month?: string | null,
   conversationId?: string | null,
 ) {
   return invoke<number>("count_images", {
-    includeUploads,
+    imageKind,
     conversationSource: conversationSource ?? null,
     month: month ?? null,
     conversationId: conversationId ?? null,

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { readImageDataUrl, listImages, countImages } from "../api";
+import { readImageDataUrl, listImages, countImages, type ImageKindFilter } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
 import GalleryThumb from "./GalleryThumb.vue";
 import SourceNav from "./SourceNav.vue";
@@ -43,7 +43,7 @@ const scopedTotal = ref<number | null>(null);
 const loading = ref(false);
 const loadingMore = ref(false);
 const hasMore = ref(true);
-const showUploads = ref(true);
+const imageKind = ref<ImageKindFilter>("all");
 const lightboxVisible = ref(false);
 const lightboxIndex = ref(0);
 const selectedIndex = ref<number | null>(null);
@@ -126,8 +126,11 @@ const visibleTotal = computed(() => {
     );
     return entry?.count ?? null;
   }
-  if (showUploads.value) {
+  if (imageKind.value === "all") {
     return props.totalCount;
+  }
+  if (imageKind.value === "upload") {
+    return props.uploadCount;
   }
   if (props.generatedCount != null) {
     const unknown = Math.max(
@@ -173,6 +176,27 @@ const sourceNavItems = computed(() => {
   }
 
   return items;
+});
+
+const imageKindOptions = computed(() => [
+  { value: "all" as const, label: t("gallery.imageKind.all") },
+  { value: "generated" as const, label: t("gallery.imageKind.generated") },
+  { value: "upload" as const, label: t("gallery.imageKind.upload") },
+]);
+
+const emptyDescription = computed(() => {
+  if (props.filterSource) {
+    return t("gallery.emptyFromSource", {
+      source: conversationSourceLabel(props.filterSource),
+    });
+  }
+  if (imageKind.value === "upload") {
+    return t("gallery.emptyUploadOnly");
+  }
+  if (imageKind.value === "generated") {
+    return t("gallery.emptyGeneratedOnly");
+  }
+  return t("gallery.emptyNoData");
 });
 
 const statsText = computed(() => {
@@ -405,7 +429,7 @@ async function refreshScopedTotal() {
     return;
   }
   scopedTotal.value = await countImages(
-    showUploads.value,
+    imageKind.value,
     props.filterSource,
     props.filterMonth,
     props.filterConversationId,
@@ -463,7 +487,7 @@ async function loadImages(reset = true) {
     const batch = await listImages(
       PAGE_SIZE,
       offset,
-      showUploads.value,
+      imageKind.value,
       props.filterSource,
       props.filterMonth,
       props.filterConversationId,
@@ -552,7 +576,7 @@ function openConversation(conversationId: string) {
   emit("openConversation", conversationId);
 }
 
-watch(showUploads, () => {
+watch(imageKind, () => {
   loadImages(true);
 });
 
@@ -579,10 +603,18 @@ onMounted(() => {
         show-dots
         @select="emit('update:filterSource', $event)"
       />
-      <label class="upload-toggle">
-        <el-checkbox v-model="showUploads" />
-        <span>{{ t("gallery.showUploads") }}</span>
-      </label>
+      <div class="image-kind-filters">
+        <button
+          v-for="option in imageKindOptions"
+          :key="option.value"
+          type="button"
+          class="kind-chip"
+          :class="{ active: imageKind === option.value }"
+          @click="imageKind = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
       <p v-if="statsText && !filterSource" class="sidebar-stats">{{ statsText }}</p>
     </aside>
 
@@ -600,13 +632,7 @@ onMounted(() => {
       <el-empty
         v-else-if="images.length === 0"
         class="gallery-empty"
-        :description="
-          filterSource
-            ? t('gallery.emptyFromSource', { source: conversationSourceLabel(filterSource) })
-            : showUploads
-              ? t('gallery.emptyNoData')
-              : t('gallery.emptyGeneratedOnly')
-        "
+        :description="emptyDescription"
       />
 
       <div
@@ -751,14 +777,34 @@ onMounted(() => {
   min-height: 0;
 }
 
-.upload-toggle {
+.image-kind-filters {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.kind-chip {
+  border: 1px solid var(--cl-border-subtle);
+  background: transparent;
   color: var(--cl-text-muted);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  text-align: left;
   cursor: pointer;
+}
+
+.kind-chip:hover {
+  color: var(--cl-text);
+  background: var(--cl-hover);
+}
+
+.kind-chip.active {
+  color: var(--cl-text);
+  background: var(--cl-selected-strong);
+  border-color: var(--cl-border);
+  font-weight: 500;
 }
 
 .sidebar-stats {

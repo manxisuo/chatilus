@@ -225,17 +225,21 @@ pub fn list_images(
     state: State<'_, AppState>,
     limit: Option<i64>,
     offset: Option<i64>,
-    include_uploads: Option<bool>,
+    image_kind: Option<String>,
     conversation_source: Option<String>,
     month: Option<String>,
     conversation_id: Option<String>,
 ) -> Result<Vec<ImageGalleryItem>, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    let image_kind = image_kind
+        .as_deref()
+        .and_then(crate::domain::models::ImageKindFilter::parse)
+        .unwrap_or(crate::domain::models::ImageKindFilter::All);
     application::list_images(
         &db,
         limit.unwrap_or(60),
         offset.unwrap_or(0),
-        include_uploads.unwrap_or(true),
+        image_kind,
         conversation_source.as_deref(),
         month.as_deref(),
         conversation_id.as_deref(),
@@ -245,15 +249,19 @@ pub fn list_images(
 #[tauri::command]
 pub fn count_images(
     state: State<'_, AppState>,
-    include_uploads: Option<bool>,
+    image_kind: Option<String>,
     conversation_source: Option<String>,
     month: Option<String>,
     conversation_id: Option<String>,
 ) -> Result<i64, String> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    let image_kind = image_kind
+        .as_deref()
+        .and_then(crate::domain::models::ImageKindFilter::parse)
+        .unwrap_or(crate::domain::models::ImageKindFilter::All);
     application::count_images(
         &db,
-        include_uploads.unwrap_or(true),
+        image_kind,
         conversation_source.as_deref(),
         month.as_deref(),
         conversation_id.as_deref(),

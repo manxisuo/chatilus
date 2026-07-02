@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::domain::mappers::asset_to_gallery_item;
+use crate::domain::models::ImageKindFilter;
 use crate::domain::ports::{AssetListQuery, AssetRepository};
 use crate::models::ImageGalleryItem;
 
@@ -7,7 +8,7 @@ pub fn list_images(
     db: &Database,
     limit: i64,
     offset: i64,
-    include_uploads: bool,
+    image_kind: ImageKindFilter,
     conversation_source: Option<&str>,
     month: Option<&str>,
     conversation_id: Option<&str>,
@@ -17,7 +18,7 @@ pub fn list_images(
         AssetListQuery {
             limit,
             offset,
-            include_uploads,
+            image_kind,
             conversation_source: conversation_source.map(str::to_string),
             month: month.map(str::to_string),
             conversation_id: conversation_id.map(str::to_string),
@@ -28,14 +29,14 @@ pub fn list_images(
 
 pub fn count_images(
     db: &Database,
-    include_uploads: bool,
+    image_kind: ImageKindFilter,
     conversation_source: Option<&str>,
     month: Option<&str>,
     conversation_id: Option<&str>,
 ) -> Result<i64, String> {
     AssetRepository::count_filtered(
         db,
-        include_uploads,
+        image_kind,
         conversation_source,
         month,
         conversation_id,
