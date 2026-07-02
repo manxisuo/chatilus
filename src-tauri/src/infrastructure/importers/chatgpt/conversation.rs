@@ -105,8 +105,14 @@ pub fn parse_conversation(
         title
     };
 
-    let create_time = value.get("create_time").and_then(|v| v.as_f64());
-    let update_time = value.get("update_time").and_then(|v| v.as_f64());
+    let conv_create_time = value
+        .get("create_time")
+        .and_then(|v| v.as_f64())
+        .and_then(normalize_unix_timestamp);
+    let conv_update_time = value
+        .get("update_time")
+        .and_then(|v| v.as_f64())
+        .and_then(normalize_unix_timestamp);
     let model = value
         .get("default_model_slug")
         .and_then(|v| v.as_str())
@@ -116,6 +122,8 @@ pub fn parse_conversation(
     let current_node = value.get("current_node").and_then(|v| v.as_str())?;
 
     let messages = linearize_messages(mapping, current_node);
+    let (create_time, update_time) =
+        derive_conversation_times(conv_create_time, conv_update_time, &messages);
     let source_contexts = extract_chatgpt_source_contexts(value, project_names);
 
     Some(ImportedConversation {
@@ -127,6 +135,54 @@ pub fn parse_conversation(
         messages,
         source_contexts,
     })
+}
+
+fn normalize_unix_timestamp(value: f64) -> Option<f64> {
+    if !value.is_finite() || value <= 0.0 {
+        return None;
+    }
+
+    let seconds = if value >= 1e11 { value / 1000.0 } else { value };
+
+    const MIN: f64 = 788_918_400.0; // 1995-01-01
+    const MAX: f64 = 4_102_444_800.0; // 2100-01-01
+    if seconds >= MIN && seconds <= MAX {
+        Some(seconds)
+    } else {
+        None
+    }
+}
+
+fn derive_conversation_times(
+    conv_create_time: Option<f64>,
+    _conv_update_time: Option<f64>,
+    messages: &[ImportedMessage],
+) -> (Option<f64>, Option<f64>) {
+    let message_times: Vec<f64> = messages
+        .iter()
+        .filter_map(|message| message.create_time)
+        .collect();
+
+    if message_times.is_empty() {
+        return (conv_create_time, _conv_update_time);
+    }
+
+    let earliest = message_times
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let latest = message_times
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    let create_time = Some(match conv_create_time {
+        Some(value) => value.min(earliest),
+        None => earliest,
+    });
+    let update_time = Some(latest);
+
+    (create_time, update_time)
 }
 
 fn extract_chatgpt_source_contexts(
@@ -311,7 +367,10 @@ fn parse_message(message: &Value) -> Option<ImportedMessage> {
         return None;
     }
     let content = extract_content(content_value);
-    let create_time = message.get("create_time").and_then(|v| v.as_f64());
+    let create_time = message
+        .get("create_time")
+        .and_then(|v| v.as_f64())
+        .and_then(normalize_unix_timestamp);
     let raw_json = message.to_string();
     let mut attachments = extract_attachment_infos_from_content(content_value, &role);
     for pointer in extract_message_attachments(message) {
@@ -678,6 +737,95 @@ mod tests {
             classify_image_source(Some(&metadata), "tool", None),
             "generated"
         );
+    }
+
+    #[test]
+    fn normalizes_millisecond_timestamps() {
+        assert_eq!(
+            normalize_unix_timestamp(1_747_975_522_572.0),
+            Some(1_747_975_522.572)
+        );
+        assert_eq!(
+            normalize_unix_timestamp(1_719_037_118.496),
+            Some(1_719_037_118.496)
+        );
+        assert!(normalize_unix_timestamp(1_747_975_522_572.0 * 1000.0).is_none());
+    }
+
+    #[test]
+    fn derives_conversation_times_from_messages_when_export_metadata_is_stale() {
+        let value = json!({
+            "id": "conv-1",
+            "title": "Byte Order & BCD Conversion",
+            "create_time": 1_782_427_417.577,
+            "update_time": 1_782_427_417.577,
+            "current_node": "n1",
+            "mapping": {
+                "n1": {
+                    "id": "n1",
+                    "message": {
+                        "id": "m1",
+                        "author": { "role": "assistant" },
+                        "content": { "content_type": "text", "parts": ["reply"] },
+                        "create_time": 1_719_037_136.045
+                    },
+                    "parent": "n0"
+                },
+                "n0": {
+                    "id": "n0",
+                    "message": {
+                        "id": "m0",
+                        "author": { "role": "user" },
+                        "content": { "content_type": "text", "parts": ["question"] },
+                        "create_time": 1_719_037_118.496
+                    },
+                    "parent": null
+                }
+            }
+        });
+
+        let parsed = parse_conversation(&value, &ProjectNameIndex::new()).expect("parse");
+
+        assert_eq!(parsed.create_time, Some(1_719_037_118.496));
+        assert_eq!(parsed.update_time, Some(1_719_037_136.045));
+    }
+
+    #[test]
+    fn ignores_millisecond_outliers_when_deriving_conversation_times() {
+        let value = json!({
+            "id": "conv-1",
+            "title": "NameNode",
+            "create_time": 1_781_619_925.286,
+            "update_time": 1_781_619_925.286,
+            "current_node": "n1",
+            "mapping": {
+                "n1": {
+                    "id": "n1",
+                    "message": {
+                        "id": "m1",
+                        "author": { "role": "assistant" },
+                        "content": { "content_type": "text", "parts": ["reply"] },
+                        "create_time": 1_747_975_522_572.0
+                    },
+                    "parent": "n0"
+                },
+                "n0": {
+                    "id": "n0",
+                    "message": {
+                        "id": "m0",
+                        "author": { "role": "user" },
+                        "content": { "content_type": "text", "parts": ["question"] },
+                        "create_time": 1_747_530_760.463
+                    },
+                    "parent": null
+                }
+            }
+        });
+
+        let parsed = parse_conversation(&value, &ProjectNameIndex::new()).expect("parse");
+
+        assert_eq!(parsed.create_time, Some(1_747_530_760.463));
+        assert_eq!(parsed.update_time, Some(1_747_975_522.572));
     }
 
     #[test]

@@ -665,6 +665,7 @@ fn merge_messages(
 
     reorder_conversation_messages(tx, storage_id)?;
     refresh_conversation_message_count(tx, storage_id)?;
+    refresh_conversation_times_from_messages(tx, storage_id)?;
     reindex_conversation_messages(tx, storage_id, &conversation.title)?;
     reindex_conversation_assets(
         tx,
@@ -761,6 +762,42 @@ fn refresh_conversation_message_count(
         params![conversation_id],
     )
     .map_err(|e| format!("更新会话消息数失败: {e}"))?;
+    Ok(())
+}
+
+fn refresh_conversation_times_from_messages(
+    tx: &Transaction<'_>,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let bounds = tx
+        .query_row(
+            "SELECT MIN(create_time), MAX(create_time)
+             FROM messages
+             WHERE conversation_id = ?1
+               AND create_time IS NOT NULL
+               AND create_time >= 788918400
+               AND create_time <= 4102444800",
+            params![conversation_id],
+            |row| Ok((row.get::<_, Option<f64>>(0)?, row.get::<_, Option<f64>>(1)?)),
+        )
+        .optional()
+        .map_err(|e| format!("读取消息时间范围失败: {e}"))?;
+
+    let Some((Some(earliest), Some(latest))) = bounds else {
+        return Ok(());
+    };
+
+    tx.execute(
+        "UPDATE conversations
+         SET create_time = CASE
+                WHEN create_time IS NULL THEN ?1
+                ELSE MIN(create_time, ?1)
+             END,
+             update_time = ?2
+         WHERE id = ?3",
+        params![earliest, latest, conversation_id],
+    )
+    .map_err(|e| format!("更新会话时间失败: {e}"))?;
     Ok(())
 }
 
