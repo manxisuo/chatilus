@@ -58,9 +58,7 @@ let wasNearBottom = false;
 let wheelBottomCooldownUntil = 0;
 
 type ScrollAnchor = {
-  atBottom: boolean;
   scrollTop: number;
-  scrollHeight: number;
 };
 
 function maxScrollTop(el: HTMLElement): number {
@@ -100,20 +98,17 @@ function restoreScrollAfterAppend(anchor: ScrollAnchor | null) {
   if (!anchor) return;
   const el = scrollContainerRef.value;
   if (!el) return;
-
-  if (anchor.atBottom) {
-    el.scrollTop = maxScrollTop(el);
-  } else {
-    const heightDelta = el.scrollHeight - anchor.scrollHeight;
-    if (heightDelta > 0) {
-      el.scrollTop = anchor.scrollTop + heightDelta;
-    }
-  }
+  // 新图片追加在列表下方，保持 scrollTop 不变即可维持视口内容。
+  el.scrollTop = anchor.scrollTop;
 }
 
 function scheduleScrollRestore(anchor: ScrollAnchor | null) {
   requestAnimationFrame(() => {
     restoreScrollAfterAppend(anchor);
+    // 缩略图懒加载后高度可能变化，再校正一次。
+    requestAnimationFrame(() => {
+      restoreScrollAfterAppend(anchor);
+    });
   });
 }
 
@@ -457,11 +452,7 @@ async function loadImages(reset = true) {
 
   const scrollAnchor: ScrollAnchor | null =
     !reset && scrollContainerRef.value
-      ? {
-          atBottom: isNearBottom(scrollContainerRef.value),
-          scrollTop: scrollContainerRef.value.scrollTop,
-          scrollHeight: scrollContainerRef.value.scrollHeight,
-        }
+      ? { scrollTop: scrollContainerRef.value.scrollTop }
       : null;
 
   try {
