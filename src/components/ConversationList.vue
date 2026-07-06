@@ -76,7 +76,10 @@ const footerText = computed(() => {
         v-for="item in items"
         :key="item.id"
         class="conversation-item"
-        :class="{ active: item.id === activeId, starred: item.is_starred }"
+        :class="{
+          'cl-nav-item-active': item.id === activeId,
+          starred: item.is_starred,
+        }"
         @click="emit('select', item.id)"
       >
         <div class="row-top">
@@ -138,17 +141,11 @@ const footerText = computed(() => {
   border-bottom: 1px solid var(--cl-border);
 }
 
-.conversation-item:hover {
+.conversation-item:hover:not(.cl-nav-item-active) {
   background: var(--cl-hover);
 }
 
-.conversation-item.active {
-  background: var(--cl-selected-strong);
-  border-left: 2px solid var(--cl-accent);
-  padding-left: 14px;
-}
-
-.conversation-item.starred {
+.conversation-item.starred:not(.cl-nav-item-active) {
   background: rgba(230, 162, 60, 0.04);
 }
 

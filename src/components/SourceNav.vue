@@ -21,7 +21,7 @@ const emit = defineEmits<{
       :key="item.id ?? 'all'"
       type="button"
       class="source-nav-row"
-      :class="{ active: activeId === item.id }"
+      :class="{ 'cl-nav-item-active': activeId === item.id }"
       @click="emit('select', item.id)"
     >
       <span
@@ -69,14 +69,12 @@ const emit = defineEmits<{
   line-height: 1.3;
 }
 
-.source-nav-row:hover {
+.source-nav-row:hover:not(.cl-nav-item-active) {
   background: var(--cl-hover);
 }
 
-.source-nav-row.active {
-  background: var(--cl-selected-strong);
+.source-nav-row.cl-nav-item-active {
   font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--cl-accent);
 }
 
 .source-dot {
@@ -105,7 +103,7 @@ const emit = defineEmits<{
   font-variant-numeric: tabular-nums;
 }
 
-.source-nav-row.active .source-nav-count {
+.source-nav-row.cl-nav-item-active .source-nav-count {
   color: var(--cl-text-muted);
 }
 </style>

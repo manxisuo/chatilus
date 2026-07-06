@@ -1156,7 +1156,7 @@ onMounted(async () => {
             v-for="hit in searchHits"
             :key="hit.message_id"
             class="search-hit"
-            :class="{ active: hit.message_id === activeSearchHitId }"
+            :class="{ 'cl-nav-item-active': hit.message_id === activeSearchHitId }"
             @click="openSearchHit(hit)"
           >
             <div class="hit-header">
@@ -1196,7 +1196,7 @@ onMounted(async () => {
               v-for="hit in starredMessageHits"
               :key="hit.message_id"
               class="search-hit"
-              :class="{ active: hit.message_id === activeSearchHitId }"
+              :class="{ 'cl-nav-item-active': hit.message_id === activeSearchHitId }"
               @click="openSearchHit(hit)"
             >
               <div class="hit-header">
@@ -1665,14 +1665,8 @@ onMounted(async () => {
   border-bottom: 1px solid var(--cl-border);
 }
 
-.search-hit:hover {
+.search-hit:hover:not(.cl-nav-item-active) {
   background: var(--cl-accent-soft);
-}
-
-.search-hit.active {
-  background: var(--cl-search-spotlight-bg);
-  box-shadow: inset 4px 0 0 var(--cl-search-spotlight-bar);
-  padding-left: 12px;
 }
 
 .hit-header {

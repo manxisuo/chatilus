@@ -544,7 +544,7 @@ onUnmounted(() => {
             :key="bucket.month"
             type="button"
             class="month-nav-item"
-            :class="{ active: activeMonth === bucket.month }"
+            :class="{ 'cl-nav-item-active': activeMonth === bucket.month }"
             :data-month-nav="bucket.month"
             @click="jumpToMonth(bucket.month)"
           >
@@ -735,14 +735,12 @@ onUnmounted(() => {
   text-align: left;
 }
 
-.month-nav-item:hover {
+.month-nav-item:hover:not(.cl-nav-item-active) {
   background: var(--cl-hover);
 }
 
-.month-nav-item.active {
-  background: var(--cl-selected-strong);
+.month-nav-item.cl-nav-item-active {
   font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--cl-accent);
 }
 
 .month-nav-label {
