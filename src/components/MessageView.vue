@@ -3,6 +3,7 @@ import { computed, nextTick, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl } from "../api";
+import { interceptExternalLinkClick } from "../utils/externalLink";
 import { renderMarkdown } from "../utils/markdown";
 import { attachmentCacheKey } from "../utils/attachment";
 import { type AppLocale, formatDateTime } from "../utils/locale";
@@ -336,7 +337,11 @@ function shouldEagerLoadImages(messageId: string) {
           <el-button text @click="emit('exportMarkdown')">{{ t("conversation.exportMarkdown") }}</el-button>
         </div>
       </header>
-      <div ref="messagesContainerRef" class="messages">
+      <div
+        ref="messagesContainerRef"
+        class="messages"
+        @click="interceptExternalLinkClick"
+      >
         <article
           v-for="message in renderedMessages"
           :key="message.id"
