@@ -1666,13 +1666,13 @@ onMounted(async () => {
 }
 
 .search-hit:hover {
-  background: rgba(64, 158, 255, 0.08);
+  background: var(--cl-accent-soft);
 }
 
 .search-hit.active {
-  background: rgba(64, 158, 255, 0.15);
-  border-left: 3px solid var(--el-color-primary);
-  padding-left: 13px;
+  background: var(--cl-search-spotlight-bg);
+  box-shadow: inset 4px 0 0 var(--cl-search-spotlight-bar);
+  padding-left: 12px;
 }
 
 .hit-header {

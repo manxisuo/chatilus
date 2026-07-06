@@ -59,6 +59,7 @@ export default {
     results: "Search results",
     hits: "{count} hits",
     noHits: "No matching messages",
+    matched: "Search match",
   },
   filter: {
     allConversations: "All chats",

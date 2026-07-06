@@ -59,6 +59,7 @@ export default {
     results: "搜索结果",
     hits: "{count} 条",
     noHits: "没有匹配的消息",
+    matched: "搜索结果",
   },
   filter: {
     allConversations: "全部对话",

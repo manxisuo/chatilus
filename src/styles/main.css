@@ -18,6 +18,10 @@ html[data-theme="light"] {
   --cl-accent: #5b6b82;
   --cl-accent-soft: rgba(91, 107, 130, 0.12);
   --cl-text-selection: rgba(91, 107, 130, 0.28);
+  --cl-search-spotlight-bg: #d8e4f2;
+  --cl-search-spotlight-ring: rgba(91, 107, 130, 0.5);
+  --cl-search-spotlight-shadow: 0 0 0 1px rgba(91, 107, 130, 0.18), 0 6px 20px rgba(91, 107, 130, 0.16);
+  --cl-search-spotlight-bar: #3f5168;
   --cl-sidebar-width: 280px;
   --cl-sidebar-width-compact: 220px;
   --cl-content-max-width: 860px;
@@ -56,6 +60,10 @@ html[data-theme="dark"] {
   --cl-accent: #9aa3b2;
   --cl-accent-soft: rgba(154, 163, 178, 0.14);
   --cl-text-selection: rgba(154, 163, 178, 0.35);
+  --cl-search-spotlight-bg: color-mix(in srgb, var(--cl-accent) 24%, var(--cl-panel-elevated));
+  --cl-search-spotlight-ring: rgba(154, 163, 178, 0.55);
+  --cl-search-spotlight-shadow: 0 0 0 1px rgba(154, 163, 178, 0.28), 0 8px 28px rgba(0, 0, 0, 0.38);
+  --cl-search-spotlight-bar: #b8c2d0;
 
   --el-color-primary: #9aa3b2;
   --el-color-primary-light-3: #9aa0a8;

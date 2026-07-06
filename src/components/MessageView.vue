@@ -33,6 +33,7 @@ const imageSrcCache = reactive<Record<string, string>>({});
 const lightboxVisible = ref(false);
 const lightboxIndex = ref(0);
 const messagesContainerRef = ref<HTMLElement | null>(null);
+const highlightPulseKey = ref(0);
 
 let scrollSession = 0;
 let resizeObserver: ResizeObserver | null = null;
@@ -90,7 +91,9 @@ function waitForImages(images: HTMLImageElement[]): Promise<void> {
   });
 }
 
-function scrollElementIntoCenter(
+const HIGHLIGHT_SCROLL_TOP_GAP = 8;
+
+function scrollElementToTop(
   container: HTMLElement,
   target: HTMLElement,
   smooth = true,
@@ -98,8 +101,7 @@ function scrollElementIntoCenter(
   const containerRect = container.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   const offset = targetRect.top - containerRect.top + container.scrollTop;
-  const scrollTop =
-    offset - container.clientHeight / 2 + target.clientHeight / 2;
+  const scrollTop = offset - HIGHLIGHT_SCROLL_TOP_GAP;
   container.scrollTo({
     top: Math.max(0, scrollTop),
     behavior: smooth ? "smooth" : "auto",
@@ -119,7 +121,7 @@ function startScrollWatch(
       `message-${props.highlightMessageId}`,
     );
     if (!currentTarget) return;
-    scrollElementIntoCenter(container, currentTarget, false);
+    scrollElementToTop(container, currentTarget, false);
   };
 
   const scheduleCorrection = () => {
@@ -167,13 +169,16 @@ async function scrollToHighlightedMessage() {
   const currentTarget = document.getElementById(`message-${props.highlightMessageId}`);
   if (!container || !currentTarget) return;
 
-  scrollElementIntoCenter(container, currentTarget, true);
+  scrollElementToTop(container, currentTarget, true);
   startScrollWatch(session, container, currentTarget);
 }
 
 watch(
   () => [props.highlightMessageId, props.loading, props.messages] as const,
   () => {
+    if (props.highlightMessageId) {
+      highlightPulseKey.value += 1;
+    }
     void scrollToHighlightedMessage();
   },
 );
@@ -345,10 +350,19 @@ function shouldEagerLoadImages(messageId: string) {
               highlighted: message.id === highlightMessageId,
             },
           ]"
+          :data-pulse="
+            message.id === highlightMessageId ? highlightPulseKey : undefined
+          "
         >
           <div class="message-head">
             <div class="head-left">
               <span class="role">{{ roleLabel(message.role) }}</span>
+              <span
+                v-if="message.id === highlightMessageId"
+                class="search-match-badge"
+              >
+                {{ t("search.matched") }}
+              </span>
               <el-button
                 class="star-btn"
                 text
@@ -479,6 +493,7 @@ function shouldEagerLoadImages(messageId: string) {
 }
 
 .message {
+  position: relative;
   max-width: var(--cl-content-max-width);
   margin: 0 auto;
   padding: 12px 0;
@@ -499,13 +514,32 @@ function shouldEagerLoadImages(messageId: string) {
 }
 
 .message.highlighted {
-  background: var(--cl-selected);
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px 14px 16px;
   border-bottom-color: transparent;
-  box-shadow: inset 3px 0 0 var(--cl-accent);
-  padding-left: 10px;
-  margin-left: -10px;
-  padding-right: 10px;
-  margin-right: -10px;
+  border-left: 4px solid var(--cl-search-spotlight-bar);
+  background: var(--cl-search-spotlight-bg);
+  border-radius: 10px;
+  box-shadow: var(--cl-search-spotlight-shadow);
+  scroll-margin-top: 8px;
+}
+
+.message.highlighted[data-pulse] {
+  animation: search-hit-enter 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes search-hit-enter {
+  0% {
+    background: color-mix(in srgb, var(--cl-search-spotlight-bar) 28%, var(--cl-panel-elevated));
+    box-shadow:
+      0 0 0 2px var(--cl-search-spotlight-ring),
+      0 10px 28px rgba(91, 107, 130, 0.22);
+  }
+  100% {
+    background: var(--cl-search-spotlight-bg);
+    box-shadow: var(--cl-search-spotlight-shadow);
+  }
 }
 
 .message.user {
@@ -521,6 +555,25 @@ function shouldEagerLoadImages(messageId: string) {
 .message.assistant,
 .message.system {
   padding: 14px 0;
+}
+
+.message.user.highlighted {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  background: var(--cl-search-spotlight-bg);
+  border: 1px solid var(--cl-search-spotlight-ring);
+  border-left: 4px solid var(--cl-search-spotlight-bar);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: var(--cl-search-spotlight-shadow);
+}
+
+.message.assistant.highlighted,
+.message.system.highlighted {
+  padding: 14px 16px;
+  border-top: 1px solid var(--cl-search-spotlight-ring);
+  border-right: 1px solid var(--cl-search-spotlight-ring);
+  border-bottom: 1px solid var(--cl-search-spotlight-ring);
 }
 
 .message-head {
@@ -540,6 +593,20 @@ function shouldEagerLoadImages(messageId: string) {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.search-match-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--cl-search-spotlight-bar);
+  background: var(--cl-accent-soft);
+  border: 1px solid var(--cl-search-spotlight-ring);
 }
 
 .role {
