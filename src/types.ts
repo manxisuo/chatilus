@@ -75,7 +75,7 @@ export interface ImportGuide {
   source: string;
   display_name: string;
   description: string;
-  support_status: "stable" | "experimental";
+  support_status: "stable" | "beta" | "experimental";
   support_summary: string;
   recognition_hint: string;
   methods: ImportMethodGuide[];

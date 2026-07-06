@@ -43,7 +43,7 @@ impl Importer for GrokImporter {
             source: self.source().as_str().to_string(),
             display_name: "Grok".to_string(),
             description: "xAI Grok 账户隐私门户导出的聊天数据".to_string(),
-            support_status: "stable".to_string(),
+            support_status: "experimental".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
             recognition_hint: "ChatLens 会读取 prod-grok-backend.json 中的 conversations / responses，\
                                并关联 prod-mc-asset-server 下的图片附件。"

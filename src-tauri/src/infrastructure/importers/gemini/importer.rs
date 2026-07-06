@@ -43,7 +43,7 @@ impl Importer for GeminiImporter {
             source: self.source().as_str().to_string(),
             display_name: "Gemini".to_string(),
             description: "Google Takeout 中的 Gemini Apps 活动记录".to_string(),
-            support_status: "stable".to_string(),
+            support_status: "beta".to_string(),
             support_summary: "Google Takeout".to_string(),
             recognition_hint: "ChatLens 会解析 Gemini Apps 活动记录目录中的 HTML 文件。".to_string(),
             methods: vec![ImportMethodGuide {

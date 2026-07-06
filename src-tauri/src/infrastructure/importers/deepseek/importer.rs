@@ -38,7 +38,7 @@ impl Importer for DeepSeekImporter {
             source: self.source().as_str().to_string(),
             display_name: "DeepSeek".to_string(),
             description: "DeepSeek 官方数据导出（设置 → 数据导出）".to_string(),
-            support_status: "stable".to_string(),
+            support_status: "experimental".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
             recognition_hint: "ChatLens 会读取 conversations.json 中的 mapping / fragments 对话树，\
                                并识别 user.json。"

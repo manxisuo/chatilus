@@ -40,7 +40,7 @@ impl Importer for CursorImporter {
             source: self.source().as_str().to_string(),
             display_name: "Cursor".to_string(),
             description: "Cursor IDE 本地对话数据库".to_string(),
-            support_status: "stable".to_string(),
+            support_status: "beta".to_string(),
             support_summary: "本地 state.vscdb".to_string(),
             recognition_hint: "ChatLens 会读取 state.vscdb 中的工作区、会话和消息记录。".to_string(),
             methods: vec![

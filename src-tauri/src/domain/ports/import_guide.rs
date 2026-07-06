@@ -27,7 +27,7 @@ pub struct ImportGuide {
     pub source: String,
     pub display_name: String,
     pub description: String,
-    /// `stable` 或 `experimental`
+    /// `stable`、`beta` 或 `experimental`
     pub support_status: String,
     /// 卡片上展示的简要支持说明，如「ZIP / 解压目录」。
     pub support_summary: String,

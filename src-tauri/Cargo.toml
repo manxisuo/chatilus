@@ -1,6 +1,6 @@
 [package]
 name = "chatlens"
-version = "0.1.0"
+version = "0.2.0"
 description = "ChatLens - 本地 AI 对话历史浏览器"
 authors = ["manxi"]
 edition = "2021"

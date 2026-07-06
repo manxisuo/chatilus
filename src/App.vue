@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ElMessage } from "element-plus";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ElMessage, type InputInstance } from "element-plus";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import ConversationList from "./components/ConversationList.vue";
@@ -14,6 +15,8 @@ import WindowControls from "./components/WindowControls.vue";
 import MessageView from "./components/MessageView.vue";
 import TimelineView from "./components/TimelineView.vue";
 import TagDialog from "./components/TagDialog.vue";
+import ImportReportDialog from "./components/ImportReportDialog.vue";
+import PrivacyDataDialog from "./components/PrivacyDataDialog.vue";
 import {
   createTag,
   deleteTag,
@@ -38,7 +41,6 @@ import type {
   ImportMethodGuide,
   ImportJobView,
   ImportProgressEvent,
-  ImportResult,
   SearchHit,
   TagView,
 } from "./types";
@@ -108,6 +110,12 @@ const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
 const { showRightPanel, compactLeftPanel } = useLayoutBreakpoints();
 const conversationInfoDrawerVisible = ref(false);
 const insightPanelWidth = LAYOUT_WIDTHS.insight;
+const importReportVisible = ref(false);
+const lastImportJob = ref<ImportJobView | null>(null);
+const privacyDialogVisible = ref(false);
+const searchInputRef = ref<InputInstance>();
+
+const FEEDBACK_URL = "https://github.com/manxisuo/ChatLens/issues";
 
 const appearanceOptions = computed(() => [
   { value: "light" as const, label: t("appearance.light") },
@@ -130,6 +138,14 @@ const librarySummaryLine = computed(() => {
 });
 
 function handleMoreCommand(command: string) {
+  if (command === "privacy") {
+    privacyDialogVisible.value = true;
+    return;
+  }
+  if (command === "feedback") {
+    void openUrl(FEEDBACK_URL);
+    return;
+  }
   if (command.startsWith("lang:")) {
     handleLanguageCommand(command.slice(5) as AppLocale);
     return;
@@ -414,34 +430,15 @@ onUnmounted(() => {
   removeKeyboardShortcuts?.();
 });
 
-function formatImportResultMessage(result: ImportResult): string {
-  const parts: string[] = [];
-  if (result.conversations_imported > 0) {
-    parts.push(t("import.result.imported", { count: result.conversations_imported }));
-  }
-  if (result.conversations_updated > 0) {
-    parts.push(t("import.result.updated", { count: result.conversations_updated }));
-  }
-  if (result.conversations_deduplicated > 0) {
-    parts.push(t("import.result.deduplicated", { count: result.conversations_deduplicated }));
-  }
-  if (parts.length === 0) {
-    parts.push(t("import.result.noneFound"));
-  }
-  parts.push(t("import.result.messagesWritten", { count: result.messages_imported }));
-  parts.push(t("import.result.mediaIndexed", { count: result.media_files_indexed }));
-  const separator = locale.value === "zh-CN" ? "，" : ", ";
-  return t("import.result.title", { details: parts.join(separator) });
-}
-
 async function finishImport(job: ImportJobView) {
   importing.value = false;
   importDialogVisible.value = false;
   cleanupImportListeners();
   importJobId.value = null;
+  lastImportJob.value = job;
+  importReportVisible.value = true;
 
   if (job.status === "done" && job.result) {
-    ElMessage.success(formatImportResultMessage(job.result));
     searchMode.value = false;
     searchQuery.value = "";
     searchHits.value = [];
@@ -450,10 +447,18 @@ async function finishImport(job: ImportJobView) {
     await refreshTags();
     await loadConversations();
     activeId.value = conversations.value[0]?.id ?? null;
-    return;
   }
+}
 
-  ElMessage.error(job.error ?? t("import.failed"));
+function handleImportReportOpenTimeline() {
+  viewMode.value = "timeline";
+}
+
+function handleImportReportStartSearch() {
+  viewMode.value = "chats";
+  void nextTick(() => {
+    searchInputRef.value?.focus();
+  });
 }
 
 async function startImportFlow(path: string, importerId?: string) {
@@ -516,13 +521,17 @@ async function openImportWizard() {
 }
 
 function importSupportStatusLabel(status: ImportGuide["support_status"]) {
-  return status === "experimental" ? t("import.experimental") : t("import.stable");
+  if (status === "experimental") return t("import.experimental");
+  if (status === "beta") return t("import.beta");
+  return t("import.stable");
 }
 
 function importSupportStatusType(
   status: ImportGuide["support_status"],
-): "success" | "warning" {
-  return status === "experimental" ? "warning" : "success";
+): "success" | "warning" | "info" {
+  if (status === "experimental") return "warning";
+  if (status === "beta") return "info";
+  return "success";
 }
 
 async function importFromDetectedPath(path: string) {
@@ -853,6 +862,7 @@ onMounted(async () => {
       <div class="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
       <div class="titlebar-right">
         <el-input
+          ref="searchInputRef"
           v-model="searchQuery"
           clearable
           :placeholder="t('search.placeholder')"
@@ -906,6 +916,12 @@ onMounted(async () => {
                 >
                   {{ option.label }}
                 </span>
+              </el-dropdown-item>
+              <el-dropdown-item divided command="privacy">
+                {{ t("privacy.menu") }}
+              </el-dropdown-item>
+              <el-dropdown-item command="feedback">
+                {{ t("feedback.menu") }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -1298,6 +1314,18 @@ onMounted(async () => {
       @save="handleSaveTags"
       @create-tag="handleCreateTag"
       @delete-tag="handleDeleteTag"
+    />
+
+    <ImportReportDialog
+      v-model:visible="importReportVisible"
+      :job="lastImportJob"
+      @open-timeline="handleImportReportOpenTimeline"
+      @start-search="handleImportReportStartSearch"
+    />
+
+    <PrivacyDataDialog
+      v-model:visible="privacyDialogVisible"
+      :db-path="stats?.db_path"
     />
   </el-container>
   </el-config-provider>

@@ -86,7 +86,8 @@ export default {
     importDirectly: "Import now",
     chooseManually: "Choose manually",
     backToSources: "← Choose another source",
-    stable: "Supported",
+    stable: "Stable",
+    beta: "Beta",
     experimental: "Experimental",
     elapsed: "Elapsed {time}",
     elapsedSeconds: "{n}s",
@@ -108,6 +109,23 @@ export default {
       mediaIndexed: "indexed {count} media files",
     },
     failed: "Import failed",
+    report: {
+      successTitle: "Import complete",
+      failureTitle: "Import failed",
+      source: "Source: {name}",
+      unknownSource: "Unknown source",
+      importedLabel: "New conversations",
+      updatedLabel: "Updated conversations",
+      deduplicatedLabel: "Deduplicated in package",
+      messagesLabel: "Messages written",
+      mediaLabel: "Media indexed",
+      openTimeline: "Open Timeline",
+      startSearch: "Start searching",
+      copyError: "Copy error",
+      errorCopied: "Error copied",
+      copyFailed: "Copy failed",
+      feedback: "Report issue",
+    },
   },
   conversation: {
     details: "Chat details",
@@ -239,5 +257,38 @@ export default {
   starred: {
     empty: "No starred messages. Click ☆ next to a message to star it.",
     manageTags: "Manage tags",
+  },
+  privacy: {
+    title: "Privacy & data",
+    menu: "Privacy & data",
+    version: "Version {version}",
+    dbPath: "Database location",
+    viewRepo: "View on GitHub",
+    feedback: "Report issue",
+    sections: {
+      local: {
+        title: "Local-first",
+        body: "ChatLens does not upload your conversations by default. Imported data is stored in a local SQLite database; browsing and search run entirely on your device.",
+      },
+      noNetwork: {
+        title: "No external AI or telemetry",
+        body: "This version does not call external LLM APIs and does not collect telemetry or analytics.",
+      },
+      storage: {
+        title: "Storage",
+        body: "The main database is chatlens.db in your OS app data folder. Image attachments are indexed by file path; image bytes are not stored inside the database.",
+      },
+      importCache: {
+        title: "Import cache",
+        body: "Some import flows cache a copy of the export under an imports/ folder next to the database for attachment resolution. It stays on your machine with the library.",
+      },
+      delete: {
+        title: "Deleting data",
+        body: "Quit ChatLens, then delete chatlens.db and the imports/ folder to remove all library data. Uninstalling the app does not remove these files automatically.",
+      },
+    },
+  },
+  feedback: {
+    menu: "Report issue",
   },
 } as const;

@@ -39,7 +39,7 @@ impl Importer for CopilotImporter {
             source: self.source().as_str().to_string(),
             display_name: "Copilot".to_string(),
             description: "Microsoft 账户隐私门户导出的 Copilot 活动历史".to_string(),
-            support_status: "stable".to_string(),
+            support_status: "experimental".to_string(),
             support_summary: "CSV".to_string(),
             recognition_hint: "ChatLens 会读取 copilot-activity-history.csv 中的 Conversation / \
                                Time / Author / Message 列，并按会话标题聚合消息。"

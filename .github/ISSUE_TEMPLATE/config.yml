@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 已知问题
+    url: https://github.com/manxisuo/ChatLens/blob/main/KNOWN_ISSUES.md
+    about: 发布前请先查看已知限制
+  - name: 讨论区
+    url: https://github.com/manxisuo/ChatLens/discussions
+    about: 功能建议与一般讨论

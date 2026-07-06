@@ -86,7 +86,8 @@ export default {
     importDirectly: "直接导入",
     chooseManually: "手动选择",
     backToSources: "← 选择其他数据源",
-    stable: "已支持",
+    stable: "稳定",
+    beta: "Beta",
     experimental: "实验性",
     elapsed: "已用时 {time}",
     elapsedSeconds: "{n} 秒",
@@ -108,6 +109,23 @@ export default {
       mediaIndexed: "索引媒体 {count} 个",
     },
     failed: "导入失败",
+    report: {
+      successTitle: "导入完成",
+      failureTitle: "导入失败",
+      source: "来源：{name}",
+      unknownSource: "未知来源",
+      importedLabel: "新增对话",
+      updatedLabel: "更新对话",
+      deduplicatedLabel: "包内去重",
+      messagesLabel: "写入消息",
+      mediaLabel: "索引媒体",
+      openTimeline: "打开 Timeline",
+      startSearch: "开始搜索",
+      copyError: "复制错误信息",
+      errorCopied: "已复制错误信息",
+      copyFailed: "复制失败",
+      feedback: "反馈问题",
+    },
   },
   conversation: {
     details: "对话详情",
@@ -239,5 +257,38 @@ export default {
   starred: {
     empty: "暂无收藏消息，在对话中点击消息旁的 ☆ 即可收藏",
     manageTags: "管理标签",
+  },
+  privacy: {
+    title: "隐私与数据",
+    menu: "隐私与数据",
+    version: "版本 {version}",
+    dbPath: "数据库位置",
+    viewRepo: "查看 GitHub",
+    feedback: "反馈问题",
+    sections: {
+      local: {
+        title: "本地优先",
+        body: "ChatLens 默认不上传你的对话内容。所有导入数据存储在本机 SQLite 数据库中，浏览与搜索均在本地完成。",
+      },
+      noNetwork: {
+        title: "无外部 AI 与统计",
+        body: "当前版本不会调用外部大模型 API，也不收集 telemetry 或使用分析 SDK。",
+      },
+      storage: {
+        title: "数据存储",
+        body: "主数据库为 chatlens.db，位于系统应用数据目录。图片附件索引指向导入包内的文件路径，不会把整张图片复制进数据库。",
+      },
+      importCache: {
+        title: "导入缓存",
+        body: "部分导入流程会在数据库同级目录下的 imports/ 文件夹缓存一份导出副本，便于附件解析。该目录随 Library 一并存放于本机。",
+      },
+      delete: {
+        title: "删除数据",
+        body: "退出 ChatLens 后，删除上述数据库文件与 imports/ 目录即可清除全部 Library 数据。卸载应用不会自动删除这些数据。",
+      },
+    },
+  },
+  feedback: {
+    menu: "反馈问题",
   },
 } as const;
