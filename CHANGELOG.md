@@ -40,5 +40,5 @@
 - 收藏对话/消息、标签、Markdown 导出
 - 浅色/深色/跟随系统主题，中英文界面
 
-[0.2.0]: https://github.com/manxisuo/ChatLens/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/manxisuo/ChatLens/releases/tag/v0.1.0
+[0.2.0]: https://github.com/manxisuo/chatilus/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/manxisuo/chatilus/releases/tag/v0.1.0

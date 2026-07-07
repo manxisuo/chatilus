@@ -6,7 +6,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ImportJobView } from "../types";
 import { sourceLabel } from "../utils/dataSource";
 
-const FEEDBACK_URL = "https://github.com/manxisuo/ChatLens/issues";
+const FEEDBACK_URL = "https://github.com/manxisuo/chatilus/issues";
 
 const props = defineProps<{
   visible: boolean;

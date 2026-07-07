@@ -1,6 +1,6 @@
 # 早期内测招募文案
 
-> 供朋友圈、开发者群、README 置顶等场景使用。发布前请确认 [GitHub Releases](https://github.com/manxisuo/ChatLens/releases) 已有 Windows 安装包。
+> 供朋友圈、开发者群、README 置顶等场景使用。发布前请确认 [GitHub Releases](https://github.com/manxisuo/chatilus/releases) 已有 Windows 安装包。
 
 ---
 
@@ -12,7 +12,7 @@
 
 目前开放 **Windows 早期内测**，ChatGPT 稳定支持，Cursor / Gemini 为 Beta。
 
-下载与反馈：https://github.com/manxisuo/ChatLens
+下载与反馈：https://github.com/manxisuo/chatilus
 
 ---
 
@@ -34,10 +34,10 @@
 
 欢迎试用并到 Issues 反馈（请勿粘贴完整聊天内容）。
 
-GitHub：https://github.com/manxisuo/ChatLens
+GitHub：https://github.com/manxisuo/chatilus
 
 ---
 
 ## README 置顶建议（英文）
 
-> **Early access (v0.2.x)** — Chatilus is a local-first browser for AI chat history. Import your ChatGPT export, search locally, browse images and timeline. Windows builds on [Releases](https://github.com/manxisuo/ChatLens/releases). Feedback welcome via [Issues](https://github.com/manxisuo/ChatLens/issues).
+> **Early access (v0.2.x)** — Chatilus is a local-first browser for AI chat history. Import your ChatGPT export, search locally, browse images and timeline. Windows builds on [Releases](https://github.com/manxisuo/chatilus/releases). Feedback welcome via [Issues](https://github.com/manxisuo/chatilus/issues).

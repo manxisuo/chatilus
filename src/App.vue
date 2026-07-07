@@ -115,7 +115,7 @@ const lastImportJob = ref<ImportJobView | null>(null);
 const privacyDialogVisible = ref(false);
 const searchInputRef = ref<InputInstance>();
 
-const FEEDBACK_URL = "https://github.com/manxisuo/ChatLens/issues";
+const FEEDBACK_URL = "https://github.com/manxisuo/chatilus/issues";
 
 const appearanceOptions = computed(() => [
   { value: "light" as const, label: t("appearance.light") },

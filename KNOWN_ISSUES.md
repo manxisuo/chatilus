@@ -32,4 +32,4 @@
 
 ## 反馈
 
-遇到问题请前往 [GitHub Issues](https://github.com/manxisuo/ChatLens/issues)。请描述环境、版本与复现步骤，**不要粘贴完整对话内容**。
+遇到问题请前往 [GitHub Issues](https://github.com/manxisuo/chatilus/issues)。请描述环境、版本与复现步骤，**不要粘贴完整对话内容**。

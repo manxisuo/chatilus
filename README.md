@@ -2,13 +2,13 @@
 
 **Browse your AI memory** — 轻量、本地优先的多源 AI 对话历史浏览器。支持 ChatGPT 导出、Cursor、Gemini Takeout 等数据导入本地 SQLite，统一浏览、搜索与图片回顾。
 
-> **早期内测 v0.2.x** — Windows 安装包见 [Releases](https://github.com/manxisuo/ChatLens/releases)。欢迎试用并通过 [Issues](https://github.com/manxisuo/ChatLens/issues) 反馈（请勿粘贴完整对话内容）。
+> **早期内测 v0.2.x** — Windows 安装包见 [Releases](https://github.com/manxisuo/chatilus/releases)。欢迎试用并通过 [Issues](https://github.com/manxisuo/chatilus/issues) 反馈（请勿粘贴完整对话内容）。
 
 ## 下载与安装
 
 | 平台 | 状态 | 说明 |
 |------|------|------|
-| **Windows 10/11** | 内测 | 从 [Releases](https://github.com/manxisuo/ChatLens/releases) 下载 `.msi` 或 `.exe` 安装包 |
+| **Windows 10/11** | 内测 | 从 [Releases](https://github.com/manxisuo/chatilus/releases) 下载 `.msi` 或 `.exe` 安装包 |
 | macOS / Linux | 未正式支持 | 可自行克隆仓库后 `npm run tauri build` |
 
 安装后首次使用：点击「导入数据」→ 选择 **ChatGPT** → 选择官方导出 ZIP 或解压目录。
@@ -40,7 +40,7 @@
 
 ## 反馈
 
-- [报告 Bug / 问题](https://github.com/manxisuo/ChatLens/issues/new?template=bug_report.yml)
+- [报告 Bug / 问题](https://github.com/manxisuo/chatilus/issues/new?template=bug_report.yml)
 - [已知问题](KNOWN_ISSUES.md)
 - [更新日志](CHANGELOG.md)
 

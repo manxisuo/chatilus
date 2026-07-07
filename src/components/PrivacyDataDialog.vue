@@ -4,8 +4,8 @@ import { useI18n } from "vue-i18n";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-const FEEDBACK_URL = "https://github.com/manxisuo/ChatLens/issues";
-const REPO_URL = "https://github.com/manxisuo/ChatLens";
+const FEEDBACK_URL = "https://github.com/manxisuo/chatilus/issues";
+const REPO_URL = "https://github.com/manxisuo/chatilus";
 
 const PRIVACY_SECTIONS = ["local", "noNetwork", "storage", "importCache", "delete"] as const;
 
