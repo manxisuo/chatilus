@@ -269,7 +269,7 @@ export default {
     sections: {
       local: {
         title: "本地优先",
-        body: "ChatLens 默认不上传你的对话内容。所有导入数据存储在本机 SQLite 数据库中，浏览与搜索均在本地完成。",
+        body: "Chatilus 默认不上传你的对话内容。所有导入数据存储在本机 SQLite 数据库中，浏览与搜索均在本地完成。",
       },
       noNetwork: {
         title: "无外部 AI 与统计",
@@ -285,7 +285,7 @@ export default {
       },
       delete: {
         title: "删除数据",
-        body: "退出 ChatLens 后，删除上述数据库文件与 imports/ 目录即可清除全部 Library 数据。卸载应用不会自动删除这些数据。",
+        body: "退出 Chatilus 后，删除上述数据库文件与 imports/ 目录即可清除全部 Library 数据。卸载应用不会自动删除这些数据。",
       },
     },
   },

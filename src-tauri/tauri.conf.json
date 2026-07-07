@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ChatLens",
+  "productName": "Chatilus",
   "version": "0.2.0",
   "identifier": "com.manxi.chatlens",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ChatLens",
+        "title": "Chatilus",
         "width": 1280,
         "height": 860,
         "minWidth": 960,

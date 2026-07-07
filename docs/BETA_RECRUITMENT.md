@@ -6,7 +6,7 @@
 
 ## 短版（朋友圈 / 即刻）
 
-我在做 **ChatLens** —— 一个本地优先的 AI 对话历史浏览器。
+我在做 **Chatilus** —— 一个本地优先的 AI 对话历史浏览器。
 
 把 ChatGPT 官方导出 ZIP 导入本地，统一搜索、浏览图片、按 Timeline 回顾，数据不上传。
 
@@ -18,7 +18,7 @@
 
 ## 中版（开发者群 / V2EX 预告）
 
-**ChatLens** 是一个桌面端工具，帮你把散落在各平台的 AI 对话导入本地，统一浏览和搜索。
+**Chatilus** 是一个桌面端工具，帮你把散落在各平台的 AI 对话导入本地，统一浏览和搜索。
 
 **现在能做什么：**
 
@@ -40,4 +40,4 @@ GitHub：https://github.com/manxisuo/ChatLens
 
 ## README 置顶建议（英文）
 
-> **Early access (v0.2.x)** — ChatLens is a local-first browser for AI chat history. Import your ChatGPT export, search locally, browse images and timeline. Windows builds on [Releases](https://github.com/manxisuo/ChatLens/releases). Feedback welcome via [Issues](https://github.com/manxisuo/ChatLens/issues).
+> **Early access (v0.2.x)** — Chatilus is a local-first browser for AI chat history. Import your ChatGPT export, search locally, browse images and timeline. Windows builds on [Releases](https://github.com/manxisuo/ChatLens/releases). Feedback welcome via [Issues](https://github.com/manxisuo/ChatLens/issues).

@@ -45,7 +45,7 @@ impl Importer for GeminiImporter {
             description: "Google Takeout 中的 Gemini Apps 活动记录".to_string(),
             support_status: "beta".to_string(),
             support_summary: "Google Takeout".to_string(),
-            recognition_hint: "ChatLens 会解析 Gemini Apps 活动记录目录中的 HTML 文件。".to_string(),
+            recognition_hint: "Chatilus 会解析 Gemini Apps 活动记录目录中的 HTML 文件。".to_string(),
             methods: vec![ImportMethodGuide {
                 id: "takeout_dir".to_string(),
                 label: "选择 Gemini Apps 目录".to_string(),

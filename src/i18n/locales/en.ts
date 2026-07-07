@@ -269,7 +269,7 @@ export default {
     sections: {
       local: {
         title: "Local-first",
-        body: "ChatLens does not upload your conversations by default. Imported data is stored in a local SQLite database; browsing and search run entirely on your device.",
+        body: "Chatilus does not upload your conversations by default. Imported data is stored in a local SQLite database; browsing and search run entirely on your device.",
       },
       noNetwork: {
         title: "No external AI or telemetry",
@@ -285,7 +285,7 @@ export default {
       },
       delete: {
         title: "Deleting data",
-        body: "Quit ChatLens, then delete chatlens.db and the imports/ folder to remove all library data. Uninstalling the app does not remove these files automatically.",
+        body: "Quit Chatilus, then delete chatlens.db and the imports/ folder to remove all library data. Uninstalling the app does not remove these files automatically.",
       },
     },
   },

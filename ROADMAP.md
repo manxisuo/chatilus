@@ -1,6 +1,6 @@
-# ChatLens 技术路线
+# Chatilus 技术路线
 
-> **ChatLens**：面向个人的 **AI 工作历史浏览器**（Personal AI Work History Browser）。
+> **Chatilus**：面向个人的 **AI 工作历史浏览器**（Personal AI Work History Browser）。
 >
 > 回答的问题不是「我记了什么」，而是 **「我和 AI 一起工作过什么？」**
 >
@@ -10,7 +10,7 @@
 
 ### 北极星
 
-当用户需要找回 AI 记忆时，**ChatLens 是默认入口**。
+当用户需要找回 AI 记忆时，**Chatilus 是默认入口**。
 
 工具类产品不必追求日活；目标是「没有它就难受」——换电脑、找旧讨论、跨平台回忆时第一个想到它。
 
@@ -40,7 +40,7 @@ AI 能力放在 `application/ai/`，不进入 domain 核心。
 
 ### 与竞品的关系
 
-| 对比 | ChatLens | Obsidian / Logseq |
+| 对比 | Chatilus | Obsidian / Logseq |
 |------|----------|-------------------|
 | 数据性质 | 被动汇聚各平台 AI 对话 | 主动书写笔记 |
 | 核心问题 | 「我以前在哪儿和 AI 讨论过这个？」 | 「我的知识网络是什么？」 |
@@ -137,7 +137,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 **主里程碑 — Workspace / Project**
 
-- [ ] 手动或规则将多源会话归入 Workspace（ChatLens、Plum、USV…）
+- [ ] 手动或规则将多源会话归入 Workspace（Chatilus、Plum、USV…）
 - [ ] 项目视图：会话、图片、标签、搜索在项目内聚合
 
 **v0.5 已完成 — Timeline**
@@ -179,7 +179,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 ### 再往后（v0.6–v0.7：Organize）
 
-- [ ] **Workspace / Project**：将多源会话归到同一工作项目（如 ChatLens、Plum、USV）；基于 Source Context 映射，而非导入时自动创建
+- [ ] **Workspace / Project**：将多源会话归到同一工作项目（如 Chatilus、Plum、USV）；基于 Source Context 映射，而非导入时自动创建
 - [ ] 项目视图：项目内聚合对话、图片、标签、搜索结果
 - [ ] **Topic（主题）**：从标题/内容统计或提取高频主题（与用户 **Tag** 区分：Tag 手动，Topic 系统发现）
 - [ ] Asset 模型增强：`thumbnail_path`，大量图片场景的缩略图缓存
@@ -227,7 +227,7 @@ EXPLAIN 抽检（本机）：`idx_messages_conversation`、`idx_conversation_tag
 
 ### 为什么不是 Electron？
 
-ChatLens 只需浏览本地历史数据，不需要内置完整 Chromium。**Tauri 2** 体积更小、内存占用更低，且 Rust 适合处理 GB 级 JSON 分片与 zip 解压。
+Chatilus 只需浏览本地历史数据，不需要内置完整 Chromium。**Tauri 2** 体积更小、内存占用更低，且 Rust 适合处理 GB 级 JSON 分片与 zip 解压。
 
 ---
 
@@ -529,7 +529,7 @@ AI 能力（总结、打标签、嵌入）拟放在 **`application/ai/`**，不�
 
 ### v0.6 — Workspace / Project
 
-- [ ] 手动或规则将多源会话归入 Workspace（ChatLens、Plum、USV…）
+- [ ] 手动或规则将多源会话归入 Workspace（Chatilus、Plum、USV…）
 - [ ] 项目视图：会话、图片、标签、搜索在项目内聚合
 - [ ] 搜索权重扩展：时间、来源、收藏、标签
 - [ ] `MessageContent` 结构化块；Asset 缩略图

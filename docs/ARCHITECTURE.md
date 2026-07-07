@@ -1,4 +1,4 @@
-# ChatLens 架构说明
+# Chatilus 架构说明
 
 > 本文描述 **架构收敛（PR 1–5）完成后的当前结构**。技术路线与版本规划见 [ROADMAP.md](../ROADMAP.md)。
 >

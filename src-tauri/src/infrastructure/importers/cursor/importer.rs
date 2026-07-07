@@ -42,7 +42,7 @@ impl Importer for CursorImporter {
             description: "Cursor IDE 本地对话数据库".to_string(),
             support_status: "beta".to_string(),
             support_summary: "本地 state.vscdb".to_string(),
-            recognition_hint: "ChatLens 会读取 state.vscdb 中的工作区、会话和消息记录。".to_string(),
+            recognition_hint: "Chatilus 会读取 state.vscdb 中的工作区、会话和消息记录。".to_string(),
             methods: vec![
                 ImportMethodGuide {
                     id: "vscdb".to_string(),
@@ -66,7 +66,7 @@ impl Importer for CursorImporter {
                     dialog_title: "选择 Cursor User 目录".to_string(),
                     extensions: Vec::new(),
                     hint: "选择包含 globalStorage/state.vscdb 的 User 目录；\
-                           ChatLens 会自动定位数据库文件。"
+                           Chatilus 会自动定位数据库文件。"
                         .to_string(),
                     example_path: Some(platform_display_path(
                         r"%APPDATA%\Cursor\User",

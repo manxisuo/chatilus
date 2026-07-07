@@ -844,7 +844,7 @@ onMounted(async () => {
     <el-header class="topbar titlebar" :height="`${48}px`">
       <div class="titlebar-left">
         <div class="brand" data-tauri-drag-region>
-          <strong class="brand-name" data-tauri-drag-region>ChatLens</strong>
+          <strong class="brand-name" data-tauri-drag-region>Chatilus</strong>
         </div>
         <nav class="nav-tabs" :aria-label="t('nav.mainViews')">
           <button

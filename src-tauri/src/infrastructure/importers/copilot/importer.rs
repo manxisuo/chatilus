@@ -41,7 +41,7 @@ impl Importer for CopilotImporter {
             description: "Microsoft 账户隐私门户导出的 Copilot 活动历史".to_string(),
             support_status: "experimental".to_string(),
             support_summary: "CSV".to_string(),
-            recognition_hint: "ChatLens 会读取 copilot-activity-history.csv 中的 Conversation / \
+            recognition_hint: "Chatilus 会读取 copilot-activity-history.csv 中的 Conversation / \
                                Time / Author / Message 列，并按会话标题聚合消息。"
                 .to_string(),
             methods: vec![
@@ -64,7 +64,7 @@ impl Importer for CopilotImporter {
                     kind: "directory".to_string(),
                     dialog_title: "选择 Copilot 导出目录".to_string(),
                     extensions: Vec::new(),
-                    hint: "选择解压后的 Copilot 导出文件夹，ChatLens 会自动查找 \
+                    hint: "选择解压后的 Copilot 导出文件夹，Chatilus 会自动查找 \
                            copilot-activity-history.csv。"
                         .to_string(),
                     example_path: None,

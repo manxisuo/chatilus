@@ -39,7 +39,7 @@ impl Importer for ChatGptImporter {
             description: "OpenAI 官方数据导出（Settings → Data controls → Export）".to_string(),
             support_status: "stable".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
-            recognition_hint: "ChatLens 会查找 conversations.json 或 conversations-*.json；\
+            recognition_hint: "Chatilus 会查找 conversations.json 或 conversations-*.json；\
                                可选还有 user.json、projects.json 及图片附件。"
                 .to_string(),
             methods: vec![
@@ -61,7 +61,7 @@ impl Importer for ChatGptImporter {
                     kind: "file".to_string(),
                     dialog_title: "选择 ChatGPT 导出 ZIP".to_string(),
                     extensions: vec!["zip".to_string()],
-                    hint: "直接选择从 OpenAI 下载的 .zip 导出包，ChatLens 会自动解压并导入。"
+                    hint: "直接选择从 OpenAI 下载的 .zip 导出包，Chatilus 会自动解压并导入。"
                         .to_string(),
                     example_path: None,
                     detected_default_path: None,

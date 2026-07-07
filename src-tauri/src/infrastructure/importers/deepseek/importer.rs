@@ -40,7 +40,7 @@ impl Importer for DeepSeekImporter {
             description: "DeepSeek 官方数据导出（设置 → 数据导出）".to_string(),
             support_status: "experimental".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
-            recognition_hint: "ChatLens 会读取 conversations.json 中的 mapping / fragments 对话树，\
+            recognition_hint: "Chatilus 会读取 conversations.json 中的 mapping / fragments 对话树，\
                                并识别 user.json。"
                 .to_string(),
             methods: vec![
@@ -62,7 +62,7 @@ impl Importer for DeepSeekImporter {
                     kind: "file".to_string(),
                     dialog_title: "选择 DeepSeek 导出 ZIP".to_string(),
                     extensions: vec!["zip".to_string()],
-                    hint: "直接选择从 DeepSeek 下载的 .zip 导出包，ChatLens 会自动解压并导入。"
+                    hint: "直接选择从 DeepSeek 下载的 .zip 导出包，Chatilus 会自动解压并导入。"
                         .to_string(),
                     example_path: None,
                     detected_default_path: None,

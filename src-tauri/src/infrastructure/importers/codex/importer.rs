@@ -44,7 +44,7 @@ impl Importer for CodexImporter {
             description: "OpenAI Codex CLI 本地会话数据".to_string(),
             support_status: "experimental".to_string(),
             support_summary: "本地 ~/.codex".to_string(),
-            recognition_hint: "ChatLens 会读取 state_*.sqlite 中的线程索引，\
+            recognition_hint: "Chatilus 会读取 state_*.sqlite 中的线程索引，\
                                并解析 sessions 目录下的 rollout JSONL 会话记录；\
                                同时索引 generated_images、附件与内嵌截图。"
                 .to_string(),

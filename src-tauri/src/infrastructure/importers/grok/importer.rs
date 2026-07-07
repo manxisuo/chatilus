@@ -45,7 +45,7 @@ impl Importer for GrokImporter {
             description: "xAI Grok 账户隐私门户导出的聊天数据".to_string(),
             support_status: "experimental".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
-            recognition_hint: "ChatLens 会读取 prod-grok-backend.json 中的 conversations / responses，\
+            recognition_hint: "Chatilus 会读取 prod-grok-backend.json 中的 conversations / responses，\
                                并关联 prod-mc-asset-server 下的图片附件。"
                 .to_string(),
             methods: vec![
@@ -67,7 +67,7 @@ impl Importer for GrokImporter {
                     kind: "file".to_string(),
                     dialog_title: "选择 Grok 导出 ZIP".to_string(),
                     extensions: vec!["zip".to_string()],
-                    hint: "直接选择从 xAI 隐私门户下载的 .zip 导出包，ChatLens 会自动解压并导入。"
+                    hint: "直接选择从 xAI 隐私门户下载的 .zip 导出包，Chatilus 会自动解压并导入。"
                         .to_string(),
                     example_path: None,
                     detected_default_path: None,

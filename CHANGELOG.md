@@ -1,6 +1,6 @@
 # Changelog
 
-本文件记录 ChatLens 的版本变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+本文件记录 Chatilus 的版本变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ## [0.2.0] - 2026-07-07
 

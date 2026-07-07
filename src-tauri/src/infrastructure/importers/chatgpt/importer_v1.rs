@@ -42,7 +42,7 @@ impl Importer for ChatGptV1Importer {
             description: "OpenAI 新版数据导出（含 export_manifest.json，附件为 .dat 文件）".to_string(),
             support_status: "stable".to_string(),
             support_summary: "ZIP / 解压目录".to_string(),
-            recognition_hint: "ChatLens 会查找 export_manifest.json、conversations-*.json 及 file-*.dat / file_*.dat 附件。"
+            recognition_hint: "Chatilus 会查找 export_manifest.json、conversations-*.json 及 file-*.dat / file_*.dat 附件。"
                 .to_string(),
             methods: vec![
                 ImportMethodGuide {
@@ -63,7 +63,7 @@ impl Importer for ChatGptV1Importer {
                     kind: "file".to_string(),
                     dialog_title: "选择 ChatGPT Manifest v1 导出 ZIP".to_string(),
                     extensions: vec!["zip".to_string()],
-                    hint: "直接选择从 OpenAI 下载的 .zip 导出包，ChatLens 会自动解压并导入。".to_string(),
+                    hint: "直接选择从 OpenAI 下载的 .zip 导出包，Chatilus 会自动解压并导入。".to_string(),
                     example_path: None,
                     detected_default_path: None,
                     detected_default_label: None,
