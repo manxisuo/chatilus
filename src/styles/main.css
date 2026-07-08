@@ -110,7 +110,6 @@ button.cl-nav-item-active,
 .month-nav-item.cl-nav-item-active,
 .search-hit.cl-nav-item-active {
   background-color: var(--cl-nav-item-active-bg);
-  box-shadow: inset 4px 0 0 var(--cl-search-spotlight-bar);
 }
 
 /* Shared inspector property list */

@@ -98,6 +98,12 @@ const sourceNavItems = computed(() => {
   return items;
 });
 
+const visibleSourceNavItems = computed(() =>
+  sourceNavItems.value.filter(
+    (item) => item.id === null || item.count > 0 || item.id === props.filterSource,
+  ),
+);
+
 function activityTime(conversation: ConversationSummary): number | null {
   return conversation.update_time ?? conversation.create_time;
 }
@@ -529,7 +535,7 @@ onUnmounted(() => {
     <div class="timeline-body">
       <aside class="timeline-sidebar">
         <SourceNav
-          :items="sourceNavItems"
+          :items="visibleSourceNavItems"
           :active-id="filterSource"
           :title="t('filter.sources')"
           show-dots
@@ -728,6 +734,10 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 7px 12px;
+  /* Keep month rows visually consistent.
+     Months with images render 2 lines on the right; enforce a min-height
+     so rows don't look cramped or shorter than the others. */
+  min-height: 44px;
   border-radius: 6px;
   font-size: 13px;
   color: var(--cl-text);

@@ -178,6 +178,12 @@ const sourceNavItems = computed(() => {
   return items;
 });
 
+const visibleSourceNavItems = computed(() =>
+  sourceNavItems.value.filter(
+    (item) => item.id === null || item.count > 0 || item.id === props.filterSource,
+  ),
+);
+
 const imageKindOptions = computed(() => [
   { value: "all" as const, label: t("gallery.imageKind.all") },
   { value: "generated" as const, label: t("gallery.imageKind.generated") },
@@ -597,7 +603,7 @@ onMounted(() => {
   <div class="image-gallery">
     <aside v-if="!filterConversationId" class="gallery-sidebar">
       <SourceNav
-        :items="sourceNavItems"
+        :items="visibleSourceNavItems"
         :active-id="filterSource"
         :title="t('filter.sources')"
         show-dots
@@ -802,8 +808,8 @@ onMounted(() => {
 
 .kind-chip.active {
   color: var(--cl-text);
-  background: var(--cl-selected-strong);
-  border-color: var(--cl-border);
+  background: var(--cl-nav-item-active-bg);
+  border-color: var(--cl-search-spotlight-ring);
   font-weight: 500;
 }
 

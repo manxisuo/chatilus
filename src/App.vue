@@ -1417,10 +1417,9 @@ onMounted(async () => {
 }
 
 .nav-tab.active {
-  background: var(--cl-panel-elevated);
+  background: var(--cl-nav-item-active-bg);
   color: var(--cl-text);
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-weight: 650;
 }
 
 .nav-label {
@@ -1614,10 +1613,10 @@ onMounted(async () => {
 }
 
 .filter-chip.active {
-  border-color: var(--cl-border);
-  background: var(--cl-selected-strong);
+  border-color: var(--cl-search-spotlight-ring);
+  background: var(--cl-nav-item-active-bg);
   color: var(--cl-text);
-  font-weight: 500;
+  font-weight: 650;
 }
 
 .tag-filter-inline {
