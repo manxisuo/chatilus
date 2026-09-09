@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""从带透明通道的 PNG 生成 ChatLens 桌面图标（保留 RGBA，不填黑底）。"""
+"""从已切好透明圆角的 PNG 生成 Chatilus 桌面图标（不二次切角，保留 RGBA）。
+
+默认不保留 iOS / Android 图标目录（当前仅面向 Windows 桌面发布）。
+"""
 
 from __future__ import annotations
 
@@ -12,14 +15,19 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 ICONS = ROOT / "src-tauri" / "icons"
-DEFAULT_SRC = ROOT / "assets" / "chatlens-original.png"
+DEFAULT_SRC = ROOT / "assets" / "chatilus-icon.png"
 TARGET_SIZE = 1024
 
 
 def prepare_source(src: Path, dest: Path) -> None:
+    """Copy/scale to 1024 square only — never punch corners."""
     img = Image.open(src).convert("RGBA")
+    if img.size == (TARGET_SIZE, TARGET_SIZE):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        img.save(dest, "PNG")
+        return
     scale = TARGET_SIZE / max(img.size)
-    nw, nh = (int(img.width * scale), int(img.height * scale))
+    nw, nh = (int(round(img.width * scale)), int(round(img.height * scale)))
     resized = img.resize((nw, nh), Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", (TARGET_SIZE, TARGET_SIZE), (0, 0, 0, 0))
     canvas.paste(resized, ((TARGET_SIZE - nw) // 2, (TARGET_SIZE - nh) // 2), resized)
@@ -36,8 +44,9 @@ def main() -> int:
     square = ICONS / "chatlens-source-square.png"
     prepare_source(src, square)
 
+    npm = "npm.cmd" if sys.platform.startswith("win") else "npm"
     subprocess.run(
-        ["npm", "run", "tauri", "icon", str(square.relative_to(ROOT)).replace("\\", "/")],
+        [npm, "run", "tauri", "--", "icon", str(square.relative_to(ROOT)).replace("\\", "/")],
         cwd=ROOT,
         check=True,
     )
@@ -50,7 +59,7 @@ def main() -> int:
     shutil.copy2(ICONS / "128x128.png", public / "favicon.png")
     shutil.copy2(ICONS / "32x32.png", public / "favicon-32.png")
 
-    print(f"已生成桌面图标，源图: {src}")
+    print(f"已生成桌面图标（无 iOS/Android），源图: {src}")
     return 0
 
 
