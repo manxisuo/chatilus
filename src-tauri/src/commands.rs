@@ -281,6 +281,24 @@ pub fn read_image_data_url(path: String) -> Result<String, String> {
     Ok(format!("data:{mime};base64,{encoded}"))
 }
 
+#[tauri::command]
+pub fn save_image_copy(source_path: String, dest_path: String) -> Result<(), String> {
+    let source = PathBuf::from(&source_path);
+    if !source.is_file() {
+        return Err(format!("图片文件不存在: {source_path}"));
+    }
+
+    let dest = PathBuf::from(&dest_path);
+    if let Some(parent) = dest.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {e}"))?;
+        }
+    }
+
+    std::fs::copy(&source, &dest).map_err(|e| format!("保存图片失败: {e}"))?;
+    Ok(())
+}
+
 fn mime_from_path(path: &PathBuf) -> &'static str {
     match path
         .extension()

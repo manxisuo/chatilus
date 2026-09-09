@@ -221,6 +221,10 @@ export default {
     openConversation: "Open chat",
     openConversationTitle: "Open chat",
     viewFullSize: "View full size",
+    saveToDisk: "Save to disk",
+    saving: "Saving…",
+    saveDialogTitle: "Save image",
+    saveSuccess: "Image saved",
     inspector: {
       title: "Image details",
       empty: "Select an image to view details",

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { readImageDataUrl, listImages, countImages, type ImageKindFilter } from "../api";
 import ImageLightbox from "./ImageLightbox.vue";
@@ -16,6 +17,7 @@ import {
 } from "../utils/dataSource";
 import { galleryItemCacheKey } from "../utils/attachment";
 import { type AppLocale, formatDateTime, formatMonthKey } from "../utils/locale";
+import { promptAndSaveImage } from "../utils/saveImage";
 
 const props = defineProps<{
   totalCount: number | null;
@@ -572,6 +574,26 @@ async function onLightboxLoadMore() {
   }
 }
 
+const savingImage = ref(false);
+
+async function saveSelectedImage() {
+  if (!selectedImage.value || savingImage.value) return;
+  savingImage.value = true;
+  try {
+    const saved = await promptAndSaveImage(selectedImage.value.path, {
+      fileKey: selectedImage.value.file_key,
+      dialogTitle: t("gallery.saveDialogTitle"),
+    });
+    if (saved) {
+      ElMessage.success(t("gallery.saveSuccess"));
+    }
+  } catch (error) {
+    ElMessage.error(String(error));
+  } finally {
+    savingImage.value = false;
+  }
+}
+
 function openLightbox(arrayIndex: number) {
   selectedIndex.value = arrayIndex;
   lightboxIndex.value = arrayIndexToDisplayIndex(arrayIndex);
@@ -737,6 +759,14 @@ onMounted(() => {
           <div class="cl-inspector-actions">
             <button type="button" class="cl-inspector-action" @click="openLightbox(selectedIndex!)">
               {{ t("gallery.viewFullSize") }}
+            </button>
+            <button
+              type="button"
+              class="cl-inspector-action"
+              :disabled="savingImage"
+              @click="saveSelectedImage"
+            >
+              {{ savingImage ? t("gallery.saving") : t("gallery.saveToDisk") }}
             </button>
             <button type="button" class="cl-inspector-action" @click="openConversation(selectedImage.conversation_id)">
               {{ t("gallery.openConversation") }}

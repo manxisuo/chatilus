@@ -166,6 +166,10 @@ export function readImageDataUrl(path: string) {
   return invoke<string>("read_image_data_url", { path });
 }
 
+export function saveImageCopy(sourcePath: string, destPath: string) {
+  return invoke<void>("save_image_copy", { sourcePath, destPath });
+}
+
 export function getStats() {
   return invoke<DatabaseStats>("get_stats");
 }

@@ -221,6 +221,10 @@ export default {
     openConversation: "打开所属对话",
     openConversationTitle: "打开所属对话",
     viewFullSize: "查看大图",
+    saveToDisk: "保存到磁盘",
+    saving: "保存中…",
+    saveDialogTitle: "保存图片",
+    saveSuccess: "图片已保存",
     inspector: {
       title: "图片详情",
       empty: "选择一张图片查看详情",

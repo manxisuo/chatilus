@@ -9,7 +9,7 @@ use commands::{
     create_tag, delete_tag, export_conversation_markdown, get_conversation, get_import_job,
     get_messages, get_stats, list_starred_messages, list_timeline, list_timeline_months,
     import_export_dir, init_state, list_conversations, count_images, list_images, list_tags,
-    list_import_guides, read_image_data_url,
+    list_import_guides, read_image_data_url, save_image_copy,
     search_messages, set_conversation_starred, set_conversation_tags, set_message_starred,
     start_import,
 };
@@ -47,6 +47,7 @@ pub fn run() {
             set_conversation_tags,
             export_conversation_markdown,
             read_image_data_url,
+            save_image_copy,
             get_stats,
         ])
         .run(tauri::generate_context!())

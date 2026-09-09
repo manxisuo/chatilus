@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, withDefaults } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
+import { promptAndSaveImage } from "../utils/saveImage";
 
 export interface GalleryImage {
   path: string;
@@ -34,6 +36,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const currentIndex = ref(0);
+const saving = ref(false);
 
 const currentImage = computed(() => props.images[currentIndex.value] ?? null);
 
@@ -55,6 +58,24 @@ function openConversation() {
   if (!currentConversationId.value) return;
   emit("openConversation", currentConversationId.value);
   close();
+}
+
+async function downloadCurrent() {
+  if (!currentImage.value || saving.value) return;
+  saving.value = true;
+  try {
+    const saved = await promptAndSaveImage(currentImage.value.path, {
+      fileKey: currentImage.value.fileKey,
+      dialogTitle: t("gallery.saveDialogTitle"),
+    });
+    if (saved) {
+      ElMessage.success(t("gallery.saveSuccess"));
+    }
+  } catch (error) {
+    ElMessage.error(String(error));
+  } finally {
+    saving.value = false;
+  }
 }
 
 const canGoPrev = computed(() => currentIndex.value > 0);
@@ -129,6 +150,9 @@ function onKeydown(event: KeyboardEvent) {
     goPrev();
   } else if (event.key === "ArrowRight") {
     goNext();
+  } else if ((event.key === "s" || event.key === "S") && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    void downloadCurrent();
   }
 }
 
@@ -172,6 +196,14 @@ onUnmounted(() => {
         <div class="meta">
           <span v-if="captionText" class="caption">{{ captionText }}</span>
           <div class="meta-actions">
+            <button
+              type="button"
+              class="open-conv-btn"
+              :disabled="saving"
+              @click="downloadCurrent"
+            >
+              {{ saving ? t("gallery.saving") : t("gallery.saveToDisk") }}
+            </button>
             <button
               v-if="currentConversationId"
               type="button"
@@ -263,8 +295,13 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.open-conv-btn:hover {
+.open-conv-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.open-conv-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .close-btn {
