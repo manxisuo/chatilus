@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, Row};
@@ -19,7 +20,7 @@ pub struct CodexThreadRecord {
     pub first_user_message: Option<String>,
 }
 
-pub fn open_codex_db(input: &Path) -> Result<(Connection, PathBuf), String> {
+pub fn open_codex_db(input: &Path) -> AppResult<(Connection, PathBuf)> {
     let db_path = resolve_codex_state_db(input)
         .ok_or_else(|| format!("未找到 Codex state 数据库: {}", input.display()))?;
     let uri = format!(
@@ -34,7 +35,7 @@ pub fn open_codex_db(input: &Path) -> Result<(Connection, PathBuf), String> {
     Ok((conn, db_path))
 }
 
-pub fn list_threads(conn: &Connection) -> Result<Vec<CodexThreadRecord>, String> {
+pub fn list_threads(conn: &Connection) -> AppResult<Vec<CodexThreadRecord>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, title, cwd, model, rollout_path, source, created_at, updated_at,
@@ -43,15 +44,15 @@ pub fn list_threads(conn: &Connection) -> Result<Vec<CodexThreadRecord>, String>
              WHERE rollout_path IS NOT NULL AND rollout_path != ''
              ORDER BY updated_at DESC",
         )
-        .map_err(|e| format!("查询 Codex 会话列表失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询 Codex 会话列表失败: {e}")))?;
 
     let rows = stmt
         .query_map([], map_thread_row)
-        .map_err(|e| format!("读取 Codex 会话列表失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取 Codex 会话列表失败: {e}")))?;
 
     let mut threads = Vec::new();
     for row in rows {
-        let thread = row.map_err(|e| format!("解析 Codex 会话行失败: {e}"))?;
+        let thread = row.map_err(|e| AppError::Msg(format!("解析 Codex 会话行失败: {e}")))?;
         if thread.rollout_path.is_file() {
             threads.push(thread);
         }

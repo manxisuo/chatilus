@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
@@ -5,7 +6,7 @@ use rusqlite::{params, Connection};
 use crate::domain::ports::ImportedSourceContext;
 use crate::models::SourceContextView;
 
-pub(crate) fn create_source_context_schema(conn: &Connection) -> Result<(), String> {
+pub(crate) fn create_source_context_schema(conn: &Connection) -> AppResult<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS source_contexts (
@@ -69,7 +70,7 @@ pub(crate) fn create_source_context_schema(conn: &Connection) -> Result<(), Stri
         );
         ",
     )
-    .map_err(|e| format!("创建 source_contexts 表失败: {e}"))
+    .map_err(|e| AppError::Msg(format!("创建 source_contexts 表失败: {e}")))
 }
 
 pub(crate) fn link_conversation_source_contexts(
@@ -77,12 +78,12 @@ pub(crate) fn link_conversation_source_contexts(
     conversation_id: &str,
     source: &str,
     contexts: &[ImportedSourceContext],
-) -> Result<(), String> {
+) -> AppResult<()> {
     conn.execute(
         "DELETE FROM conversation_source_contexts WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("清理来源上下文关联失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("清理来源上下文关联失败: {e}")))?;
 
     for context in contexts {
         let context_id = source_context_storage_id(source, context);
@@ -92,7 +93,7 @@ pub(crate) fn link_conversation_source_contexts(
              VALUES (?1, ?2)",
             params![conversation_id, context_id],
         )
-        .map_err(|e| format!("写入来源上下文关联失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("写入来源上下文关联失败: {e}")))?;
     }
 
     Ok(())
@@ -101,7 +102,7 @@ pub(crate) fn link_conversation_source_contexts(
 pub(crate) fn attach_source_contexts(
     conn: &Connection,
     summaries: &mut [crate::models::ConversationSummary],
-) -> Result<(), String> {
+) -> AppResult<()> {
     if summaries.is_empty() {
         return Ok(());
     }
@@ -119,7 +120,7 @@ pub(crate) fn attach_source_contexts(
 
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("查询来源上下文失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询来源上下文失败: {e}")))?;
 
     let params: Vec<&dyn rusqlite::ToSql> = ids
         .iter()
@@ -140,12 +141,12 @@ pub(crate) fn attach_source_contexts(
                 },
             ))
         })
-        .map_err(|e| format!("查询来源上下文失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询来源上下文失败: {e}")))?;
 
     let mut by_conversation: HashMap<String, Vec<SourceContextView>> = HashMap::new();
     for row in rows {
         let (conversation_id, context) =
-            row.map_err(|e| format!("读取来源上下文失败: {e}"))?;
+            row.map_err(|e| AppError::Msg(format!("读取来源上下文失败: {e}")))?;
         by_conversation
             .entry(conversation_id)
             .or_default()
@@ -164,7 +165,7 @@ fn upsert_source_context(
     source: &str,
     context_id: &str,
     context: &ImportedSourceContext,
-) -> Result<(), String> {
+) -> AppResult<()> {
     conn.execute(
         "INSERT INTO source_contexts (
             id, source, context_type, external_id, name, path, raw_json, created_at, updated_at
@@ -185,7 +186,7 @@ fn upsert_source_context(
             context.raw_json,
         ],
     )
-    .map_err(|e| format!("写入来源上下文失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("写入来源上下文失败: {e}")))?;
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use std::fs;
 
 use crate::domain::models::{DataSource, ImportProgress};
@@ -62,7 +63,7 @@ impl Importer for GeminiImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_gemini_export_root(&input.path).is_some();
         Ok(ImportDetectResult {
             matched,
@@ -71,7 +72,7 @@ impl Importer for GeminiImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let export_root = resolve_gemini_export_root(&input.path)
             .ok_or_else(|| format!("未找到 Gemini Takeout 活动记录: {}", input.path.display()))?;
         let conversations = load_conversations(&export_root)?;
@@ -87,7 +88,7 @@ impl Importer for GeminiImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let export_root = resolve_gemini_export_root(&input.path)
             .ok_or_else(|| format!("未找到 Gemini Takeout 活动记录: {}", input.path.display()))?;
 
@@ -132,7 +133,7 @@ impl Importer for GeminiImporter {
     }
 }
 
-fn load_conversations(export_root: &std::path::Path) -> Result<Vec<crate::domain::ports::ImportedConversation>, String> {
+fn load_conversations(export_root: &std::path::Path) -> AppResult<Vec<crate::domain::ports::ImportedConversation>> {
     let html_path = find_activity_html(export_root)
         .ok_or_else(|| format!("未找到 Gemini 活动 HTML: {}", export_root.display()))?;
     let html = fs::read_to_string(&html_path)

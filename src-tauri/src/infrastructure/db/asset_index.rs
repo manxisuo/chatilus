@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::collections::HashSet;
 
 use rusqlite::{params, Connection};
@@ -6,7 +7,7 @@ use crate::models::AttachmentView;
 
 use super::helpers::parse_attachments_json;
 
-pub(crate) fn create_assets_schema(conn: &Connection) -> Result<(), String> {
+pub(crate) fn create_assets_schema(conn: &Connection) -> AppResult<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS assets (
@@ -35,7 +36,7 @@ pub(crate) fn create_assets_schema(conn: &Connection) -> Result<(), String> {
             ON assets(conversation_id, created_at DESC);
         ",
     )
-    .map_err(|e| format!("创建 assets 表失败: {e}"))
+    .map_err(|e| AppError::Msg(format!("创建 assets 表失败: {e}")))
 }
 
 pub(crate) fn reindex_conversation_assets(
@@ -43,12 +44,12 @@ pub(crate) fn reindex_conversation_assets(
     conversation_id: &str,
     conversation_title: &str,
     conversation_source: &str,
-) -> Result<(), String> {
+) -> AppResult<()> {
     conn.execute(
         "DELETE FROM assets WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("清理图片索引失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("清理图片索引失败: {e}")))?;
 
     let mut stmt = conn
         .prepare(
@@ -56,7 +57,7 @@ pub(crate) fn reindex_conversation_assets(
              FROM messages m
              WHERE m.conversation_id = ?1",
         )
-        .map_err(|e| format!("读取消息附件失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取消息附件失败: {e}")))?;
 
     let rows = stmt
         .query_map(params![conversation_id], |row| {
@@ -67,11 +68,11 @@ pub(crate) fn reindex_conversation_assets(
                 row.get::<_, Option<String>>(3)?,
             ))
         })
-        .map_err(|e| format!("读取消息附件失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取消息附件失败: {e}")))?;
 
     for row in rows {
         let (message_id, role, create_time, attachments) =
-            row.map_err(|e| format!("读取消息附件失败: {e}"))?;
+            row.map_err(|e| AppError::Msg(format!("读取消息附件失败: {e}")))?;
 
         let attachment_views = dedupe_attachment_views(parse_stored_attachments(
             attachments.as_deref(),
@@ -94,13 +95,13 @@ pub(crate) fn reindex_conversation_assets(
     Ok(())
 }
 
-pub(crate) fn backfill_all_assets(conn: &Connection) -> Result<(), String> {
+pub(crate) fn backfill_all_assets(conn: &Connection) -> AppResult<()> {
     let mut stmt = conn
         .prepare(
             "SELECT c.id, c.title, COALESCE(c.source, 'chatgpt')
              FROM conversations c",
         )
-        .map_err(|e| format!("读取会话失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取会话失败: {e}")))?;
 
     let conversations = stmt
         .query_map([], |row| {
@@ -110,9 +111,9 @@ pub(crate) fn backfill_all_assets(conn: &Connection) -> Result<(), String> {
                 row.get::<_, String>(2)?,
             ))
         })
-        .map_err(|e| format!("读取会话失败: {e}"))?
+        .map_err(|e| AppError::Msg(format!("读取会话失败: {e}")))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取会话失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取会话失败: {e}")))?;
 
     for (conversation_id, title, source) in conversations {
         reindex_conversation_assets(&conn, &conversation_id, &title, &source)?;
@@ -148,7 +149,7 @@ fn insert_asset_row(
     role: &str,
     create_time: Option<f64>,
     attachment: &AttachmentView,
-) -> Result<(), String> {
+) -> AppResult<()> {
     conn.execute(
         "INSERT OR REPLACE INTO assets (
             message_id, file_key, conversation_id, conversation_source, role,
@@ -167,6 +168,6 @@ fn insert_asset_row(
             create_time,
         ],
     )
-    .map_err(|e| format!("写入图片索引失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("写入图片索引失败: {e}")))?;
     Ok(())
 }

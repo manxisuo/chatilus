@@ -1,18 +1,19 @@
+use crate::error::{AppError, AppResult};
 use crate::domain::ports::AssetRepository;
 use crate::models::DatabaseStats;
 
 use super::Database;
 
 impl Database {
-    pub fn stats(&self) -> Result<DatabaseStats, String> {
+    pub fn stats(&self) -> AppResult<DatabaseStats> {
         let conversation_count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))
-            .map_err(|e| format!("统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计失败: {e}")))?;
         let message_count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
-            .map_err(|e| format!("统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计失败: {e}")))?;
         let starred_conversation_count: i64 = self
             .conn
             .query_row(
@@ -20,7 +21,7 @@ impl Database {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计失败: {e}")))?;
         let starred_message_count: i64 = self
             .conn
             .query_row(
@@ -28,11 +29,11 @@ impl Database {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计失败: {e}")))?;
         let tag_count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
-            .map_err(|e| format!("统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计失败: {e}")))?;
         let (image_count, generated_image_count, upload_image_count) =
             AssetRepository::count_by_source(self)?;
         let conversation_counts_by_source = self.conversation_counts_by_source()?;
@@ -44,7 +45,7 @@ impl Database {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("统计最近导入时间失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计最近导入时间失败: {e}")))?;
 
         Ok(DatabaseStats {
             conversation_count,
@@ -62,7 +63,7 @@ impl Database {
         })
     }
 
-    fn conversation_counts_by_source(&self) -> Result<Vec<crate::models::SourceCount>, String> {
+    fn conversation_counts_by_source(&self) -> AppResult<Vec<crate::models::SourceCount>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -71,7 +72,7 @@ impl Database {
                  GROUP BY COALESCE(source, 'chatgpt')
                  ORDER BY count DESC, source ASC",
             )
-            .map_err(|e| format!("统计来源会话数失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("统计来源会话数失败: {e}")))?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -80,9 +81,9 @@ impl Database {
                     count: row.get(1)?,
                 })
             })
-            .map_err(|e| format!("读取来源会话统计失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("读取来源会话统计失败: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取来源会话统计失败: {e}"))
+            .map_err(|e| AppError::Msg(format!("读取来源会话统计失败: {e}")))
     }
 }

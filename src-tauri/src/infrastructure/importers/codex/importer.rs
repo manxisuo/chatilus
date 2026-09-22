@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
@@ -83,7 +84,7 @@ impl Importer for CodexImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_codex_state_db(&input.path).is_some();
         Ok(ImportDetectResult {
             matched,
@@ -92,7 +93,7 @@ impl Importer for CodexImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let (conn, _) = open_codex_db(&input.path)?;
         let threads = list_threads(&conn)?;
         Ok(ImportPreview {
@@ -107,7 +108,7 @@ impl Importer for CodexImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let (conn, db_path) = open_codex_db(&input.path)?;
         let codex_home = resolve_codex_home(&input.path)
             .or_else(|| db_path.parent().map(std::path::Path::to_path_buf))

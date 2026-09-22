@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,7 @@ use super::detect::GROK_BACKEND_FILENAME;
 
 const ASSET_SERVER_DIR: &str = "prod-mc-asset-server";
 
-pub fn parse_grok_export(export_root: &Path) -> Result<Vec<ImportedConversation>, String> {
+pub fn parse_grok_export(export_root: &Path) -> AppResult<Vec<ImportedConversation>> {
     let backend_path = export_root.join(GROK_BACKEND_FILENAME);
     let raw = fs::read_to_string(&backend_path)
         .map_err(|e| format!("无法读取 Grok 导出文件 ({}): {e}", backend_path.display()))?;
@@ -20,7 +21,7 @@ pub fn parse_grok_export(export_root: &Path) -> Result<Vec<ImportedConversation>
         return Err(format!(
             "Grok 导出缺少 conversations 数组: {}",
             backend_path.display()
-        ));
+        ).into());
     };
 
     let mut conversations = items

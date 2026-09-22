@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection};
 
 use super::asset_index::backfill_all_assets;
@@ -10,16 +11,16 @@ use super::asset_index::backfill_all_assets;
 pub const CURRENT_SCHEMA_VERSION: i32 = 1;
 
 impl super::Database {
-    pub fn schema_version(&self) -> Result<i32, String> {
+    pub fn schema_version(&self) -> AppResult<i32> {
         read_schema_version(&self.conn)
     }
 
-    pub fn app_version(&self) -> Result<Option<String>, String> {
+    pub fn app_version(&self) -> AppResult<Option<String>> {
         read_meta(&self.conn, "app_version")
     }
 }
 
-pub(super) fn run_migrations(conn: &Connection) -> Result<(), String> {
+pub(super) fn run_migrations(conn: &Connection) -> AppResult<()> {
     let version = read_schema_version(conn)?;
     match version {
         0 => upsert_meta(conn, "schema_version", &CURRENT_SCHEMA_VERSION.to_string())?,
@@ -28,7 +29,7 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<(), String> {
             return Err(format!(
                 "数据库 schema 版本不兼容（库中为 v{v}，当前应用为 v{CURRENT_SCHEMA_VERSION}）。\
                  开发阶段请删除 chatlens.db 后重新导入；正式发布后将提供增量迁移。"
-            ));
+            ).into());
         }
     }
     upsert_meta(conn, "app_version", env!("CARGO_PKG_VERSION"))?;
@@ -36,7 +37,7 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn maybe_rebuild_assets_path_dedupe(conn: &Connection) -> Result<(), String> {
+fn maybe_rebuild_assets_path_dedupe(conn: &Connection) -> AppResult<()> {
     if read_meta(conn, "assets_path_dedupe_v1")?.as_deref() == Some("1") {
         return Ok(());
     }
@@ -49,16 +50,16 @@ fn maybe_rebuild_assets_path_dedupe(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn read_schema_version(conn: &Connection) -> Result<i32, String> {
+fn read_schema_version(conn: &Connection) -> AppResult<i32> {
     match read_meta(conn, "schema_version")? {
         Some(value) => value
             .parse()
-            .map_err(|e| format!("解析 schema_version 失败 ({value}): {e}")),
+            .map_err(|e| AppError::Msg(format!("解析 schema_version 失败 ({value}): {e}"))),
         None => Ok(0),
     }
 }
 
-fn read_meta(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+fn read_meta(conn: &Connection, key: &str) -> AppResult<Option<String>> {
     if !table_exists(conn, "meta")? {
         return Ok(None);
     }
@@ -73,22 +74,22 @@ fn read_meta(conn: &Connection, key: &str) -> Result<Option<String>, String> {
         if matches!(error, rusqlite::Error::QueryReturnedNoRows) {
             Ok(None)
         } else {
-            Err(format!("读取 meta.{key} 失败: {error}"))
+            Err(AppError::Msg(format!("读取 meta.{key} 失败: {error}")))
         }
     })
 }
 
-pub(super) fn upsert_meta(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+pub(super) fn upsert_meta(conn: &Connection, key: &str, value: &str) -> AppResult<()> {
     conn.execute(
         "INSERT INTO meta (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
     )
-    .map_err(|e| format!("写入 meta.{key} 失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("写入 meta.{key} 失败: {e}")))?;
     Ok(())
 }
 
-fn table_exists(conn: &Connection, table: &str) -> Result<bool, String> {
+fn table_exists(conn: &Connection, table: &str) -> AppResult<bool> {
     conn.query_row(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
         params![table],
@@ -99,7 +100,7 @@ fn table_exists(conn: &Connection, table: &str) -> Result<bool, String> {
         if matches!(error, rusqlite::Error::QueryReturnedNoRows) {
             Ok(false)
         } else {
-            Err(format!("检查表 {table} 是否存在失败: {error}"))
+            Err(AppError::Msg(format!("检查表 {table} 是否存在失败: {error}")))
         }
     })
 }
@@ -111,7 +112,7 @@ mod tests {
     use rusqlite::Connection;
 
     use super::{read_schema_version, upsert_meta, CURRENT_SCHEMA_VERSION, run_migrations};
-    use crate::db::Database;
+    use crate::infrastructure::db::Database;
 
     fn temp_db_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("chatlens-migration-{name}.db"))
@@ -174,7 +175,7 @@ mod tests {
         match Database::open(&path) {
             Err(error) => {
                 assert!(
-                    error.contains("schema 版本不兼容"),
+                    error.to_string().contains("schema 版本不兼容"),
                     "unexpected error: {error}"
                 );
             }

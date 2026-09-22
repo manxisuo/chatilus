@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
@@ -75,7 +76,7 @@ impl Importer for CopilotImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_copilot_csv_path(&input.path).is_some();
         Ok(ImportDetectResult {
             matched,
@@ -84,7 +85,7 @@ impl Importer for CopilotImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let csv_path = resolve_copilot_csv_path(&input.path)
             .ok_or_else(|| format!("未找到 Copilot 活动历史 CSV: {}", input.path.display()))?;
         let conversations = parse_copilot_csv(&csv_path)?;
@@ -100,7 +101,7 @@ impl Importer for CopilotImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let csv_path = resolve_copilot_csv_path(&input.path)
             .ok_or_else(|| format!("未找到 Copilot 活动历史 CSV: {}", input.path.display()))?;
 

@@ -1,5 +1,5 @@
-use std::path::Path;
 
+use crate::error::AppResult;
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
@@ -77,7 +77,7 @@ impl Importer for GrokImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_grok_export_root(&input.path).is_some();
         Ok(ImportDetectResult {
             matched,
@@ -86,7 +86,7 @@ impl Importer for GrokImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let export_root = resolve_grok_export_root(&input.path)
             .ok_or_else(|| format!("未找到 Grok 导出数据: {}", input.path.display()))?;
         let conversations = parse_grok_export(&export_root)?;
@@ -102,7 +102,7 @@ impl Importer for GrokImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let export_root = resolve_grok_export_root(&input.path)
             .ok_or_else(|| format!("未找到 Grok 导出数据: {}", input.path.display()))?;
 

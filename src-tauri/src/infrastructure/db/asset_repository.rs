@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
 
 use rusqlite::ToSql;
@@ -20,7 +21,7 @@ struct ImageFilters<'a> {
 }
 
 impl AssetRepository for Database {
-    fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String> {
+    fn list(&self, query: AssetListQuery) -> AppResult<Vec<Asset>> {
         let filters = ImageFilters {
             image_kind: query.image_kind,
             conversation_source: normalized_source(query.conversation_source.as_deref()),
@@ -34,7 +35,7 @@ impl AssetRepository for Database {
         &self,
         image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
-    ) -> Result<i64, String> {
+    ) -> AppResult<i64> {
         let filters = ImageFilters {
             image_kind,
             conversation_source: normalized_source(conversation_source),
@@ -44,11 +45,11 @@ impl AssetRepository for Database {
         count_assets(&self.conn, &filters)
     }
 
-    fn count_by_source(&self) -> Result<(i64, i64, i64), String> {
+    fn count_by_source(&self) -> AppResult<(i64, i64, i64)> {
         count_images_by_source(&self.conn)
     }
 
-    fn image_counts_by_conversation_source(&self) -> Result<Vec<SourceCount>, String> {
+    fn image_counts_by_conversation_source(&self) -> AppResult<Vec<SourceCount>> {
         image_counts_by_conversation_source(&self.conn)
     }
 
@@ -58,7 +59,7 @@ impl AssetRepository for Database {
         conversation_source: Option<&str>,
         month: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<i64, String> {
+    ) -> AppResult<i64> {
         let filters = ImageFilters {
             image_kind,
             conversation_source: normalized_source(conversation_source),
@@ -71,7 +72,7 @@ impl AssetRepository for Database {
     fn image_counts_by_message_month(
         &self,
         conversation_source: Option<&str>,
-    ) -> Result<HashMap<String, i64>, String> {
+    ) -> AppResult<HashMap<String, i64>> {
         image_counts_by_message_month(&self.conn, conversation_source)
     }
 }
@@ -107,7 +108,7 @@ fn list_assets(
     limit: i64,
     offset: i64,
     filters: &ImageFilters,
-) -> Result<Vec<Asset>, String> {
+) -> AppResult<Vec<Asset>> {
     let mut sql = String::from(
         "SELECT
             a.message_id,
@@ -130,18 +131,18 @@ fn list_assets(
 
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("查询图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询图片失败: {e}")))?;
 
     let param_refs: Vec<&dyn ToSql> = bind.iter().map(|value| value.as_ref()).collect();
     let rows = stmt
         .query_map(param_refs.as_slice(), map_asset_row)
-        .map_err(|e| format!("查询图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询图片失败: {e}")))?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取图片失败: {e}"))
+        .map_err(|e| AppError::Msg(format!("读取图片失败: {e}")))
 }
 
-fn count_assets(conn: &rusqlite::Connection, filters: &ImageFilters) -> Result<i64, String> {
+fn count_assets(conn: &rusqlite::Connection, filters: &ImageFilters) -> AppResult<i64> {
     let mut sql = String::from(
         "SELECT COUNT(*)
          FROM assets a
@@ -152,7 +153,7 @@ fn count_assets(conn: &rusqlite::Connection, filters: &ImageFilters) -> Result<i
 
     let param_refs: Vec<&dyn ToSql> = bind.iter().map(|value| value.as_ref()).collect();
     conn.query_row(&sql, param_refs.as_slice(), |row| row.get(0))
-        .map_err(|e| format!("统计图片失败: {e}"))
+        .map_err(|e| AppError::Msg(format!("统计图片失败: {e}")))
 }
 
 fn map_asset_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Asset> {
@@ -172,7 +173,7 @@ fn map_asset_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Asset> {
 fn image_counts_by_message_month(
     conn: &rusqlite::Connection,
     conversation_source: Option<&str>,
-) -> Result<HashMap<String, i64>, String> {
+) -> AppResult<HashMap<String, i64>> {
     let mut sql = String::from("SELECT ");
     sql.push_str(ASSET_MONTH_SQL);
     sql.push_str(
@@ -190,30 +191,30 @@ fn image_counts_by_message_month(
 
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计月份图片失败: {e}")))?;
     let param_refs: Vec<&dyn ToSql> = bind.iter().map(|value| value.as_ref()).collect();
     let rows = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
-        .map_err(|e| format!("统计月份图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计月份图片失败: {e}")))?;
 
     let mut counts = HashMap::new();
     for row in rows {
-        let (month, count) = row.map_err(|e| format!("统计月份图片失败: {e}"))?;
+        let (month, count) = row.map_err(|e| AppError::Msg(format!("统计月份图片失败: {e}")))?;
         counts.insert(month, count);
     }
     Ok(counts)
 }
 
-fn count_images_by_source(conn: &rusqlite::Connection) -> Result<(i64, i64, i64), String> {
+fn count_images_by_source(conn: &rusqlite::Connection) -> AppResult<(i64, i64, i64)> {
     let total: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM assets WHERE local_path != ''",
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("统计图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计图片失败: {e}")))?;
 
     let generated: i64 = conn
         .query_row(
@@ -221,7 +222,7 @@ fn count_images_by_source(conn: &rusqlite::Connection) -> Result<(i64, i64, i64)
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("统计图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计图片失败: {e}")))?;
 
     let upload: i64 = conn
         .query_row(
@@ -229,12 +230,12 @@ fn count_images_by_source(conn: &rusqlite::Connection) -> Result<(i64, i64, i64)
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("统计图片失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计图片失败: {e}")))?;
 
     Ok((total, generated, upload))
 }
 
-fn image_counts_by_conversation_source(conn: &rusqlite::Connection) -> Result<Vec<SourceCount>, String> {
+fn image_counts_by_conversation_source(conn: &rusqlite::Connection) -> AppResult<Vec<SourceCount>> {
     let mut stmt = conn
         .prepare(
             "SELECT a.conversation_source AS source, COUNT(*) AS count
@@ -243,7 +244,7 @@ fn image_counts_by_conversation_source(conn: &rusqlite::Connection) -> Result<Ve
              GROUP BY a.conversation_source
              ORDER BY count DESC, source ASC",
         )
-        .map_err(|e| format!("统计来源图片数失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("统计来源图片数失败: {e}")))?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -252,16 +253,16 @@ fn image_counts_by_conversation_source(conn: &rusqlite::Connection) -> Result<Ve
                 count: row.get(1)?,
             })
         })
-        .map_err(|e| format!("读取来源图片统计失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取来源图片统计失败: {e}")))?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取来源图片统计失败: {e}"))
+        .map_err(|e| AppError::Msg(format!("读取来源图片统计失败: {e}")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::Database;
+    use crate::infrastructure::db::Database;
     use crate::domain::models::ImageKindFilter;
     use crate::domain::ports::AssetRepository;
     use super::super::asset_index::reindex_conversation_assets;

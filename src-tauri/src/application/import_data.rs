@@ -1,8 +1,9 @@
+use crate::error::{AppError, AppResult};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::db::Database;
+use crate::infrastructure::db::Database;
 use crate::domain::models::{ImportProgress, SourceInfo};
 use crate::domain::ports::{ImportInput, ImportOptions};
 use crate::infrastructure::archive::resolve_import_path;
@@ -10,7 +11,7 @@ use crate::infrastructure::archive::ResolvedImportPath;
 use crate::infrastructure::importers::default_importer_registry;
 use crate::models::ImportResult;
 
-pub fn import_export_dir(db: &mut Database, source_path: &Path) -> Result<ImportResult, String> {
+pub fn import_export_dir(db: &mut Database, source_path: &Path) -> AppResult<ImportResult> {
     let resolved = resolve_import_path(source_path, None)?;
     run_import_resolved(db, resolved, None)
 }
@@ -19,7 +20,7 @@ pub fn run_import(
     db: &mut Database,
     input_path: &Path,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<ImportResult, String> {
+) -> AppResult<ImportResult> {
     let resolved = resolve_import_path(input_path, on_progress.clone())?;
     run_import_resolved(db, resolved, on_progress)
 }
@@ -28,7 +29,7 @@ pub fn run_import_resolved(
     db: &mut Database,
     resolved: ResolvedImportPath,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<ImportResult, String> {
+) -> AppResult<ImportResult> {
     let export_dir = if resolved.cleanup.is_some() {
         persist_export_dir(&db.path, &resolved.export_label, &resolved.export_dir)?
     } else {
@@ -91,7 +92,7 @@ fn persist_export_dir(
     db_path: &str,
     export_label: &str,
     source_dir: &Path,
-) -> Result<PathBuf, String> {
+) -> AppResult<PathBuf> {
     let safe_label = export_label
         .chars()
         .map(|ch| {
@@ -111,14 +112,14 @@ fn persist_export_dir(
     Ok(dest)
 }
 
-fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), String> {
+fn copy_dir_recursive(source: &Path, dest: &Path) -> AppResult<()> {
     fs::create_dir_all(dest)
         .map_err(|e| format!("创建导入缓存目录失败 ({}): {e}", dest.display()))?;
 
     for entry in fs::read_dir(source)
         .map_err(|e| format!("读取导出目录失败 ({}): {e}", source.display()))?
     {
-        let entry = entry.map_err(|e| format!("读取导出目录项失败: {e}"))?;
+        let entry = entry.map_err(|e| AppError::Msg(format!("读取导出目录项失败: {e}")))?;
         let from = entry.path();
         let to = dest.join(entry.file_name());
         if from.is_dir() {

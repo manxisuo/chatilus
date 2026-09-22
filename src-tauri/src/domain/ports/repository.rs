@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use crate::domain::models::ImageKindFilter;
 use crate::domain::models::Asset;
 use crate::domain::models::DataSource;
@@ -44,65 +45,65 @@ pub struct ImportPersistCounts {
 }
 
 pub trait ConversationRepository {
-    fn list(&self, query: ConversationListQuery) -> Result<Vec<ConversationSummary>, String>;
+    fn list(&self, query: ConversationListQuery) -> AppResult<Vec<ConversationSummary>>;
     fn list_timeline(
         &self,
         query: TimelineListQuery,
-    ) -> Result<Vec<ConversationSummary>, String>;
+    ) -> AppResult<Vec<ConversationSummary>>;
     fn list_timeline_months(
         &self,
         source: Option<&str>,
-    ) -> Result<Vec<crate::models::TimelineMonthBucket>, String>;
-    fn get_summary(&self, conversation_id: &str) -> Result<Option<ConversationSummary>, String>;
-    fn set_starred(&self, conversation_id: &str, starred: bool) -> Result<(), String>;
+    ) -> AppResult<Vec<crate::models::TimelineMonthBucket>>;
+    fn get_summary(&self, conversation_id: &str) -> AppResult<Option<ConversationSummary>>;
+    fn set_starred(&self, conversation_id: &str, starred: bool) -> AppResult<()>;
     fn set_tags(
         &self,
         conversation_id: &str,
         tag_ids: &[i64],
-    ) -> Result<Vec<String>, String>;
+    ) -> AppResult<Vec<String>>;
     fn export_markdown(
         &self,
         conversation_id: &str,
         output_path: &std::path::Path,
-    ) -> Result<ExportResult, String>;
+    ) -> AppResult<ExportResult>;
     fn save_many(
         &mut self,
         conversations: &[ImportedConversation],
         source_path: &str,
         data_source: DataSource,
         conversations_deduplicated: usize,
-    ) -> Result<ImportPersistCounts, String>;
+    ) -> AppResult<ImportPersistCounts>;
 }
 
 pub trait MessageRepository {
-    fn list_by_conversation(&self, conversation_id: &str) -> Result<Vec<MessageView>, String>;
+    fn list_by_conversation(&self, conversation_id: &str) -> AppResult<Vec<MessageView>>;
     fn list_starred(
         &self,
         source: Option<&str>,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<crate::models::SearchHit>, String>;
-    fn set_starred(&self, message_id: &str, starred: bool) -> Result<(), String>;
+    ) -> AppResult<Vec<crate::models::SearchHit>>;
+    fn set_starred(&self, message_id: &str, starred: bool) -> AppResult<()>;
 }
 
 pub trait AssetRepository {
-    fn list(&self, query: AssetListQuery) -> Result<Vec<Asset>, String>;
+    fn list(&self, query: AssetListQuery) -> AppResult<Vec<Asset>>;
     fn count(
         &self,
         image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
-    ) -> Result<i64, String>;
-    fn count_by_source(&self) -> Result<(i64, i64, i64), String>;
-    fn image_counts_by_conversation_source(&self) -> Result<Vec<crate::models::SourceCount>, String>;
+    ) -> AppResult<i64>;
+    fn count_by_source(&self) -> AppResult<(i64, i64, i64)>;
+    fn image_counts_by_conversation_source(&self) -> AppResult<Vec<crate::models::SourceCount>>;
     fn count_filtered(
         &self,
         image_kind: ImageKindFilter,
         conversation_source: Option<&str>,
         month: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<i64, String>;
+    ) -> AppResult<i64>;
     fn image_counts_by_message_month(
         &self,
         conversation_source: Option<&str>,
-    ) -> Result<std::collections::HashMap<String, i64>, String>;
+    ) -> AppResult<std::collections::HashMap<String, i64>>;
 }

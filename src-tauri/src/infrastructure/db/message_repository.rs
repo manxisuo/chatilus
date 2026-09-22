@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::params;
 
 use crate::domain::mappers::{message_from_db_fields, message_to_view};
@@ -8,7 +9,7 @@ use super::helpers::{clean_content_placeholders, message_snippet, parse_attachme
 use super::Database;
 
 impl MessageRepository for Database {
-    fn list_by_conversation(&self, conversation_id: &str) -> Result<Vec<MessageView>, String> {
+    fn list_by_conversation(&self, conversation_id: &str) -> AppResult<Vec<MessageView>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -18,7 +19,7 @@ impl MessageRepository for Database {
                  WHERE conversation_id = ?1
                  ORDER BY sort_order ASC",
             )
-            .map_err(|e| format!("查询消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询消息失败: {e}")))?;
 
         let rows = stmt
             .query_map(params![conversation_id], |row| {
@@ -52,10 +53,10 @@ impl MessageRepository for Database {
                 );
                 Ok(message_to_view(message, attachments))
             })
-            .map_err(|e| format!("查询消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询消息失败: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取消息失败: {e}"))
+            .map_err(|e| AppError::Msg(format!("读取消息失败: {e}")))
     }
 
     fn list_starred(
@@ -63,7 +64,7 @@ impl MessageRepository for Database {
         source: Option<&str>,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<crate::models::SearchHit>, String> {
+    ) -> AppResult<Vec<crate::models::SearchHit>> {
         let mut sql = String::from(
             "SELECT m.id, m.conversation_id, c.title, m.role, m.content, m.create_time,
                     COALESCE(c.source, 'chatgpt') AS source
@@ -88,7 +89,7 @@ impl MessageRepository for Database {
         let mut stmt = self
             .conn
             .prepare(&sql)
-            .map_err(|e| format!("查询收藏消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询收藏消息失败: {e}")))?;
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
         let rows = stmt
@@ -104,23 +105,23 @@ impl MessageRepository for Database {
                     source: row.get(6)?,
                 })
             })
-            .map_err(|e| format!("查询收藏消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询收藏消息失败: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取收藏消息失败: {e}"))
+            .map_err(|e| AppError::Msg(format!("读取收藏消息失败: {e}")))
     }
 
-    fn set_starred(&self, message_id: &str, starred: bool) -> Result<(), String> {
+    fn set_starred(&self, message_id: &str, starred: bool) -> AppResult<()> {
         let updated = self
             .conn
             .execute(
                 "UPDATE messages SET is_starred = ?1 WHERE id = ?2",
                 params![starred as i64, message_id],
             )
-            .map_err(|e| format!("更新消息收藏失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("更新消息收藏失败: {e}")))?;
 
         if updated == 0 {
-            return Err("消息不存在".to_string());
+            return Err(AppError::msg("消息不存在"));
         }
         Ok(())
     }

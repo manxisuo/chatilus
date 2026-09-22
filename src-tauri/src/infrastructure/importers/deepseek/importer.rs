@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
@@ -72,7 +73,7 @@ impl Importer for DeepSeekImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_deepseek_export_root(&input.path)
             .or_else(|| {
                 input
@@ -90,7 +91,7 @@ impl Importer for DeepSeekImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let export_root = resolve_deepseek_export_root(&input.path)
             .ok_or_else(|| format!("未找到 DeepSeek 导出: {}", input.path.display()))?;
         let conversations = parse_export_dir(&export_root)?;
@@ -106,7 +107,7 @@ impl Importer for DeepSeekImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let export_root = resolve_deepseek_export_root(&input.path)
             .ok_or_else(|| format!("未找到 DeepSeek 导出: {}", input.path.display()))?;
 

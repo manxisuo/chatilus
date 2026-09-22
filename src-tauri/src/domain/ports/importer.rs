@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -49,11 +50,11 @@ pub trait Importer: Send + Sync {
 
     fn import_guide(&self) -> ImportGuide;
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String>;
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String>;
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult>;
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview>;
     fn import(
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String>;
+    ) -> AppResult<NormalizedImportResult>;
 }

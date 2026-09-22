@@ -1,11 +1,12 @@
-use crate::db::Database;
+use crate::error::AppResult;
+use crate::infrastructure::db::Database;
 use crate::domain::ports::{AssetRepository, ConversationRepository, TimelineListQuery};
 use crate::models::{ConversationSummary, TimelineMonthBucket};
 
 pub fn list_timeline_months(
     db: &Database,
     source: Option<&str>,
-) -> Result<Vec<TimelineMonthBucket>, String> {
+) -> AppResult<Vec<TimelineMonthBucket>> {
     let mut months = ConversationRepository::list_timeline_months(db, source)?;
     let image_counts = AssetRepository::image_counts_by_message_month(db, source)?;
     for bucket in &mut months {
@@ -20,7 +21,7 @@ pub fn list_timeline(
     month: Option<&str>,
     limit: i64,
     offset: i64,
-) -> Result<Vec<ConversationSummary>, String> {
+) -> AppResult<Vec<ConversationSummary>> {
     ConversationRepository::list_timeline(
         db,
         TimelineListQuery {

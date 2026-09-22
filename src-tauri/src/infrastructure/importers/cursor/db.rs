@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -59,7 +60,7 @@ pub fn is_cursor_vscdb(path: &Path) -> bool {
         .is_some()
 }
 
-pub fn open_cursor_db(path: &Path) -> Result<Connection, String> {
+pub fn open_cursor_db(path: &Path) -> AppResult<Connection> {
     let uri = format!(
         "file:{}?mode=ro&immutable=1",
         path.to_string_lossy().replace('\\', "/")
@@ -68,10 +69,10 @@ pub fn open_cursor_db(path: &Path) -> Result<Connection, String> {
         uri,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     )
-    .map_err(|e| format!("无法以只读方式打开 Cursor 数据库 {}: {e}", path.display()))
+    .map_err(|e| AppError::Msg(format!("无法以只读方式打开 Cursor 数据库 {}: {e}", path.display())))
 }
 
-pub fn load_composer_index(conn: &Connection) -> Result<HashMap<String, CursorComposerMeta>, String> {
+pub fn load_composer_index(conn: &Connection) -> AppResult<HashMap<String, CursorComposerMeta>> {
     let mut index = HashMap::new();
 
     let Ok(raw) = conn.query_row(
@@ -84,7 +85,7 @@ pub fn load_composer_index(conn: &Connection) -> Result<HashMap<String, CursorCo
 
     let text = read_json_text(raw)?;
     let value: Value =
-        serde_json::from_str(&text).map_err(|e| format!("解析 composer.composerHeaders 失败: {e}"))?;
+        serde_json::from_str(&text).map_err(|e| AppError::Msg(format!("解析 composer.composerHeaders 失败: {e}")))?;
 
     let composers = value
         .get("allComposers")
@@ -101,18 +102,18 @@ pub fn load_composer_index(conn: &Connection) -> Result<HashMap<String, CursorCo
     Ok(index)
 }
 
-pub fn list_composer_ids(conn: &Connection) -> Result<Vec<String>, String> {
+pub fn list_composer_ids(conn: &Connection) -> AppResult<Vec<String>> {
     let mut stmt = conn
         .prepare("SELECT key FROM cursorDiskKV WHERE key LIKE 'composerData:%' ORDER BY rowid ASC")
-        .map_err(|e| format!("查询 Cursor 会话列表失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询 Cursor 会话列表失败: {e}")))?;
 
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("读取 Cursor 会话列表失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取 Cursor 会话列表失败: {e}")))?;
 
     let mut ids = Vec::new();
     for row in rows {
-        let key = row.map_err(|e| format!("读取 Cursor 会话 key 失败: {e}"))?;
+        let key = row.map_err(|e| AppError::Msg(format!("读取 Cursor 会话 key 失败: {e}")))?;
         if let Some(composer_id) = key.strip_prefix("composerData:") {
             ids.push(composer_id.to_string());
         }
@@ -121,7 +122,7 @@ pub fn list_composer_ids(conn: &Connection) -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
-pub fn load_composer_json(conn: &Connection, composer_id: &str) -> Result<Value, String> {
+pub fn load_composer_json(conn: &Connection, composer_id: &str) -> AppResult<Value> {
     let key = format!("composerData:{composer_id}");
     let raw = conn
         .query_row(
@@ -129,17 +130,17 @@ pub fn load_composer_json(conn: &Connection, composer_id: &str) -> Result<Value,
             [&key],
             read_value_column,
         )
-        .map_err(|e| format!("读取会话 {composer_id} 失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("读取会话 {composer_id} 失败: {e}")))?;
 
     let text = read_json_text(raw)?;
-    serde_json::from_str(&text).map_err(|e| format!("解析会话 {composer_id} 失败: {e}"))
+    serde_json::from_str(&text).map_err(|e| AppError::Msg(format!("解析会话 {composer_id} 失败: {e}")))
 }
 
 pub fn load_bubbles_by_ids(
     conn: &Connection,
     composer_id: &str,
     bubble_ids: &[String],
-) -> Result<HashMap<String, Value>, String> {
+) -> AppResult<HashMap<String, Value>> {
     if bubble_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -158,7 +159,7 @@ pub fn load_bubbles_by_ids(
         let sql = format!("SELECT key, value FROM cursorDiskKV WHERE key IN ({placeholders})");
         let mut stmt = conn
             .prepare(&sql)
-            .map_err(|e| format!("查询会话 {composer_id} 消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询会话 {composer_id} 消息失败: {e}")))?;
 
         let params: Vec<&dyn rusqlite::ToSql> =
             keys.iter().map(|key| key as &dyn rusqlite::ToSql).collect();
@@ -179,10 +180,10 @@ pub fn load_bubbles_by_ids(
                 };
                 Ok(Some((key, raw)))
             })
-            .map_err(|e| format!("读取会话 {composer_id} 消息失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("读取会话 {composer_id} 消息失败: {e}")))?;
 
         for row in rows {
-            let Some((key, raw)) = row.map_err(|e| format!("读取消息行失败: {e}"))? else {
+            let Some((key, raw)) = row.map_err(|e| AppError::Msg(format!("读取消息行失败: {e}")))? else {
                 continue;
             };
             let Some(bubble_id) = key.strip_prefix(&prefix) else {
@@ -190,7 +191,7 @@ pub fn load_bubbles_by_ids(
             };
             let text = read_json_text(raw)?;
             let value: Value =
-                serde_json::from_str(&text).map_err(|e| format!("解析消息 {bubble_id} 失败: {e}"))?;
+                serde_json::from_str(&text).map_err(|e| AppError::Msg(format!("解析消息 {bubble_id} 失败: {e}")))?;
             bubbles.insert(bubble_id.to_string(), value);
         }
     }
@@ -216,7 +217,7 @@ fn header_bubble_ids(composer_json: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub fn parse_all_conversations(conn: &Connection) -> Result<Vec<crate::domain::ports::ImportedConversation>, String> {
+pub fn parse_all_conversations(conn: &Connection) -> AppResult<Vec<crate::domain::ports::ImportedConversation>> {
     let index = load_composer_index(conn)?;
     let composer_ids = list_composer_ids(conn)?;
     let mut conversations = Vec::new();
@@ -255,11 +256,11 @@ fn read_value_column(row: &Row<'_>) -> rusqlite::Result<Vec<u8>> {
     }
 }
 
-fn read_json_text(raw: Vec<u8>) -> Result<String, String> {
+fn read_json_text(raw: Vec<u8>) -> AppResult<String> {
     if raw.is_empty() {
-        return Err("Cursor 数据为空".to_string());
+        return Err(AppError::msg("Cursor 数据为空"));
     }
-    String::from_utf8(raw).map_err(|e| format!("Cursor 数据不是有效 UTF-8: {e}"))
+    String::from_utf8(raw).map_err(|e| AppError::Msg(format!("Cursor 数据不是有效 UTF-8: {e}")))
 }
 
 #[cfg(test)]

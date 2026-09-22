@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection};
 
 use crate::models::TagView;
@@ -5,7 +6,7 @@ use crate::models::TagView;
 use super::Database;
 
 impl Database {
-    pub fn list_tags(&self) -> Result<Vec<TagView>, String> {
+    pub fn list_tags(&self) -> AppResult<Vec<TagView>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -15,7 +16,7 @@ impl Database {
                  GROUP BY t.id
                  ORDER BY t.name COLLATE NOCASE ASC",
             )
-            .map_err(|e| format!("查询标签失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询标签失败: {e}")))?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -25,21 +26,21 @@ impl Database {
                     conversation_count: row.get(2)?,
                 })
             })
-            .map_err(|e| format!("查询标签失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("查询标签失败: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("读取标签失败: {e}"))
+            .map_err(|e| AppError::Msg(format!("读取标签失败: {e}")))
     }
 
-    pub fn create_tag(&self, name: &str) -> Result<TagView, String> {
+    pub fn create_tag(&self, name: &str) -> AppResult<TagView> {
         let trimmed = name.trim();
         if trimmed.is_empty() {
-            return Err("标签名不能为空".to_string());
+            return Err(AppError::msg("标签名不能为空"));
         }
 
         self.conn
             .execute("INSERT INTO tags (name) VALUES (?1)", params![trimmed])
-            .map_err(|e| format!("创建标签失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("创建标签失败: {e}")))?;
 
         let id = self.conn.last_insert_rowid();
         Ok(TagView {
@@ -49,10 +50,10 @@ impl Database {
         })
     }
 
-    pub fn delete_tag(&self, tag_id: i64) -> Result<(), String> {
+    pub fn delete_tag(&self, tag_id: i64) -> AppResult<()> {
         self.conn
             .execute("DELETE FROM tags WHERE id = ?1", params![tag_id])
-            .map_err(|e| format!("删除标签失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("删除标签失败: {e}")))?;
         Ok(())
     }
 }
@@ -60,7 +61,7 @@ impl Database {
 pub(crate) fn get_conversation_tag_names(
     conn: &Connection,
     conversation_id: &str,
-) -> Result<Vec<String>, String> {
+) -> AppResult<Vec<String>> {
     let mut stmt = conn
         .prepare(
             "SELECT t.name
@@ -69,12 +70,12 @@ pub(crate) fn get_conversation_tag_names(
              WHERE ct.conversation_id = ?1
              ORDER BY t.name COLLATE NOCASE ASC",
         )
-        .map_err(|e| format!("查询标签失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询标签失败: {e}")))?;
 
     let rows = stmt
         .query_map(params![conversation_id], |row| row.get(0))
-        .map_err(|e| format!("查询标签失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("查询标签失败: {e}")))?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取标签失败: {e}"))
+        .map_err(|e| AppError::Msg(format!("读取标签失败: {e}")))
 }

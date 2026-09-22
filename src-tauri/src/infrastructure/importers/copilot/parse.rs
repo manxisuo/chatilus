@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -15,7 +16,7 @@ struct CopilotRow {
     message: String,
 }
 
-pub fn parse_copilot_csv(path: &Path) -> Result<Vec<ImportedConversation>, String> {
+pub fn parse_copilot_csv(path: &Path) -> AppResult<Vec<ImportedConversation>> {
     let raw = fs::read_to_string(path)
         .map_err(|e| format!("无法读取 Copilot 导出 CSV ({}): {e}", path.display()))?;
     let raw = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
@@ -32,7 +33,7 @@ pub fn parse_copilot_csv(path: &Path) -> Result<Vec<ImportedConversation>, Strin
         return Err(format!(
             "不是 Copilot 活动历史 CSV（缺少 Conversation/Time/Author/Message 列）: {}",
             path.display()
-        ));
+        ).into());
     }
 
     let mut groups: HashMap<String, Vec<CopilotRow>> = HashMap::new();

@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 #[derive(Debug, Clone)]
 pub struct SearchQuery {
     pub text: String,
@@ -24,5 +25,5 @@ pub struct SearchIndexEntry {
 }
 
 pub trait SearchEngine {
-    fn search(&self, query: SearchQuery) -> Result<Vec<SearchResult>, String>;
+    fn search(&self, query: SearchQuery) -> AppResult<Vec<SearchResult>>;
 }

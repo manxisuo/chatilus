@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::fs;
 use std::path::Path;
 
@@ -26,12 +27,12 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn open(path: &Path) -> Result<Self, String> {
+    pub fn open(path: &Path) -> AppResult<Self> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("无法创建数据库目录: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| AppError::Msg(format!("无法创建数据库目录: {e}")))?;
         }
 
-        let conn = Connection::open(path).map_err(|e| format!("无法打开数据库: {e}"))?;
+        let conn = Connection::open(path).map_err(|e| AppError::Msg(format!("无法打开数据库: {e}")))?;
         let db = Self {
             conn,
             path: path.display().to_string(),
@@ -44,7 +45,7 @@ impl Database {
         &mut self,
         imported: &NormalizedImportResult,
         source_info: &SourceInfo,
-    ) -> Result<ImportResult, String> {
+    ) -> AppResult<ImportResult> {
         let source = imported.source_path.clone();
         let files_processed = imported.files_processed;
         let media_files_indexed = imported.media_files_indexed;
@@ -77,7 +78,7 @@ impl Database {
                     importer_version,
                 ],
             )
-            .map_err(|e| format!("记录导入历史失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("记录导入历史失败: {e}")))?;
 
         Ok(ImportResult {
             conversations_imported: counts.new_conversations,

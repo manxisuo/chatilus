@@ -1,9 +1,10 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, Transaction};
 
 use crate::domain::ports::{SearchEngine, SearchIndexEntry, SearchQuery, SearchResult};
 use crate::infrastructure::db::Database;
 
-pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>, String> {
+pub fn search(conn: &Connection, query: SearchQuery) -> AppResult<Vec<SearchResult>> {
     let trimmed = query.text.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
@@ -26,7 +27,7 @@ pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>
              ORDER BY bm25(messages_fts)
              LIMIT ?2",
         )
-        .map_err(|e| format!("搜索失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("搜索失败: {e}")))?;
 
     let fts_query = build_fts_query(trimmed);
     let rows = stmt
@@ -41,13 +42,13 @@ pub fn search(conn: &Connection, query: SearchQuery) -> Result<Vec<SearchResult>
                 source: row.get(6)?,
             })
         })
-        .map_err(|e| format!("搜索失败: {e}"))?;
+        .map_err(|e| AppError::Msg(format!("搜索失败: {e}")))?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取搜索结果失败: {e}"))
+        .map_err(|e| AppError::Msg(format!("读取搜索结果失败: {e}")))
 }
 
-pub fn index_message(tx: &Transaction<'_>, entry: &SearchIndexEntry) -> Result<(), String> {
+pub fn index_message(tx: &Transaction<'_>, entry: &SearchIndexEntry) -> AppResult<()> {
     tx.execute(
         "INSERT INTO messages_fts (message_id, conversation_id, conversation_title, content)
          VALUES (?1, ?2, ?3, ?4)",
@@ -58,19 +59,19 @@ pub fn index_message(tx: &Transaction<'_>, entry: &SearchIndexEntry) -> Result<(
             entry.content,
         ],
     )
-    .map_err(|e| format!("写入全文索引失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("写入全文索引失败: {e}")))?;
     Ok(())
 }
 
 pub fn remove_conversation_index(
     tx: &Transaction<'_>,
     conversation_id: &str,
-) -> Result<(), String> {
+) -> AppResult<()> {
     tx.execute(
         "DELETE FROM messages_fts WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("清理旧索引失败: {e}"))?;
+    .map_err(|e| AppError::Msg(format!("清理旧索引失败: {e}")))?;
     Ok(())
 }
 
@@ -84,7 +85,7 @@ pub fn build_fts_query(input: &str) -> String {
 }
 
 impl SearchEngine for Database {
-    fn search(&self, query: SearchQuery) -> Result<Vec<SearchResult>, String> {
+    fn search(&self, query: SearchQuery) -> AppResult<Vec<SearchResult>> {
         search(&self.conn, query)
     }
 }

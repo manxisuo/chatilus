@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::functions::FunctionFlags;
 
 use super::asset_index::create_assets_schema;
@@ -7,7 +8,7 @@ use super::source_context_index::create_source_context_schema;
 use super::Database;
 
 impl Database {
-    pub(crate) fn init_schema(&self) -> Result<(), String> {
+    pub(crate) fn init_schema(&self) -> AppResult<()> {
         self.conn
             .execute_batch(
                 "
@@ -113,7 +114,7 @@ impl Database {
                 );
                 ",
             )
-            .map_err(|e| format!("初始化数据库失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("初始化数据库失败: {e}")))?;
 
         create_assets_schema(&self.conn)?;
         create_source_context_schema(&self.conn)?;
@@ -123,7 +124,7 @@ impl Database {
         Ok(())
     }
 
-    fn register_sql_functions(&self) -> Result<(), String> {
+    fn register_sql_functions(&self) -> AppResult<()> {
         self.conn
             .create_scalar_function(
                 "effective_image_source",
@@ -135,7 +136,7 @@ impl Database {
                     Ok(effective_source_from_attachment_json(&role, &json))
                 },
             )
-            .map_err(|e| format!("注册 SQL 函数失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("注册 SQL 函数失败: {e}")))?;
         Ok(())
     }
 }

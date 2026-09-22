@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 use crate::application::{import_job_store::SharedImportJobStore, run_import_resolved};
-use crate::db::Database;
+use crate::infrastructure::db::Database;
 use crate::domain::models::{ImportJob, ImportProgress, SourceInfo};
 use crate::infrastructure::archive::{resolve_import_path, resolve_import_path_for_importer};
 use crate::infrastructure::importers::default_importer_registry;
@@ -104,14 +104,14 @@ pub fn spawn_import_job(
                 );
             }
             Err(error) => {
-                registry.mark_failed(&job_id, error.clone());
+                registry.mark_failed(&job_id, error.to_string());
                 if let Some(job) = registry.get_job(&job_id) {
                     let _ = Database::open(&db_path).and_then(|db| db.persist_import_job(&job));
                 }
                 let _ = app.emit(
                     "import-complete",
                     registry.get_view(&job_id).unwrap_or_else(|| {
-                        ImportJobView::failed(&job_id, &source_path, error.as_str())
+                        ImportJobView::failed(&job_id, &source_path, &error.to_string())
                     }),
                 );
             }

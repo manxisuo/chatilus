@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::fs::{self, File};
 use std::io::{copy, Read};
 use std::path::{Path, PathBuf};
@@ -37,7 +38,7 @@ pub fn resolve_import_path_for_importer(
     importer_id: &str,
     registry: &ImporterRegistry,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<ResolvedImportPath, String> {
+) -> AppResult<ResolvedImportPath> {
     let importer = registry
         .by_id(importer_id)
         .ok_or_else(|| format!("未知数据源: {importer_id}"))?;
@@ -61,7 +62,7 @@ pub fn resolve_import_path_for_importer(
                 return Err(format!(
                     "{} 不支持 ZIP 文件，请选择目录或其它文件类型",
                     importer.display_name()
-                ));
+                ).into());
             }
             report(on_progress.as_ref(), "extracting", 0, 1, 0.02);
             let cleanup = TempExtractDir {
@@ -99,13 +100,13 @@ pub fn resolve_import_path_for_importer(
         "路径不存在或不是 {} 支持的导入格式: {}",
         importer.display_name(),
         input_path.display()
-    ))
+    ).into())
 }
 
 pub fn resolve_import_path(
     input_path: &Path,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<ResolvedImportPath, String> {
+) -> AppResult<ResolvedImportPath> {
     resolve_import_path_with_registry(input_path, &default_importer_registry(), on_progress)
 }
 
@@ -113,7 +114,7 @@ pub fn resolve_import_path_with_registry(
     input_path: &Path,
     registry: &ImporterRegistry,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<ResolvedImportPath, String> {
+) -> AppResult<ResolvedImportPath> {
     if input_path.is_dir() {
         let (export_dir, detect) = registry.find_export_root(input_path)?;
         let export_label = export_label_from_path(input_path);
@@ -164,7 +165,7 @@ pub fn resolve_import_path_with_registry(
     Err(format!(
         "路径不存在或不是支持的导入格式（目录 / zip / Cursor state.vscdb / Codex state.sqlite）: {}",
         input_path.display()
-    ))
+    ).into())
 }
 
 fn importer_supports_zip(importer: &dyn Importer) -> bool {
@@ -204,9 +205,9 @@ fn is_zip_file(path: &Path) -> bool {
     file.read_exact(&mut header).is_ok() && header[0] == 0x50 && header[1] == 0x4B
 }
 
-fn create_extract_dir(zip_path: &Path) -> Result<PathBuf, String> {
+fn create_extract_dir(zip_path: &Path) -> AppResult<PathBuf> {
     let base = std::env::temp_dir().join("chatlens-import");
-    fs::create_dir_all(&base).map_err(|e| format!("无法创建临时目录: {e}"))?;
+    fs::create_dir_all(&base).map_err(|e| AppError::Msg(format!("无法创建临时目录: {e}")))?;
     let dir = base.join(format!(
         "{}-{}",
         zip_path
@@ -218,21 +219,21 @@ fn create_extract_dir(zip_path: &Path) -> Result<PathBuf, String> {
             .map(|duration| duration.as_millis())
             .unwrap_or(0)
     ));
-    fs::create_dir_all(&dir).map_err(|e| format!("无法创建解压目录: {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| AppError::Msg(format!("无法创建解压目录: {e}")))?;
     Ok(dir)
 }
 
-fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
-    fs::create_dir_all(dest_dir).map_err(|e| format!("无法创建解压目录: {e}"))?;
+fn extract_zip(zip_path: &Path, dest_dir: &Path) -> AppResult<()> {
+    fs::create_dir_all(dest_dir).map_err(|e| AppError::Msg(format!("无法创建解压目录: {e}")))?;
     let file =
         File::open(zip_path).map_err(|e| format!("无法打开 zip 文件 {}: {e}", zip_path.display()))?;
     let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| format!("无法读取 zip 文件: {e}"))?;
+        zip::ZipArchive::new(file).map_err(|e| AppError::Msg(format!("无法读取 zip 文件: {e}")))?;
 
     for index in 0..archive.len() {
         let mut entry = archive
             .by_index(index)
-            .map_err(|e| format!("读取 zip 条目失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("读取 zip 条目失败: {e}")))?;
         let entry_path = match entry.enclosed_name() {
             Some(path) => dest_dir.join(path),
             None => continue,
@@ -251,7 +252,7 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
 
         let mut outfile = File::create(&entry_path)
             .map_err(|e| format!("创建文件 {} 失败: {e}", entry_path.display()))?;
-        copy(&mut entry, &mut outfile).map_err(|e| format!("解压文件失败: {e}"))?;
+        copy(&mut entry, &mut outfile).map_err(|e| AppError::Msg(format!("解压文件失败: {e}")))?;
     }
 
     Ok(())
@@ -260,7 +261,7 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
 fn extract_nested_zips(
     root: &Path,
     on_progress: Option<Arc<dyn Fn(ImportProgress) + Send + Sync>>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let mut pending = collect_zip_files(root)?;
     let mut processed = 0usize;
     let initial_total = pending.len().max(1);
@@ -291,16 +292,16 @@ fn extract_nested_zips(
     Ok(())
 }
 
-fn collect_zip_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+fn collect_zip_files(root: &Path) -> AppResult<Vec<PathBuf>> {
     let mut files = Vec::new();
     collect_zip_files_recursively(root, &mut files)?;
     files.sort();
     Ok(files)
 }
 
-fn collect_zip_files_recursively(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+fn collect_zip_files_recursively(dir: &Path, files: &mut Vec<PathBuf>) -> AppResult<()> {
     for entry in fs::read_dir(dir).map_err(|e| format!("无法读取目录 {}: {e}", dir.display()))? {
-        let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+        let entry = entry.map_err(|e| AppError::Msg(format!("读取目录项失败: {e}")))?;
         let path = entry.path();
         if path.is_dir() {
             collect_zip_files_recursively(&path, files)?;

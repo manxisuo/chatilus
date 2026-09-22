@@ -5,16 +5,12 @@ mod importer;
 mod importer_v1;
 mod projects;
 
-pub use conversation::{
-    classify_image_source, extract_attachment_infos_from_message_json,
-    extract_pointers_from_message_json, parse_conversation,
-    ParsedAttachment, ParsedConversation, ParsedMessage,
-};
-pub use format::is_manifest_v1_export;
+pub use conversation::classify_image_source;
 pub use importer::ChatGptImporter;
 pub use importer_v1::ChatGptV1Importer;
 pub use projects::{load_project_name_index, ProjectNameIndex};
 
+use crate::error::AppResult;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,7 +18,7 @@ use serde_json::Value;
 
 use crate::domain::ports::ImportedConversation;
 
-pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String> {
+pub fn find_conversation_files(export_dir: &Path) -> AppResult<Vec<PathBuf>> {
     let mut files: Vec<PathBuf> = fs::read_dir(export_dir)
         .map_err(|e| format!("无法读取目录 {}: {e}", export_dir.display()))?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
@@ -43,7 +39,7 @@ pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String
         return Err(format!(
             "在 {} 中未找到 conversations.json 或 conversations-*.json",
             export_dir.display()
-        ));
+        ).into());
     }
 
     Ok(files)
@@ -52,7 +48,7 @@ pub fn find_conversation_files(export_dir: &Path) -> Result<Vec<PathBuf>, String
 pub fn parse_conversation_file(
     file: &Path,
     project_names: &ProjectNameIndex,
-) -> Result<Vec<ImportedConversation>, String> {
+) -> AppResult<Vec<ImportedConversation>> {
     let raw =
         fs::read_to_string(file).map_err(|e| format!("无法读取 {}: {e}", file.display()))?;
     let items: Vec<Value> = serde_json::from_str(&raw)
@@ -67,7 +63,7 @@ pub fn parse_conversation_file(
     Ok(conversations)
 }
 
-pub fn parse_export_dir(export_dir: &Path) -> Result<Vec<ImportedConversation>, String> {
+pub fn parse_export_dir(export_dir: &Path) -> AppResult<Vec<ImportedConversation>> {
     let project_names = projects::load_project_name_index(export_dir);
     let files = find_conversation_files(export_dir)?;
     let mut conversations = Vec::new();

@@ -1,4 +1,5 @@
-use crate::db::Database;
+use crate::error::AppResult;
+use crate::infrastructure::db::Database;
 use crate::domain::mappers::asset_to_gallery_item;
 use crate::domain::models::ImageKindFilter;
 use crate::domain::ports::{AssetListQuery, AssetRepository};
@@ -12,7 +13,7 @@ pub fn list_images(
     conversation_source: Option<&str>,
     month: Option<&str>,
     conversation_id: Option<&str>,
-) -> Result<Vec<ImageGalleryItem>, String> {
+) -> AppResult<Vec<ImageGalleryItem>> {
     AssetRepository::list(
         db,
         AssetListQuery {
@@ -33,7 +34,7 @@ pub fn count_images(
     conversation_source: Option<&str>,
     month: Option<&str>,
     conversation_id: Option<&str>,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     AssetRepository::count_filtered(
         db,
         image_kind,

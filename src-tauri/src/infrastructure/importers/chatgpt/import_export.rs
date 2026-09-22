@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use std::path::Path;
 
 use crate::domain::models::ImportProgress;
@@ -17,12 +18,12 @@ pub struct ChatGptImportOutput {
 pub fn import_chatgpt_export_dir(
     export_dir: &Path,
     options: &ImportOptions,
-) -> Result<ChatGptImportOutput, String> {
+) -> AppResult<ChatGptImportOutput> {
     if !export_dir.is_dir() {
         return Err(format!(
             "路径不存在或不是目录: {}",
             export_dir.display()
-        ));
+        ).into());
     }
 
     let media_index = MediaIndex::build(export_dir);

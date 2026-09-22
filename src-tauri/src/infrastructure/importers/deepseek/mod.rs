@@ -4,6 +4,7 @@ mod importer;
 
 pub use importer::DeepSeekImporter;
 
+use crate::error::AppResult;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,13 +15,13 @@ use crate::domain::ports::ImportedConversation;
 use self::conversation::parse_conversation;
 use self::detect::is_deepseek_export;
 
-pub fn parse_export_dir(export_dir: &Path) -> Result<Vec<ImportedConversation>, String> {
+pub fn parse_export_dir(export_dir: &Path) -> AppResult<Vec<ImportedConversation>> {
     let file = export_dir.join("conversations.json");
     if !file.is_file() {
         return Err(format!(
             "在 {} 中未找到 conversations.json",
             export_dir.display()
-        ));
+        ).into());
     }
 
     let raw = fs::read_to_string(&file).map_err(|e| format!("无法读取 {}: {e}", file.display()))?;

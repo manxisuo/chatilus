@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use crate::domain::models::{DataSource, ImportProgress};
 use crate::domain::ports::{
     ImportDetectResult, ImportGuide, ImportInput, ImportMethodGuide, ImportOptions, ImportPackage,
@@ -80,7 +81,7 @@ impl Importer for CursorImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = resolve_cursor_db_path(&input.path).is_some();
         Ok(ImportDetectResult {
             matched,
@@ -89,7 +90,7 @@ impl Importer for CursorImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let db_path = resolve_cursor_db_path(&input.path)
             .ok_or_else(|| format!("未找到 Cursor state.vscdb: {}", input.path.display()))?;
         let conn = open_cursor_db(&db_path)?;
@@ -106,7 +107,7 @@ impl Importer for CursorImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         let db_path = resolve_cursor_db_path(&input.path)
             .ok_or_else(|| format!("未找到 Cursor state.vscdb: {}", input.path.display()))?;
         let conn = open_cursor_db(&db_path)?;

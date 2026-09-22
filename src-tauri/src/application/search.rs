@@ -1,8 +1,9 @@
-use crate::db::Database;
+use crate::error::AppResult;
+use crate::infrastructure::db::Database;
 use crate::domain::ports::{SearchEngine, SearchQuery};
 use crate::models::SearchHit;
 
-pub fn search_messages(db: &Database, query: &str, limit: i64) -> Result<Vec<SearchHit>, String> {
+pub fn search_messages(db: &Database, query: &str, limit: i64) -> AppResult<Vec<SearchHit>> {
     SearchEngine::search(
         db,
         SearchQuery {

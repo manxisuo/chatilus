@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::path::{Path, PathBuf};
 
 use crate::domain::ports::{ImportDetectResult, ImportGuide, ImportInput, Importer};
@@ -11,7 +12,7 @@ impl ImporterRegistry {
         Self { importers }
     }
 
-    pub fn detect(&self, path: &Path) -> Result<ImportDetectResult, String> {
+    pub fn detect(&self, path: &Path) -> AppResult<ImportDetectResult> {
         let input = ImportInput {
             path: path.to_path_buf(),
         };
@@ -26,10 +27,10 @@ impl ImporterRegistry {
         Err(format!(
             "未识别支持的导出格式: {}",
             path.display()
-        ))
+        ).into())
     }
 
-    pub fn find_export_root(&self, search_root: &Path) -> Result<(PathBuf, ImportDetectResult), String> {
+    pub fn find_export_root(&self, search_root: &Path) -> AppResult<(PathBuf, ImportDetectResult)> {
         if let Ok(result) = self.detect(search_root) {
             return Ok((search_root.to_path_buf(), result));
         }
@@ -40,7 +41,7 @@ impl ImporterRegistry {
                 std::fs::read_dir(&dir).map_err(|e| format!("无法读取目录 {}: {e}", dir.display()))?;
 
             for entry in entries {
-                let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+                let entry = entry.map_err(|e| AppError::Msg(format!("读取目录项失败: {e}")))?;
                 let path = entry.path();
                 if !path.is_dir() {
                     continue;
@@ -57,7 +58,7 @@ impl ImporterRegistry {
         Err(format!(
             "在 {} 中未找到可识别的导出数据",
             search_root.display()
-        ))
+        ).into())
     }
 
     pub fn detect_with_importer(
@@ -65,7 +66,7 @@ impl ImporterRegistry {
         path: &Path,
         importer_id: &str,
         user_selected: bool,
-    ) -> Result<ImportDetectResult, String> {
+    ) -> AppResult<ImportDetectResult> {
         let importer = self
             .by_id(importer_id)
             .ok_or_else(|| format!("未知数据源: {importer_id}"))?;
@@ -84,7 +85,7 @@ impl ImporterRegistry {
                 "路径不符合 {} 的导入要求: {}",
                 importer.display_name(),
                 path.display()
-            ))
+            ).into())
         }
     }
 
@@ -92,7 +93,7 @@ impl ImporterRegistry {
         &self,
         importer: &dyn Importer,
         input: &ImportInput,
-    ) -> Result<ImportDetectResult, String> {
+    ) -> AppResult<ImportDetectResult> {
         use super::chatgpt::find_conversation_files;
 
         let matched = match importer.id() {
@@ -111,7 +112,7 @@ impl ImporterRegistry {
         &self,
         search_root: &Path,
         importer_id: &str,
-    ) -> Result<(PathBuf, ImportDetectResult), String> {
+    ) -> AppResult<(PathBuf, ImportDetectResult)> {
         if let Ok(result) = self.detect_with_importer(search_root, importer_id, true) {
             return Ok((search_root.to_path_buf(), result));
         }
@@ -122,7 +123,7 @@ impl ImporterRegistry {
                 std::fs::read_dir(&dir).map_err(|e| format!("无法读取目录 {}: {e}", dir.display()))?;
 
             for entry in entries {
-                let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+                let entry = entry.map_err(|e| AppError::Msg(format!("读取目录项失败: {e}")))?;
                 let path = entry.path();
                 if !path.is_dir() {
                     continue;
@@ -143,7 +144,7 @@ impl ImporterRegistry {
             "在 {} 中未找到符合 {} 的导出数据",
             search_root.display(),
             importer.display_name()
-        ))
+        ).into())
     }
 
     pub fn list_import_guides(&self) -> Vec<ImportGuide> {

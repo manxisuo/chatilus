@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use rusqlite::params;
 
 use crate::domain::models::{ImportJob, ImportJobStatus, SourceInfo};
@@ -5,7 +6,7 @@ use crate::domain::models::{ImportJob, ImportJobStatus, SourceInfo};
 use super::Database;
 
 impl Database {
-    pub fn persist_import_job(&self, job: &ImportJob) -> Result<(), String> {
+    pub fn persist_import_job(&self, job: &ImportJob) -> AppResult<()> {
         let (source, export_label, importer_version) = job
             .source_info
             .as_ref()
@@ -52,7 +53,7 @@ impl Database {
                     finished_at,
                 ],
             )
-            .map_err(|e| format!("保存 import_job 失败: {e}"))?;
+            .map_err(|e| AppError::Msg(format!("保存 import_job 失败: {e}")))?;
         Ok(())
     }
 
