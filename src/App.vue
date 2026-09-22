@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { save } from "@tauri-apps/plugin-dialog";
 import { ElMessage, type InputInstance } from "element-plus";
 import en from "element-plus/es/locale/lang/en";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
@@ -16,6 +14,7 @@ import MessageView from "./components/MessageView.vue";
 import TimelineView from "./components/TimelineView.vue";
 import TagDialog from "./components/TagDialog.vue";
 import ImportReportDialog from "./components/ImportReportDialog.vue";
+import ImportWizardDialog from "./components/ImportWizardDialog.vue";
 import PrivacyDataDialog from "./components/PrivacyDataDialog.vue";
 import {
   createTag,
@@ -29,30 +28,20 @@ import {
   listTags,
   searchMessages,
   setConversationStarred,
-  listImportGuides,
   setConversationTags,
   setMessageStarred,
-  startImport,
 } from "./api";
 import type {
   ConversationSummary,
   DatabaseStats,
-  ImportGuide,
-  ImportMethodGuide,
-  ImportJobView,
-  ImportProgressEvent,
   SearchHit,
   TagView,
 } from "./types";
 import { KNOWN_DATA_SOURCES, sourceLabel, sourceTagType } from "./utils/dataSource";
-import {
-  type AppearanceMode,
-  getStoredAppearance,
-  setAppearance,
-} from "./utils/appearance";
+import { useImportFlow } from "./composables/useImportFlow";
+import { useAppearanceMenu } from "./composables/useAppearanceMenu";
 import { installDesktopBehaviors } from "./composables/useKeyboardShortcuts";
 import { useLayoutBreakpoints } from "./composables/useLayoutBreakpoints";
-import { setAppLocale } from "./i18n";
 import { LAYOUT_WIDTHS } from "./utils/layout";
 import {
   type AppLocale,
@@ -73,22 +62,6 @@ const activeId = ref<string | null>(null);
 const fetchedConversation = ref<ConversationSummary | null>(null);
 const listLoading = ref(false);
 const messageLoading = ref(false);
-const importing = ref(false);
-const importDialogVisible = ref(false);
-const importWizardVisible = ref(false);
-const importWizardStep = ref<"source" | "method">("source");
-const importGuides = ref<ImportGuide[]>([]);
-const selectedImportGuide = ref<ImportGuide | null>(null);
-const importJobId = ref<string | null>(null);
-const importProgress = ref({
-  phase: "pending",
-  progress: 0,
-  processed: 0,
-  total: 0,
-});
-const importElapsedMs = ref(0);
-let importTimer: ReturnType<typeof setInterval> | null = null;
-let importUnlisten: UnlistenFn[] = [];
 const exporting = ref(false);
 const stats = ref<DatabaseStats | null>(null);
 const listQuery = ref("");
@@ -106,27 +79,52 @@ const tagDialogVisible = ref(false);
 const viewMode = ref<"chats" | "timeline" | "images">("chats");
 const galleryMonth = ref<string | null>(null);
 const galleryConversationId = ref<string | null>(null);
-const appearanceMode = ref<AppearanceMode>(getStoredAppearance());
 const { showRightPanel, compactLeftPanel } = useLayoutBreakpoints();
 const conversationInfoDrawerVisible = ref(false);
 const insightPanelWidth = LAYOUT_WIDTHS.insight;
-const importReportVisible = ref(false);
-const lastImportJob = ref<ImportJobView | null>(null);
-const privacyDialogVisible = ref(false);
 const searchInputRef = ref<InputInstance>();
 
-const FEEDBACK_URL = "https://github.com/manxisuo/chatilus/issues";
+const {
+  importing,
+  importDialogVisible,
+  importWizardVisible,
+  importWizardStep,
+  importWizardTitle,
+  importGuides,
+  selectedImportGuide,
+  importProgress,
+  importPhaseLabel,
+  importElapsedMs,
+  formatImportElapsed,
+  importReportVisible,
+  lastImportJob,
+  openImportWizard,
+  importSupportStatusLabel,
+  importSupportStatusType,
+  importFromDetectedPath,
+  selectImportSource,
+  backToImportSources,
+  pickImportPath,
+} = useImportFlow({
+  onImported: async () => {
+    searchMode.value = false;
+    searchQuery.value = "";
+    searchHits.value = [];
+    activeSearchHitId.value = null;
+    await refreshStats();
+    await refreshTags();
+    await loadConversations();
+    activeId.value = conversations.value[0]?.id ?? null;
+  },
+});
 
-const appearanceOptions = computed(() => [
-  { value: "light" as const, label: t("appearance.light") },
-  { value: "dark" as const, label: t("appearance.dark") },
-  { value: "system" as const, label: t("appearance.system") },
-]);
-
-const languageOptions: Array<{ value: AppLocale; label: string }> = [
-  { value: "zh-CN", label: "简体中文" },
-  { value: "en", label: "English" },
-];
+const {
+  appearanceMode,
+  appearanceOptions,
+  languageOptions,
+  privacyDialogVisible,
+  handleMoreCommand,
+} = useAppearanceMenu();
 
 const librarySummaryLine = computed(() => {
   if (!stats.value) return "";
@@ -136,33 +134,6 @@ const librarySummaryLine = computed(() => {
     sources: sourceCount.value,
   });
 });
-
-function handleMoreCommand(command: string) {
-  if (command === "privacy") {
-    privacyDialogVisible.value = true;
-    return;
-  }
-  if (command === "feedback") {
-    void openUrl(FEEDBACK_URL);
-    return;
-  }
-  if (command.startsWith("lang:")) {
-    handleLanguageCommand(command.slice(5) as AppLocale);
-    return;
-  }
-  if (command.startsWith("appearance:")) {
-    handleAppearanceCommand(command.slice(11) as AppearanceMode);
-  }
-}
-
-function handleAppearanceCommand(mode: AppearanceMode) {
-  appearanceMode.value = mode;
-  setAppearance(mode);
-}
-
-function handleLanguageCommand(next: AppLocale) {
-  setAppLocale(next);
-}
 
 const sourceCount = computed(() => {
   const entries = stats.value?.conversation_counts_by_source ?? [];
@@ -377,78 +348,6 @@ async function ensureConversationSummary(conversationId: string) {
   fetchedConversation.value = await getConversation(conversationId);
 }
 
-const importPhaseLabel = computed(() => {
-  const phase = importProgress.value.phase;
-  if (phase === "extracting" || phase === "parsing" || phase === "persisting" || phase === "done") {
-    return t(`import.phase.${phase}`);
-  }
-  return t("import.phase.pending");
-});
-
-function formatImportElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const time =
-    minutes > 0
-      ? t("import.elapsedMinutes", {
-          m: minutes,
-          s: String(seconds).padStart(2, "0"),
-        })
-      : t("import.elapsedSeconds", { n: totalSeconds });
-  return t("import.elapsed", { time });
-}
-
-function startImportTimer() {
-  stopImportTimer();
-  importElapsedMs.value = 0;
-  const startedAt = Date.now();
-  importTimer = setInterval(() => {
-    importElapsedMs.value = Date.now() - startedAt;
-  }, 200);
-}
-
-function stopImportTimer() {
-  if (importTimer !== null) {
-    clearInterval(importTimer);
-    importTimer = null;
-  }
-}
-
-function cleanupImportListeners() {
-  stopImportTimer();
-  for (const unlisten of importUnlisten) {
-    void unlisten();
-  }
-  importUnlisten = [];
-}
-
-let removeKeyboardShortcuts: (() => void) | undefined;
-
-onUnmounted(() => {
-  cleanupImportListeners();
-  removeKeyboardShortcuts?.();
-});
-
-async function finishImport(job: ImportJobView) {
-  importing.value = false;
-  importDialogVisible.value = false;
-  cleanupImportListeners();
-  importJobId.value = null;
-  lastImportJob.value = job;
-  importReportVisible.value = true;
-
-  if (job.status === "done" && job.result) {
-    searchMode.value = false;
-    searchQuery.value = "";
-    searchHits.value = [];
-    activeSearchHitId.value = null;
-    await refreshStats();
-    await refreshTags();
-    await loadConversations();
-    activeId.value = conversations.value[0]?.id ?? null;
-  }
-}
 
 function handleImportReportOpenTimeline() {
   viewMode.value = "timeline";
@@ -461,133 +360,6 @@ function handleImportReportStartSearch() {
   });
 }
 
-async function startImportFlow(path: string, importerId?: string) {
-  cleanupImportListeners();
-  importing.value = true;
-  importDialogVisible.value = true;
-  startImportTimer();
-  importProgress.value = {
-    phase: "pending",
-    progress: 0,
-    processed: 0,
-    total: 0,
-  };
-
-  try {
-    const jobId = await startImport(path, importerId);
-    importJobId.value = jobId;
-
-    importUnlisten.push(
-      await listen<ImportProgressEvent>("import-progress", (event) => {
-        if (event.payload.job_id !== importJobId.value) {
-          return;
-        }
-        importProgress.value = {
-          phase: event.payload.phase,
-          progress: Math.round(event.payload.progress * 100),
-          processed: event.payload.processed,
-          total: event.payload.total,
-        };
-      }),
-    );
-
-    importUnlisten.push(
-      await listen<ImportJobView>("import-complete", (event) => {
-        if (event.payload.id !== importJobId.value) {
-          return;
-        }
-        void finishImport(event.payload);
-      }),
-    );
-  } catch (error) {
-    importing.value = false;
-    importDialogVisible.value = false;
-    cleanupImportListeners();
-    ElMessage.error(String(error));
-  }
-}
-
-async function openImportWizard() {
-  importWizardStep.value = "source";
-  selectedImportGuide.value = null;
-  importWizardVisible.value = true;
-
-  try {
-    importGuides.value = await listImportGuides();
-  } catch (error) {
-    importWizardVisible.value = false;
-    ElMessage.error(String(error));
-  }
-}
-
-function importSupportStatusLabel(status: ImportGuide["support_status"]) {
-  if (status === "experimental") return t("import.experimental");
-  if (status === "beta") return t("import.beta");
-  return t("import.stable");
-}
-
-function importSupportStatusType(
-  status: ImportGuide["support_status"],
-): "success" | "warning" | "info" {
-  if (status === "experimental") return "warning";
-  if (status === "beta") return "info";
-  return "success";
-}
-
-async function importFromDetectedPath(path: string) {
-  const guide = selectedImportGuide.value;
-  if (!guide) {
-    return;
-  }
-  importWizardVisible.value = false;
-  await startImportFlow(path, guide.importer_id);
-}
-
-function selectImportSource(guide: ImportGuide) {
-  selectedImportGuide.value = guide;
-  importWizardStep.value = "method";
-}
-
-function backToImportSources() {
-  importWizardStep.value = "source";
-  selectedImportGuide.value = null;
-}
-
-async function pickImportPath(method: ImportMethodGuide) {
-  const guide = selectedImportGuide.value;
-  if (!guide) {
-    return;
-  }
-
-  const isDirectory = method.kind === "directory";
-  const extensions = (method.extensions ?? []).filter(Boolean);
-
-  const selected = await open({
-    multiple: false,
-    directory: isDirectory,
-    title: method.dialog_title,
-    filters:
-      !isDirectory && extensions.length > 0
-        ? [{ name: method.label, extensions }]
-        : undefined,
-  });
-
-  if (!selected || Array.isArray(selected)) {
-    return;
-  }
-
-  importWizardVisible.value = false;
-  await startImportFlow(selected, guide.importer_id);
-}
-
-const importWizardTitle = computed(() => {
-  if (importWizardStep.value === "source") {
-    return t("import.selectSource");
-  }
-  return t("import.importFrom", {
-    name: selectedImportGuide.value?.display_name ?? "",
-  });
-});
 
 function clearSearch() {
   searchMode.value = false;
@@ -829,6 +601,12 @@ watch(
   }
 });
 
+let removeKeyboardShortcuts: (() => void) | undefined;
+
+onUnmounted(() => {
+  removeKeyboardShortcuts?.();
+});
+
 onMounted(async () => {
   removeKeyboardShortcuts = installDesktopBehaviors();
   await refreshStats();
@@ -930,113 +708,25 @@ onMounted(async () => {
       </div>
     </el-header>
 
-    <el-dialog
-      v-model="importWizardVisible"
-      :title="importWizardTitle"
-      width="520px"
-      destroy-on-close
-    >
-      <div v-if="importWizardStep === 'source'" class="import-source-grid">
-        <button
-          v-for="guide in importGuides"
-          :key="guide.importer_id"
-          type="button"
-          class="import-source-card"
-          @click="selectImportSource(guide)"
-        >
-          <div class="import-source-card-header">
-            <el-tag size="small" :type="sourceTagType(guide.source)">
-              {{ sourceLabel(guide.source) }}
-            </el-tag>
-            <el-tag
-              size="small"
-              :type="importSupportStatusType(guide.support_status)"
-              effect="plain"
-            >
-              {{ importSupportStatusLabel(guide.support_status) }}
-            </el-tag>
-          </div>
-          <strong class="import-source-name">{{ guide.display_name }}</strong>
-          <p class="import-source-summary">{{ guide.support_summary }}</p>
-          <p class="import-source-desc">{{ guide.description }}</p>
-        </button>
-      </div>
-
-      <div v-else-if="selectedImportGuide" class="import-method-panel">
-        <p class="import-method-desc">{{ selectedImportGuide.description }}</p>
-        <p class="import-recognition-hint">
-          <span class="import-recognition-label">{{ t("import.recognitionBasis") }}</span>
-          {{ selectedImportGuide.recognition_hint }}
-        </p>
-        <div
-          v-for="method in selectedImportGuide.methods"
-          :key="method.id"
-          class="import-method-card"
-        >
-          <div
-            v-if="method.detected_default_path"
-            class="import-detected-default"
-          >
-            <p class="import-detected-label">
-              {{ method.detected_default_label ?? t("import.detectedDefaultPath") }}
-            </p>
-            <code class="import-method-example">{{ method.detected_default_path }}</code>
-            <div class="import-detected-actions">
-              <el-button
-                type="primary"
-                size="small"
-                @click="importFromDetectedPath(method.detected_default_path!)"
-              >
-                {{ t("import.importDirectly") }}
-              </el-button>
-              <el-button size="small" @click="pickImportPath(method)">
-                {{ t("import.chooseManually") }}
-              </el-button>
-            </div>
-          </div>
-          <template v-else>
-            <button
-              type="button"
-              class="import-method-action"
-              @click="pickImportPath(method)"
-            >
-              {{ method.label }}
-            </button>
-            <p class="import-method-hint">{{ method.hint }}</p>
-            <code v-if="method.example_path" class="import-method-example">
-              {{ method.example_path }}
-            </code>
-          </template>
-        </div>
-        <el-button class="import-wizard-back" @click="backToImportSources">
-          {{ t("import.backToSources") }}
-        </el-button>
-      </div>
-    </el-dialog>
-
-    <el-dialog
-      v-model="importDialogVisible"
-      :title="t('import.inProgress')"
-      width="420px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-      :show-close="false"
-    >
-      <p>{{ importPhaseLabel }}</p>
-      <p class="import-progress-elapsed">
-        {{ formatImportElapsed(importElapsedMs) }}
-      </p>
-      <el-progress
-        :percentage="importProgress.progress"
-        :stroke-width="16"
-        striped
-        striped-flow
-      />
-      <p v-if="importProgress.total > 0" class="import-progress-detail">
-        {{ importProgress.processed }} / {{ importProgress.total }}
-      </p>
-    </el-dialog>
-
+    <ImportWizardDialog
+      v-model:wizard-visible="importWizardVisible"
+      v-model:progress-visible="importDialogVisible"
+      :wizard-title="importWizardTitle"
+      :wizard-step="importWizardStep"
+      :import-guides="importGuides"
+      :selected-import-guide="selectedImportGuide"
+      :phase-label="importPhaseLabel"
+      :elapsed-label="formatImportElapsed(importElapsedMs)"
+      :progress-percent="importProgress.progress"
+      :progress-processed="importProgress.processed"
+      :progress-total="importProgress.total"
+      :support-status-label="importSupportStatusLabel"
+      :support-status-type="importSupportStatusType"
+      @select-source="selectImportSource"
+      @back="backToImportSources"
+      @pick-path="pickImportPath"
+      @import-detected="importFromDetectedPath"
+    />
     <el-container v-if="viewMode === 'chats'" class="body">
       <el-aside
         class="sidebar"
@@ -1745,165 +1435,4 @@ onMounted(async () => {
   bottom: 20px;
 }
 
-.import-progress-elapsed,
-.import-progress-detail {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--cl-text-muted);
-}
-
-.import-progress-elapsed {
-  margin-top: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.import-source-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.import-source-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--cl-border);
-  border-radius: 10px;
-  background: var(--cl-surface);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.import-source-card-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  width: 100%;
-}
-
-.import-source-summary {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--cl-text);
-}
-
-.import-source-card:hover {
-  border-color: var(--el-color-primary);
-  background: var(--cl-surface-raised, var(--cl-surface));
-}
-
-.import-source-name {
-  font-size: 15px;
-  color: var(--cl-text);
-}
-
-.import-source-desc {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--cl-text-muted);
-}
-
-.import-method-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.import-method-desc {
-  margin: 0 0 4px;
-  font-size: 13px;
-  color: var(--cl-text-muted);
-}
-
-.import-recognition-hint {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--cl-code-bg, rgba(127, 127, 127, 0.08));
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--cl-text-muted);
-}
-
-.import-recognition-label {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--cl-text);
-}
-
-.import-detected-default {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.import-detected-label {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--cl-text);
-}
-
-.import-detected-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.import-method-card {
-  padding: 12px 14px;
-  border: 1px solid var(--cl-border);
-  border-radius: 10px;
-  background: var(--cl-surface);
-}
-
-.import-method-action {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-color-primary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.import-method-action:hover {
-  text-decoration: underline;
-}
-
-.import-method-hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--cl-text-muted);
-  white-space: pre-wrap;
-}
-
-.import-method-example {
-  display: block;
-  margin-top: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--cl-code-bg, rgba(127, 127, 127, 0.12));
-  font-size: 11px;
-  color: var(--cl-text);
-  word-break: break-all;
-}
-
-.import-wizard-back {
-  align-self: flex-start;
-  margin-top: 8px;
-}
 </style>
