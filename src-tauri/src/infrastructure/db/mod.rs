@@ -16,10 +16,15 @@ mod helpers;
 mod import_job_repository;
 mod message_repository;
 mod migration;
+mod pool;
 mod schema;
 mod source_context_index;
 mod stats;
 mod tag_repository;
+
+pub use pool::DbPool;
+#[allow(unused_imports)]
+pub use pool::PooledDatabase;
 
 pub struct Database {
     pub(crate) conn: Connection,
@@ -33,6 +38,9 @@ impl Database {
         }
 
         let conn = Connection::open(path).map_err(|e| AppError::Msg(format!("无法打开数据库: {e}")))?;
+        // Concurrent pool connections + import threads share the file under WAL.
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| AppError::Msg(format!("设置 busy_timeout 失败: {e}")))?;
         let db = Self {
             conn,
             path: path.display().to_string(),
