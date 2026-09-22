@@ -1,0 +1,39 @@
+[
+  {
+    "id": "conv-v1-fixture-1",
+    "title": "Manifest v1 fixture",
+    "create_time": 1719200000.0,
+    "update_time": 1719200200.0,
+    "current_node": "n1",
+    "mapping": {
+      "n0": {
+        "id": "n0",
+        "message": {
+          "id": "m0",
+          "author": { "role": "user" },
+          "content": {
+            "content_type": "text",
+            "parts": ["Describe the fixture."]
+          },
+          "create_time": 1719200000.0,
+          "metadata": {}
+        },
+        "parent": null
+      },
+      "n1": {
+        "id": "n1",
+        "message": {
+          "id": "m1",
+          "author": { "role": "assistant" },
+          "content": {
+            "content_type": "text",
+            "parts": ["This is a portable Manifest v1 sample used by unit tests."]
+          },
+          "create_time": 1719200200.0,
+          "metadata": {}
+        },
+        "parent": "n0"
+      }
+    }
+  }
+]

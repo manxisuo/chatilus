@@ -1,0 +1,7 @@
+{
+  "version": "1.0",
+  "export_files": [
+    { "path": "conversations.json" },
+    { "path": "file-fixture.dat" }
+  ]
+}

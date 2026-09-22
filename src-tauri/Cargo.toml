@@ -1,7 +1,7 @@
 [package]
-name = "chatlens"
+name = "chatilus"
 version = "0.2.0"
-description = "ChatLens - 本地 AI 对话历史浏览器"
+description = "Chatilus - 本地 AI 对话历史浏览器"
 authors = ["manxi"]
 edition = "2021"
 
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "chatlens_lib"
+name = "chatilus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -23,6 +23,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
 rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 base64 = "0.22"
 zip = "2.2"

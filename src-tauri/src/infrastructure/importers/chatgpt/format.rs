@@ -74,28 +74,20 @@ mod tests {
     use std::path::PathBuf;
 
     fn legacy_style_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export")
     }
 
     fn sample_v1_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export-v1")
     }
 
     #[test]
     fn detects_manifest_v1_export() {
-        let dir = sample_v1_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-        assert!(is_manifest_v1_export(&dir));
+        assert!(is_manifest_v1_export(&sample_v1_export_dir()));
     }
 
     #[test]
     fn legacy_export_with_manifest_is_not_manifest_v1() {
-        let dir = legacy_style_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-        assert!(!is_manifest_v1_export(&dir));
+        assert!(!is_manifest_v1_export(&legacy_style_export_dir()));
     }
 }

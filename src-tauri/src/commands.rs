@@ -1,3 +1,4 @@
+use crate::error::{AppError, AppResult};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -5,10 +6,11 @@ use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use crate::application::{self, new_import_job_store, spawn_import_job, SharedImportJobStore};
-use crate::db::Database;
+use crate::infrastructure::db::Database;
 use crate::domain::models::ImportJob;
 use crate::domain::ports::ImportGuide;
 use crate::infrastructure::importers::default_importer_registry;
+use crate::infrastructure::path_guard::{resolve_readable_image, validate_save_destination};
 use crate::models::{
     ConversationSummary, DatabaseStats, ExportResult, ImageGalleryItem, ImportJobView,
     ImportResult, MessageView, SearchHit, TagView, TimelineMonthBucket,
@@ -16,20 +18,23 @@ use crate::models::{
 
 pub struct AppState {
     pub db_path: PathBuf,
+    pub app_data_dir: PathBuf,
     pub db: Mutex<Database>,
     pub import_jobs: SharedImportJobStore,
 }
 
-pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
-    let db_path = app
+pub fn init_state(app: &AppHandle) -> AppResult<AppState> {
+    let app_data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("无法获取应用数据目录: {e}"))?
-        .join("chatlens.db");
+        .map_err(|e| AppError::Msg(format!("无法获取应用数据目录: {e}")))?;
+    // chatlens.db name is stable for existing user libraries (bundle id com.manxi.chatlens).
+    let db_path = app_data_dir.join("chatlens.db");
 
     let db = Database::open(&db_path)?;
     Ok(AppState {
         db_path,
+        app_data_dir,
         db: Mutex::new(db),
         import_jobs: new_import_job_store(),
     })
@@ -39,10 +44,13 @@ pub fn init_state(app: &AppHandle) -> Result<AppState, String> {
 pub fn import_export_dir(
     state: State<'_, AppState>,
     path: String,
-) -> Result<ImportResult, String> {
+) -> AppResult<ImportResult> {
     let export_path = PathBuf::from(path);
     if !export_path.exists() {
-        return Err(format!("路径不存在: {}", export_path.display()));
+        return Err(AppError::Msg(format!(
+            "路径不存在: {}",
+            export_path.display()
+        )));
     }
 
     let mut db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
@@ -50,7 +58,7 @@ pub fn import_export_dir(
 }
 
 #[tauri::command]
-pub fn list_import_guides() -> Result<Vec<ImportGuide>, String> {
+pub fn list_import_guides() -> AppResult<Vec<ImportGuide>> {
     Ok(default_importer_registry().list_import_guides())
 }
 
@@ -60,15 +68,18 @@ pub fn start_import(
     app: AppHandle,
     path: String,
     importer_id: Option<String>,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let input_path = PathBuf::from(&path);
     if !input_path.exists() {
-        return Err(format!("路径不存在: {}", input_path.display()));
+        return Err(AppError::Msg(format!(
+            "路径不存在: {}",
+            input_path.display()
+        )));
     }
 
     if let Some(ref id) = importer_id {
         if default_importer_registry().by_id(id).is_none() {
-            return Err(format!("未知数据源: {id}"));
+            return Err(AppError::Msg(format!("未知数据源: {id}")));
         }
     }
 
@@ -80,14 +91,14 @@ pub fn start_import(
 }
 
 #[tauri::command]
-pub fn get_import_job(state: State<'_, AppState>, job_id: String) -> Result<ImportJobView, String> {
+pub fn get_import_job(state: State<'_, AppState>, job_id: String) -> AppResult<ImportJobView> {
     let registry = state
         .import_jobs
         .lock()
         .map_err(|_| "导入任务锁失败".to_string())?;
     registry
         .get_view(&job_id)
-        .ok_or_else(|| format!("未找到导入任务: {job_id}"))
+        .ok_or_else(|| AppError::NotFound(format!("未找到导入任务: {job_id}")))
 }
 
 #[tauri::command]
@@ -102,7 +113,7 @@ pub fn list_conversations(
     has_attachments: Option<bool>,
     limit: Option<i64>,
     offset: Option<i64>,
-) -> Result<Vec<ConversationSummary>, String> {
+) -> AppResult<Vec<ConversationSummary>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_conversations(
         &db,
@@ -122,7 +133,7 @@ pub fn list_conversations(
 pub fn get_conversation(
     state: State<'_, AppState>,
     conversation_id: String,
-) -> Result<Option<ConversationSummary>, String> {
+) -> AppResult<Option<ConversationSummary>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::get_conversation(&db, &conversation_id)
 }
@@ -131,7 +142,7 @@ pub fn get_conversation(
 pub fn get_messages(
     state: State<'_, AppState>,
     conversation_id: String,
-) -> Result<Vec<MessageView>, String> {
+) -> AppResult<Vec<MessageView>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::get_messages(&db, &conversation_id)
 }
@@ -141,7 +152,7 @@ pub fn search_messages(
     state: State<'_, AppState>,
     query: String,
     limit: Option<i64>,
-) -> Result<Vec<SearchHit>, String> {
+) -> AppResult<Vec<SearchHit>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::search_messages(&db, &query, limit.unwrap_or(100))
 }
@@ -151,7 +162,7 @@ pub fn set_conversation_starred(
     state: State<'_, AppState>,
     conversation_id: String,
     starred: bool,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::set_conversation_starred(&db, &conversation_id, starred)
 }
@@ -162,7 +173,7 @@ pub fn list_starred_messages(
     source: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
-) -> Result<Vec<SearchHit>, String> {
+) -> AppResult<Vec<SearchHit>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_starred_messages(
         &db,
@@ -177,25 +188,25 @@ pub fn set_message_starred(
     state: State<'_, AppState>,
     message_id: String,
     starred: bool,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::set_message_starred(&db, &message_id, starred)
 }
 
 #[tauri::command]
-pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<TagView>, String> {
+pub fn list_tags(state: State<'_, AppState>) -> AppResult<Vec<TagView>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_tags(&db)
 }
 
 #[tauri::command]
-pub fn create_tag(state: State<'_, AppState>, name: String) -> Result<TagView, String> {
+pub fn create_tag(state: State<'_, AppState>, name: String) -> AppResult<TagView> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::create_tag(&db, &name)
 }
 
 #[tauri::command]
-pub fn delete_tag(state: State<'_, AppState>, tag_id: i64) -> Result<(), String> {
+pub fn delete_tag(state: State<'_, AppState>, tag_id: i64) -> AppResult<()> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::delete_tag(&db, tag_id)
 }
@@ -205,7 +216,7 @@ pub fn set_conversation_tags(
     state: State<'_, AppState>,
     conversation_id: String,
     tag_ids: Vec<i64>,
-) -> Result<Vec<String>, String> {
+) -> AppResult<Vec<String>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::set_conversation_tags(&db, &conversation_id, &tag_ids)
 }
@@ -215,7 +226,7 @@ pub fn export_conversation_markdown(
     state: State<'_, AppState>,
     conversation_id: String,
     output_path: String,
-) -> Result<ExportResult, String> {
+) -> AppResult<ExportResult> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::export_conversation_markdown(&db, &conversation_id, &PathBuf::from(output_path))
 }
@@ -229,7 +240,7 @@ pub fn list_images(
     conversation_source: Option<String>,
     month: Option<String>,
     conversation_id: Option<String>,
-) -> Result<Vec<ImageGalleryItem>, String> {
+) -> AppResult<Vec<ImageGalleryItem>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     let image_kind = image_kind
         .as_deref()
@@ -253,7 +264,7 @@ pub fn count_images(
     conversation_source: Option<String>,
     month: Option<String>,
     conversation_id: Option<String>,
-) -> Result<i64, String> {
+) -> AppResult<i64> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     let image_kind = image_kind
         .as_deref()
@@ -269,33 +280,36 @@ pub fn count_images(
 }
 
 #[tauri::command]
-pub fn read_image_data_url(path: String) -> Result<String, String> {
-    let file_path = PathBuf::from(&path);
-    if !file_path.is_file() {
-        return Err(format!("图片文件不存在: {path}"));
-    }
+pub fn read_image_data_url(
+    state: State<'_, AppState>,
+    path: String,
+) -> AppResult<String> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    let file_path = resolve_readable_image(&db, &state.app_data_dir, &path)?;
 
-    let bytes = std::fs::read(&file_path).map_err(|e| format!("读取图片失败: {e}"))?;
+    let bytes = std::fs::read(&file_path).map_err(|e| AppError::Msg(format!("读取图片失败: {e}")))?;
     let mime = mime_from_path(&file_path);
     let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
     Ok(format!("data:{mime};base64,{encoded}"))
 }
 
 #[tauri::command]
-pub fn save_image_copy(source_path: String, dest_path: String) -> Result<(), String> {
-    let source = PathBuf::from(&source_path);
-    if !source.is_file() {
-        return Err(format!("图片文件不存在: {source_path}"));
-    }
+pub fn save_image_copy(
+    state: State<'_, AppState>,
+    source_path: String,
+    dest_path: String,
+) -> AppResult<()> {
+    let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
+    let source = resolve_readable_image(&db, &state.app_data_dir, &source_path)?;
+    let dest = validate_save_destination(&dest_path)?;
 
-    let dest = PathBuf::from(&dest_path);
     if let Some(parent) = dest.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| AppError::Msg(format!("创建目标目录失败: {e}")))?;
         }
     }
 
-    std::fs::copy(&source, &dest).map_err(|e| format!("保存图片失败: {e}"))?;
+    std::fs::copy(&source, &dest).map_err(|e| AppError::Msg(format!("保存图片失败: {e}")))?;
     Ok(())
 }
 
@@ -319,7 +333,7 @@ fn mime_from_path(path: &PathBuf) -> &'static str {
 pub fn list_timeline_months(
     state: State<'_, AppState>,
     source: Option<String>,
-) -> Result<Vec<TimelineMonthBucket>, String> {
+) -> AppResult<Vec<TimelineMonthBucket>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_timeline_months(&db, source.as_deref())
 }
@@ -331,7 +345,7 @@ pub fn list_timeline(
     month: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
-) -> Result<Vec<ConversationSummary>, String> {
+) -> AppResult<Vec<ConversationSummary>> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     application::list_timeline(
         &db,
@@ -343,7 +357,7 @@ pub fn list_timeline(
 }
 
 #[tauri::command]
-pub fn get_stats(state: State<'_, AppState>) -> Result<DatabaseStats, String> {
+pub fn get_stats(state: State<'_, AppState>) -> AppResult<DatabaseStats> {
     let db = state.db.lock().map_err(|_| "数据库锁失败".to_string())?;
     db.stats()
 }

@@ -507,7 +507,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "chatlens"
+name = "chatilus"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
@@ -519,6 +519,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "thiserror 2.0.18",
  "uuid",
  "zip",
 ]

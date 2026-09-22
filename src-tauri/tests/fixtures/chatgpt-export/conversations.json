@@ -1,0 +1,74 @@
+[
+  {
+    "id": "conv-fixture-1",
+    "title": "What is Rust?",
+    "create_time": 1719037118.496,
+    "update_time": 1719037136.045,
+    "current_node": "n1",
+    "default_model_slug": "auto",
+    "mapping": {
+      "n0": {
+        "id": "n0",
+        "message": {
+          "id": "m0",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["What is Rust?"] },
+          "create_time": 1719037118.496,
+          "metadata": {}
+        },
+        "parent": null
+      },
+      "n1": {
+        "id": "n1",
+        "message": {
+          "id": "m1",
+          "author": { "role": "assistant" },
+          "content": {
+            "content_type": "text",
+            "parts": ["Rust is a systems programming language focused on safety and performance. It uses a unique ownership model."]
+          },
+          "create_time": 1719037136.045,
+          "metadata": {}
+        },
+        "parent": "n0"
+      }
+    }
+  },
+  {
+    "id": "conv-fixture-2",
+    "title": "uuid generation in tests",
+    "create_time": 1719100000.0,
+    "update_time": 1719100100.0,
+    "current_node": "n1",
+    "mapping": {
+      "n0": {
+        "id": "n0",
+        "message": {
+          "id": "m0",
+          "author": { "role": "user" },
+          "content": {
+            "content_type": "text",
+            "parts": ["How do I generate a uuid in JavaScript?"]
+          },
+          "create_time": 1719100000.0,
+          "metadata": {}
+        },
+        "parent": null
+      },
+      "n1": {
+        "id": "n1",
+        "message": {
+          "id": "m1",
+          "author": { "role": "assistant" },
+          "content": {
+            "content_type": "text",
+            "parts": ["Use crypto.randomUUID() or the uuid npm package."]
+          },
+          "create_time": 1719100100.0,
+          "metadata": {}
+        },
+        "parent": "n0"
+      }
+    }
+  }
+]

@@ -1,9 +1,11 @@
 mod application;
 mod commands;
-mod db;
 mod domain;
+mod error;
 mod infrastructure;
 mod models;
+
+pub use error::{AppError, AppResult};
 
 use commands::{
     create_tag, delete_tag, export_conversation_markdown, get_conversation, get_import_job,
@@ -59,11 +61,11 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::application;
-    use crate::db::Database;
+    use crate::infrastructure::db::Database;
     use crate::infrastructure::importers::chatgpt::parse_export_dir;
 
     fn sample_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export")
     }
 
     #[test]
@@ -80,7 +82,13 @@ mod tests {
 
     #[test]
     fn import_into_sqlite() {
-        let dir = std::env::temp_dir().join("chatlens-test-v02.db");
+        let dir = std::env::temp_dir().join(format!(
+            "chatlens-test-{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
         let _ = std::fs::remove_file(&dir);
 
         let mut db = Database::open(&dir).expect("open db");
@@ -89,7 +97,7 @@ mod tests {
 
         assert!(result.conversations_imported > 0);
         assert!(result.messages_imported > 0);
-        assert_eq!(result.files_processed, 14);
+        assert_eq!(result.files_processed, 1);
         assert!(result.media_files_indexed > 0);
 
         let stats = db.stats().expect("stats");
@@ -112,10 +120,19 @@ mod tests {
         application::set_conversation_tags(&db, &conv_id, &[tag.id])
             .expect("set tags");
 
-        let export_path = std::env::temp_dir().join("chatlens-export-test.md");
+        let export_path = std::env::temp_dir().join(format!(
+            "chatlens-export-test-{}.md",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
         let export = application::export_conversation_markdown(&db, &conv_id, &export_path)
             .expect("export");
         assert!(export.message_count > 0);
         assert!(export_path.exists());
+
+        let _ = std::fs::remove_file(&dir);
+        let _ = std::fs::remove_file(&export_path);
     }
 }

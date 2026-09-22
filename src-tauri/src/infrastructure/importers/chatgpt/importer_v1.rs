@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use super::format::is_manifest_v1_export;
 use super::import_export::import_chatgpt_export_dir;
 use crate::domain::models::DataSource;
@@ -72,7 +73,7 @@ impl Importer for ChatGptV1Importer {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         let matched = is_manifest_v1_export(&input.path);
         Ok(ImportDetectResult {
             matched,
@@ -81,12 +82,12 @@ impl Importer for ChatGptV1Importer {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         if !is_manifest_v1_export(&input.path) {
             return Err(format!(
                 "不是 ChatGPT Manifest v1 导出目录: {}",
                 input.path.display()
-            ));
+            ).into());
         }
         let shard_file_count = super::find_conversation_files(&input.path)?.len();
         let conversations = parse_export_dir(&input.path)?;
@@ -102,12 +103,12 @@ impl Importer for ChatGptV1Importer {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         if !options.user_selected && !is_manifest_v1_export(&input.path) {
             return Err(format!(
                 "不是 ChatGPT Manifest v1 导出目录: {}",
                 input.path.display()
-            ));
+            ).into());
         }
 
         if options.user_selected {
@@ -134,19 +135,20 @@ mod tests {
     use std::path::PathBuf;
 
     fn sample_v1_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export-v1")
+    }
+
+    fn legacy_export_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export")
     }
 
     #[test]
     fn detect_matches_manifest_v1_export() {
-        let dir = sample_v1_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-
         let importer = ChatGptV1Importer::new();
         let result = importer
-            .detect(&ImportInput { path: dir })
+            .detect(&ImportInput {
+                path: sample_v1_export_dir(),
+            })
             .expect("detect");
         assert!(result.matched);
         assert_eq!(result.importer_id, "chatgpt-v1");
@@ -154,14 +156,11 @@ mod tests {
 
     #[test]
     fn user_selected_import_accepts_legacy_style_export() {
-        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35");
-        if !dir.is_dir() {
-            return;
-        }
-
         let importer = ChatGptV1Importer::new();
         let result = importer.import(
-            &ImportInput { path: dir },
+            &ImportInput {
+                path: legacy_export_dir(),
+            },
             &ImportOptions {
                 user_selected: true,
                 ..ImportOptions::default()
@@ -172,32 +171,18 @@ mod tests {
 
     #[test]
     fn import_resolves_dat_media_paths() {
-        let dir = sample_v1_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-
         let importer = ChatGptV1Importer::new();
         let result = importer
-            .import(&ImportInput { path: dir }, &ImportOptions::default())
+            .import(
+                &ImportInput {
+                    path: sample_v1_export_dir(),
+                },
+                &ImportOptions::default(),
+            )
             .expect("import");
 
         assert_eq!(result.source, DataSource::ChatGpt);
         assert!(!result.package.conversations.is_empty());
         assert!(result.media_files_indexed > 0);
-
-        let with_attachment = result
-            .package
-            .conversations
-            .iter()
-            .flat_map(|conversation| conversation.messages.iter())
-            .find(|message| !message.attachments.is_empty());
-
-        if let Some(message) = with_attachment {
-            assert!(message
-                .attachments
-                .iter()
-                .any(|attachment| attachment.path.is_some()));
-        }
     }
 }

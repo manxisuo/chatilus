@@ -1,3 +1,4 @@
+use crate::error::AppResult;
 use super::{find_conversation_files, format::is_manifest_v1_export, import_export::import_chatgpt_export_dir};
 use crate::domain::models::DataSource;
 use crate::domain::ports::{
@@ -71,7 +72,7 @@ impl Importer for ChatGptImporter {
         }
     }
 
-    fn detect(&self, input: &ImportInput) -> Result<ImportDetectResult, String> {
+    fn detect(&self, input: &ImportInput) -> AppResult<ImportDetectResult> {
         if is_manifest_v1_export(&input.path) {
             return Ok(ImportDetectResult {
                 matched: false,
@@ -87,7 +88,7 @@ impl Importer for ChatGptImporter {
         })
     }
 
-    fn preview(&self, input: &ImportInput) -> Result<ImportPreview, String> {
+    fn preview(&self, input: &ImportInput) -> AppResult<ImportPreview> {
         let shard_file_count = find_conversation_files(&input.path)?.len();
         let conversations = super::parse_export_dir(&input.path)?;
         Ok(ImportPreview {
@@ -102,12 +103,12 @@ impl Importer for ChatGptImporter {
         &self,
         input: &ImportInput,
         options: &ImportOptions,
-    ) -> Result<NormalizedImportResult, String> {
+    ) -> AppResult<NormalizedImportResult> {
         if !options.user_selected && is_manifest_v1_export(&input.path) {
             return Err(format!(
                 "该目录为 ChatGPT Manifest v1 导出，请使用「ChatGPT (Manifest v1)」导入: {}",
                 input.path.display()
-            ));
+            ).into());
         }
 
         let output = import_chatgpt_export_dir(&input.path, options)?;
@@ -130,34 +131,28 @@ mod tests {
     use std::path::PathBuf;
 
     fn sample_export_dir() -> PathBuf {
-        PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-05-16-12-08-35")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chatgpt-export")
     }
 
     #[test]
     fn detect_matches_chatgpt_export() {
-        let dir = sample_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-
         let importer = ChatGptImporter::new();
         let result = importer
-            .detect(&ImportInput { path: dir })
+            .detect(&ImportInput {
+                path: sample_export_dir(),
+            })
             .expect("detect");
         assert!(result.matched);
         assert_eq!(result.importer_id, "chatgpt");
     }
 
     #[test]
-    fn user_selected_import_accepts_manifest_v1_export() {
-        let dir = PathBuf::from(r"D:\Personal\ChatGPT数据下载\2026-06-26");
-        if !dir.is_dir() {
-            return;
-        }
-
+    fn user_selected_import_accepts_legacy_style_export() {
         let importer = ChatGptImporter::new();
         let result = importer.import(
-            &ImportInput { path: dir },
+            &ImportInput {
+                path: sample_export_dir(),
+            },
             &ImportOptions {
                 user_selected: true,
                 ..ImportOptions::default()
@@ -168,15 +163,12 @@ mod tests {
 
     #[test]
     fn import_resolves_media_paths() {
-        let dir = sample_export_dir();
-        if !dir.is_dir() {
-            return;
-        }
-
         let importer = ChatGptImporter::new();
         let result = importer
             .import(
-                &ImportInput { path: dir },
+                &ImportInput {
+                    path: sample_export_dir(),
+                },
                 &ImportOptions {
                     user_selected: true,
                     ..ImportOptions::default()
@@ -186,19 +178,7 @@ mod tests {
 
         assert!(!result.package.conversations.is_empty());
         assert!(result.media_files_indexed > 0);
-
-        let with_attachment = result
-            .package
-            .conversations
-            .iter()
-            .flat_map(|conversation| conversation.messages.iter())
-            .find(|message| !message.attachments.is_empty());
-
-        if let Some(message) = with_attachment {
-            assert!(message
-                .attachments
-                .iter()
-                .all(|attachment| attachment.path.is_some()));
-        }
+        assert_eq!(result.files_processed, 1);
+        assert!(result.package.conversations.iter().all(|c| !c.messages.is_empty()));
     }
 }

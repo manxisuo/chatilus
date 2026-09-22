@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust test & clippy
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Hard gate: unit tests must pass (portable fixtures, no machine-local paths).
+      - name: Test
+        run: cargo test --lib
+
+      # Advisory for now; tighten to `-D warnings` once historical lints are paid down.
+      - name: Clippy
+        run: cargo clippy --all-targets
+
+  frontend:
+    name: Frontend typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx vue-tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
